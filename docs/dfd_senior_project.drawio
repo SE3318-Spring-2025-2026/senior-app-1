@@ -1,0 +1,308 @@
+<mxfile host="drawio-plugin" modified="2026-03-23T10:43:40.696Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" version="22.1.22" etag="l7JoY7XfcA-O7n3N5nlT" type="embed" pages="2">
+  <diagram id="context-diag" name="Level 0 - Context Diagram">
+    <mxGraphModel dx="680" dy="955" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="P0" value="Senior Project Management System (0.0)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=16;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="600" y="450" width="350" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="S" value="Student" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;fontSize=14;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="150" y="400" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="A" value="Advisor (Professor)" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;fontSize=14;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="1280" y="420" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="C" value="Coordinator" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;fontSize=14;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="700" y="150" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="AD" value="Admin" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;fontSize=14;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="160" y="850" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="GH" value="GitHub API" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;fontSize=14;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="1150" y="650" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="JI" value="JIRA API" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;fontSize=14;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="1150" y="850" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="AI" value="AI Service" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;fontSize=14;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="700" y="950" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="e_s_in" value="ID, OAuth, Proposals, Invites" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="S" target="P0" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="430" />
+              <mxPoint x="350" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_a_in" value="Approval/Rejection, Reviews, Grades" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="A" target="P0" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="900" y="430" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_c_in" value="Rubrics, Weights, Student List, Transfers" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="C" target="P0" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ad_in" value="Prof Registration, Password Reset" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="AD" target="P0" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="240" y="730" />
+              <mxPoint x="350" y="730" />
+              <mxPoint x="350" y="630" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_gh_in" value="PR Data, Merge Status" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="GH" target="P0" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1050" y="670" />
+              <mxPoint x="1050" y="575" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ji_in" value="Issue Data, Story Points" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="JI" target="P0" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1230" y="810" />
+              <mxPoint x="850" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ai_in" value="Validation Results (Diffs/Reviews)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="AI" target="P0" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_s_out" value="Final Grades, Notifications, Feedback" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="P0" target="S" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="470" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_a_out" value="Notifications, Advisee Details" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="P0" target="A" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1100" y="500" />
+              <mxPoint x="1100" y="460" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_c_out" value="System Logs, Reports, Status Updates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="P0" target="C" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ad_out" value="Reset Links, Success/Error Status" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="P0" target="AD" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="710" y="770" />
+              <mxPoint x="350" y="770" />
+              <mxPoint x="350" y="890" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_gh_out" value="OAuth Request, Hook Config" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="P0" target="GH" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="990" y="600" />
+              <mxPoint x="990" y="710" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ji_out" value="Sync Request, User Mapping" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="P0" target="JI" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ai_out" value="PR Content, Issue Description" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=12;" parent="1" source="P0" target="AI" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="overview-diag" name="Level 1 - Overview">
+    <mxGraphModel dx="1180" dy="955" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="G_SYS" value="Senior Project System (Processes 1.0 - 6.0)" style="swimlane;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#cccccc;dashed=1;fontSize=14;fontStyle=1;startSize=30;" parent="1" vertex="1">
+          <mxGeometry x="460" y="70" width="680" height="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="P1" value="1.0 User Registration &amp; Admin Controls" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="G_SYS" vertex="1">
+          <mxGeometry x="190" y="140" width="300" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="P2" value="2.0 Group Formation &amp; Advisor Selection" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="G_SYS" vertex="1">
+          <mxGeometry x="190" y="300" width="300" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="P3" value="3.0 Mentor Matching &amp; Transfers" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="G_SYS" vertex="1">
+          <mxGeometry x="190" y="470" width="300" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="P4" value="4.0 Deliverable Mgmt &amp; Rubric Config" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="G_SYS" vertex="1">
+          <mxGeometry x="190" y="600" width="300" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="P5" value="5.0 Sprint Monitoring &amp; API Integration" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="G_SYS" vertex="1">
+          <mxGeometry x="190" y="730" width="300" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="P6" value="6.0 Final Evaluation &amp; Scalar Logic" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="G_SYS" vertex="1">
+          <mxGeometry x="190" y="870" width="300" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="G_DB" value="Centralized Databases" style="swimlane;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#cccccc;dashed=1;fontSize=14;fontStyle=1;startSize=30;" parent="1" vertex="1">
+          <mxGeometry x="1500" y="60" width="500" height="940" as="geometry" />
+        </mxCell>
+        <mxCell id="D1" value="D1: User DB" style="shape=partialRectangle;right=0;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="G_DB" vertex="1">
+          <mxGeometry x="900" y="150" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="D2" value="D2: Group DB" style="shape=partialRectangle;right=0;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="G_DB" vertex="1">
+          <mxGeometry x="900" y="350" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="D3" value="D3: Grading DB" style="shape=partialRectangle;right=0;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="G_DB" vertex="1">
+          <mxGeometry x="900" y="550" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="D4" value="D4: Sprint Data" style="shape=partialRectangle;right=0;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="G_DB" vertex="1">
+          <mxGeometry x="900" y="750" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="S1" value="Student" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+          <mxGeometry x="50" y="150" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="AD1" value="Admin" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+          <mxGeometry x="50" y="450" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="C1" value="Coordinator" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+          <mxGeometry x="1300" y="100" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="A1" value="Advisor" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+          <mxGeometry x="1300" y="300" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="GH1" value="GitHub API" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+          <mxGeometry x="1300" y="500" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="JI1" value="JIRA API" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+          <mxGeometry x="1300" y="700" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="AI1" value="AI Service" style="whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+          <mxGeometry x="1300" y="900" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="l1_e0" value="Reg Info / ID" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="S1" target="P1" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l1_e1" value="Prof Data / Reset" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="AD1" target="P1" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="125" y="350" />
+              <mxPoint x="540" y="350" />
+              <mxPoint x="540" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_e2" value="Save / Fetch" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="P1" target="D1" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l1_e3" value="Reset Links" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="P1" target="AD1" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l1_e4" value="Create Group" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="S1" target="P2" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="190" />
+              <mxPoint x="520" y="420" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_e5" value="Store Group" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="P2" target="D2" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l1_e6" value="Group Ready" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="P2" target="P3" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l1_e7" value="Update Advisor" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="P3" target="D2" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l1_e8" value="Transfer Req" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="C1" target="P3" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="140" />
+              <mxPoint x="1000" y="590" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_e9" value="Rubrics" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="C1" target="P4" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1090" y="140" />
+              <mxPoint x="1090" y="720" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_e10" value="Submissions" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="S1" target="P4" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="610" y="190" />
+              <mxPoint x="610" y="720" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_e11" value="Store Grades" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="P4" target="D3" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1675" y="690" />
+              <mxPoint x="1675" y="650" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_e12" value="PRs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="GH1" target="P5" edge="1">
+          <mxGeometry x="-0.4676" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1375" y="650" />
+              <mxPoint x="1140" y="650" />
+              <mxPoint x="1140" y="850" />
+            </Array>
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_e13" value="Issues" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="JI1" target="P5" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1375" y="820" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_e14" value="Sync Stats" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="P5" target="D4" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l1_e15" value="Base Grades" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="D3" target="P6" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2280" y="650" />
+              <mxPoint x="2280" y="880" />
+              <mxPoint x="990" y="880" />
+              <mxPoint x="990" y="990" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_e16" value="Metrics" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="D4" target="P6" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2500" y="990" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_e17" value="Final Result" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;strokeWidth=1.5;" parent="1" source="P6" target="S1" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="330" y="990" />
+              <mxPoint x="330" y="190" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
