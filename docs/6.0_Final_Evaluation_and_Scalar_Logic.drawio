@@ -1,0 +1,77 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0" version="29.6.6">
+  <diagram name="Sayfa-1" id="XTnhzlAYC_ev7JyDAJI0">
+    <mxGraphModel dx="1034" dy="564" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-1" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="Advisor" vertex="1">
+          <mxGeometry height="54" width="112" x="71" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-2" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="Committee" vertex="1">
+          <mxGeometry height="54" width="139" x="285" y="229" as="geometry" />
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-3" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="JIRA / GitHub Integration" vertex="1">
+          <mxGeometry height="54" width="242" x="399" y="807" as="geometry" />
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-4" parent="1" style="ellipse;aspect=fixed;strokeWidth=2;whiteSpace=wrap;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="6.1 Calculate Team&#xa;Allowance Coefficient" vertex="1">
+          <mxGeometry height="215" width="215" x="20" y="148" as="geometry" />
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-5" parent="1" style="ellipse;aspect=fixed;strokeWidth=2;whiteSpace=wrap;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="6.2 Apply Deliverable&#xa;Scalars" vertex="1">
+          <mxGeometry height="215" width="215" x="134" y="437" as="geometry" />
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-6" parent="1" style="ellipse;aspect=fixed;strokeWidth=2;whiteSpace=wrap;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="6.3 Apply Deliverable&#xa;Weights" vertex="1">
+          <mxGeometry height="215" width="215" x="134" y="726" as="geometry" />
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-7" parent="1" style="ellipse;aspect=fixed;strokeWidth=2;whiteSpace=wrap;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="6.4 Calculate&#xa;Individual Grade" vertex="1">
+          <mxGeometry height="215" width="215" x="273" y="1039" as="geometry" />
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-8" parent="1" style="shape=cylinder3;boundedLbl=1;backgroundOutline=1;size=10;strokeWidth=2;whiteSpace=wrap;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="D6: Student Grades DB" vertex="1">
+          <mxGeometry height="83" width="177" x="292" y="1328" as="geometry" />
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-9" edge="1" parent="1" source="DZMvP2gJPHEqrYUOrxSb-1" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="DZMvP2gJPHEqrYUOrxSb-4" value="Point A &amp; Point B Data">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-10" edge="1" parent="1" source="DZMvP2gJPHEqrYUOrxSb-4" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.11;entryY=0;rounded=0;" target="DZMvP2gJPHEqrYUOrxSb-5" value="Coefficient of Allowance">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="128" y="400" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-11" edge="1" parent="1" source="DZMvP2gJPHEqrYUOrxSb-2" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=0.99;entryX=0.89;entryY=0;rounded=0;" target="DZMvP2gJPHEqrYUOrxSb-5" value="Raw Deliverable Grades">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="355" y="400" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-12" edge="1" parent="1" source="DZMvP2gJPHEqrYUOrxSb-5" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="DZMvP2gJPHEqrYUOrxSb-6" value="Scaled Deliverable Grades">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-13" edge="1" parent="1" source="DZMvP2gJPHEqrYUOrxSb-6" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.05;entryY=0;rounded=0;" target="DZMvP2gJPHEqrYUOrxSb-7" value="Team Overall Grade">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="241" y="990" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-14" edge="1" parent="1" source="DZMvP2gJPHEqrYUOrxSb-3" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=0.99;entryX=0.94;entryY=0;rounded=0;" target="DZMvP2gJPHEqrYUOrxSb-7" value="Story Point Completion Ratio">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="990" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="DZMvP2gJPHEqrYUOrxSb-15" edge="1" parent="1" source="DZMvP2gJPHEqrYUOrxSb-7" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="DZMvP2gJPHEqrYUOrxSb-8" value="Final Individual Grade">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
