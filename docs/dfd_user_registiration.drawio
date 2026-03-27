@@ -65,10 +65,10 @@
                 <mxCell id="36" value="1.2&lt;div&gt;Llink Github Account&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" parent="22" vertex="1">
                     <mxGeometry x="290" y="440" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="44" value="Upload Valid Student ID&#39;s" style="rounded=1;whiteSpace=wrap;html=1;" parent="22" vertex="1">
+                <mxCell id="44" value="1.5&lt;div&gt;Upload Valid Student ID&#39;s&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" parent="22" vertex="1">
                     <mxGeometry x="450" y="10" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="52" value="Set Initial Professor&lt;div&gt;Password&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" parent="22" vertex="1">
+                <mxCell id="52" value="1.4&lt;div&gt;Set Initial Professor&lt;div&gt;Password&lt;/div&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" parent="22" vertex="1">
                     <mxGeometry x="160" y="600" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="68" value="student ID" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" parent="22" vertex="1">
