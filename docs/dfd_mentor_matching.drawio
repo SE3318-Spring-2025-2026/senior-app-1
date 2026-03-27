@@ -1,0 +1,318 @@
+<mxfile host="drawio-plugin" modified="2026-03-27T00:00:00.000Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" version="22.1.22" type="embed">
+  <diagram id="dfd-3-mentor-matching" name="Level 2 - 3.0 Mentor Matching">
+    <mxGraphModel dx="1404" dy="955" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===== TITLE ===== -->
+        <mxCell id="title" value="DFD – Process 3.0 Mentor Matching (Level 2)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=20;fontStyle=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="350" y="20" width="1000" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ===== LEGEND ===== -->
+        <mxCell id="legend_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1140" width="320" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_title" value="Legend" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];fontSize=12;fontStyle=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="80" y="1145" width="100" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_solid" value="Data Flow" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="80" y="1185" as="sourcePoint" />
+            <mxPoint x="200" y="1185" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend_dashed" value="Audit Log Flow" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="80" y="1215" as="sourcePoint" />
+            <mxPoint x="200" y="1215" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===== EXTERNAL ENTITIES ===== -->
+
+        <mxCell id="TL" value="Team Leader" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="480" width="40" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ADV" value="Advisor" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1530" y="410" width="40" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="COORD" value="Coordinator" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="760" y="60" width="40" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ===== PROCESSES ===== -->
+
+        <!-- 3.1 Submit Advisee Request -->
+        <mxCell id="P31" value="3.1&#xa;Submit Advisee Request" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="310" y="420" width="185" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- 3.2 Process Advisor Decision -->
+        <mxCell id="P32" value="3.2&#xa;Process Advisor Decision" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="950" y="380" width="195" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- 3.3 Release Advisor Assignment -->
+        <mxCell id="P33" value="3.3&#xa;Release Advisor Assignment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="950" y="590" width="195" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- 3.4 Transfer Group (Coordinator) -->
+        <mxCell id="P34" value="3.4&#xa;Transfer Group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="610" y="185" width="185" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- 3.5 Sanitize Orphaned Groups -->
+        <mxCell id="P35" value="3.5&#xa;Sanitize Orphaned Groups" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="610" y="870" width="195" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- ===== DATA STORES ===== -->
+
+        <!-- D1: User DB -->
+        <mxCell id="D1" value="D1: User DB" style="shape=datastore;whiteSpace=wrap;html=1;fillColor=#FFC59E;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="310" y="240" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- D2: Group DB -->
+        <mxCell id="D2" value="D2: Group DB" style="shape=datastore;whiteSpace=wrap;html=1;fillColor=#FFC59E;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="790" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- D6: Audit Logs -->
+        <mxCell id="D6" value="D6: Audit Logs" style="shape=datastore;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="195" y="920" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- D7: Pending Advisor Requests -->
+        <mxCell id="D7" value="D7: Pending Advisor&#xa;Requests" style="shape=datastore;whiteSpace=wrap;html=1;fillColor=#FFC59E;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="640" y="540" width="170" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ===== DATA FLOWS ===== -->
+
+        <!-- 1. Team Leader → 3.1: Advisee Request (Professor ID) -->
+        <mxCell id="f1" value="Advisee Request&#xa;(Prof ID, Group ID)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="TL" target="P31" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 2. D1 → 3.1: Professor Profile lookup -->
+        <mxCell id="f2" value="Professor Profile" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="D1" target="P31" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 3. 3.1 → D7: Store Pending Request -->
+        <mxCell id="f3" value="Store Pending Request" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="P31" target="D7" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="400" y="575" />
+              <mxPoint x="640" y="575" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 4. 3.1 → Advisor: Request Notification (Group Details) -->
+        <mxCell id="f4" value="Request Notification&#xa;(Group Details)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="P31" target="ADV" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="495" y="455" />
+              <mxPoint x="1550" y="455" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 5. D7 → 3.2: Request Details for decision processing -->
+        <mxCell id="f5" value="Request Details" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="D7" target="P32" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="810" y="555" />
+              <mxPoint x="1047" y="555" />
+              <mxPoint x="1047" y="455" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 6. Advisor → 3.2: Approve/Reject Decision -->
+        <mxCell id="f6" value="Approve / Reject Decision" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="ADV" target="P32" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 7. 3.2 → D2: Update Advisor Assignment -->
+        <mxCell id="f7" value="Update Advisor Assignment" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="P32" target="D2" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1145" y="455" />
+              <mxPoint x="1345" y="455" />
+              <mxPoint x="1345" y="790" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 8. 3.2 → D7: Remove Pending Request (request resolved) -->
+        <mxCell id="f8" value="Remove Resolved Request" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="P32" target="D7" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="950" y="510" />
+              <mxPoint x="810" y="510" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 9. 3.2 → Team Leader: Decision Notification -->
+        <mxCell id="f9" value="Decision Notification&#xa;(Approved / Rejected)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="P32" target="TL" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="950" y="540" />
+              <mxPoint x="90" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 10. 3.2 → D6: Log Advisor Decision (dashed) -->
+        <mxCell id="f10" value="Log Advisor Decision" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" edge="1" source="P32" target="D6" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="950" y="560" />
+              <mxPoint x="270" y="560" />
+              <mxPoint x="270" y="920" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 11. Advisor → 3.3: Release Confirmation -->
+        <mxCell id="f11" value="Release Confirmation" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="ADV" target="P33" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1550" y="627" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 12. 3.3 → D2: Clear Advisor Assignment -->
+        <mxCell id="f12" value="Clear Advisor Assignment" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="P33" target="D2" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1145" y="660" />
+              <mxPoint x="1345" y="660" />
+              <mxPoint x="1345" y="790" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 13. 3.3 → Team Leader: Release Notification -->
+        <mxCell id="f13" value="Release Notification&#xa;(Advisor Freed)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="P33" target="TL" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="950" y="680" />
+              <mxPoint x="90" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 14. 3.3 → D6: Log Release Event (dashed) -->
+        <mxCell id="f14" value="Log Release Event" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" edge="1" source="P33" target="D6" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="950" y="710" />
+              <mxPoint x="270" y="710" />
+              <mxPoint x="270" y="990" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 15. Coordinator → 3.4: Transfer Command -->
+        <mxCell id="f15" value="Transfer Command&#xa;(Group ID, New Advisor ID)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="COORD" target="P34" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 16. D1 → 3.4: User / Advisor Info -->
+        <mxCell id="f16" value="User / Advisor Info" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="D1" target="P34" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="460" y="275" />
+              <mxPoint x="610" y="275" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 17. 3.4 → D2: Forced Advisor Update -->
+        <mxCell id="f17" value="Forced Advisor Update" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="P34" target="D2" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="795" y="222" />
+              <mxPoint x="1345" y="222" />
+              <mxPoint x="1345" y="790" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 18. 3.4 → Team Leader: Transfer Notification -->
+        <mxCell id="f18" value="Transfer Notification" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="P34" target="TL" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="610" y="260" />
+              <mxPoint x="90" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 19. 3.4 → Advisor: New Assignment Notification -->
+        <mxCell id="f19" value="New Assignment Notification" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="P34" target="ADV" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="795" y="200" />
+              <mxPoint x="1550" y="200" />
+              <mxPoint x="1550" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 20. 3.4 → D6: Log Transfer Event (dashed) -->
+        <mxCell id="f20" value="Log Transfer Event" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" edge="1" source="P34" target="D6" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="610" y="240" />
+              <mxPoint x="270" y="240" />
+              <mxPoint x="270" y="920" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 21. D2 → 3.5: Groups without Advisor (scheduled cleanup query) -->
+        <mxCell id="f21" value="Groups without Advisor" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="D2" target="P35" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1270" y="855" />
+              <mxPoint x="805" y="855" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 22. 3.5 → D2: Disband Orphaned Groups -->
+        <mxCell id="f22" value="Disband Orphaned Groups" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" source="P35" target="D2" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="805" y="895" />
+              <mxPoint x="1270" y="895" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 23. 3.5 → D6: Log Sanitization (dashed) -->
+        <mxCell id="f23" value="Log Sanitization" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" edge="1" source="P35" target="D6" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="610" y="935" />
+              <mxPoint x="345" y="935" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
