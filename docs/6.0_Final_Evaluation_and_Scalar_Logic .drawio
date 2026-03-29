@@ -1,0 +1,121 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0" version="29.6.6">
+  <diagram name="Sayfa-1" id="XTnhzlAYC_ev7JyDAJI0">
+    <mxGraphModel dx="1723" dy="940" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-16" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" value="Advisor" vertex="1">
+          <mxGeometry height="60" width="48" x="51.75" y="810" as="geometry" />
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-17" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" value="Committee" vertex="1">
+          <mxGeometry height="60" width="48" x="51.75" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-18" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;aspect=fixed;" value="Coordinator" vertex="1">
+          <mxGeometry height="60" width="48" x="51.75" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-19" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="JIRA / GitHub Integration" vertex="1">
+          <mxGeometry height="60" width="100" x="25.75" y="198.5" as="geometry" />
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-20" parent="1" style="ellipse;aspect=fixed;strokeWidth=2;whiteSpace=wrap;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="6.1 Calculate Team&#xa;Allowance Coefficient" vertex="1">
+          <mxGeometry height="215" width="215" x="600" y="750.5" as="geometry" />
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-21" parent="1" style="ellipse;aspect=fixed;strokeWidth=2;whiteSpace=wrap;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="6.2 Apply&#xa;Deliverable Scalars" vertex="1">
+          <mxGeometry height="215" width="215" x="600" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-22" parent="1" style="ellipse;aspect=fixed;strokeWidth=2;whiteSpace=wrap;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="6.3 Apply&#xa;Deliverable Weights" vertex="1">
+          <mxGeometry height="215" width="215" x="1100" y="750.5" as="geometry" />
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-23" parent="1" style="ellipse;aspect=fixed;strokeWidth=2;whiteSpace=wrap;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="6.4 Calculate&#xa;Individual Grade" vertex="1">
+          <mxGeometry height="215" width="215" x="1100" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-24" parent="1" style="shape=cylinder3;boundedLbl=1;backgroundOutline=1;size=10;strokeWidth=2;whiteSpace=wrap;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="D6: Student Grades DB" vertex="1">
+          <mxGeometry height="83" width="177" x="1119" y="175.5" as="geometry" />
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-25" edge="1" parent="1" source="iHnE8Kcey03Ngcy6U75X-16" style="curved=1;startArrow=none;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;rounded=0;" target="iHnE8Kcey03Ngcy6U75X-20" value="Point A &amp; Point B Grades">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-26" edge="1" parent="1" source="iHnE8Kcey03Ngcy6U75X-17" style="curved=1;startArrow=none;endArrow=block;rounded=0;" target="iHnE8Kcey03Ngcy6U75X-21" value="Raw Deliverable Grades">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="681.5" y="710" />
+            </Array>
+            <mxPoint x="145" y="723" as="sourcePoint" />
+            <mxPoint x="680.4386940463355" y="720.1411786356354" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-27" edge="1" parent="1" source="iHnE8Kcey03Ngcy6U75X-18" style="curved=1;startArrow=none;endArrow=block;exitX=1;exitY=1;rounded=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="iHnE8Kcey03Ngcy6U75X-21" value="Deliverable Associations">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="211.81" y="569" />
+              <mxPoint x="500" y="630" />
+            </Array>
+            <mxPoint x="30.003877551020253" y="429" as="sourcePoint" />
+            <mxPoint x="525.7857989265683" y="467.5346794924077" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-28" edge="1" parent="1" source="iHnE8Kcey03Ngcy6U75X-18" style="curved=1;startArrow=none;endArrow=block;exitX=0.88;exitY=0.99;entryX=0;entryY=0.27;rounded=0;" target="iHnE8Kcey03Ngcy6U75X-22" value="Deliverable Weights">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="370" y="420" />
+              <mxPoint x="410" y="400" />
+              <mxPoint x="1030" y="480" />
+              <mxPoint x="1110" y="610" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-29" edge="1" parent="1" source="iHnE8Kcey03Ngcy6U75X-18" style="curved=1;startArrow=none;endArrow=block;exitX=1;exitY=0.3333333333333333;rounded=0;exitDx=0;exitDy=0;exitPerimeter=0;" target="iHnE8Kcey03Ngcy6U75X-23" value="Story Point Targets">
+          <mxGeometry relative="1" x="0.0009" y="17" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="390" y="300" />
+              <mxPoint x="1070" y="460" />
+              <mxPoint x="1060" y="460" />
+            </Array>
+            <mxPoint x="183.5" y="305.1999999999998" as="sourcePoint" />
+            <mxPoint x="1570.830128253293" y="363.16626603166173" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-30" edge="1" parent="1" source="iHnE8Kcey03Ngcy6U75X-19" style="curved=1;startArrow=none;endArrow=block;exitX=1;exitY=0.49;entryX=0.338;entryY=0.04;rounded=0;entryDx=0;entryDy=0;entryPerimeter=0;" target="iHnE8Kcey03Ngcy6U75X-23" value="Completed Story Points">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1160" y="390" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-31" edge="1" parent="1" style="curved=1;startArrow=none;endArrow=block;exitX=1;exitY=0.5;entryX=1;entryY=1;rounded=0;entryDx=0;entryDy=0;" value="Coefficient of Allowance">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="836.49" y="760" />
+            </Array>
+            <mxPoint x="821.4900000000036" y="854.49" as="sourcePoint" />
+            <mxPoint x="780.0039789775603" y="650.0039789775603" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-32" edge="1" parent="1" source="iHnE8Kcey03Ngcy6U75X-21" style="curved=1;startArrow=none;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.74;rounded=0;" target="iHnE8Kcey03Ngcy6U75X-22" value="Scaled Deliverable Grades">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1080" y="800" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-33" edge="1" parent="1" source="iHnE8Kcey03Ngcy6U75X-22" style="curved=1;startArrow=none;endArrow=block;exitX=0.587;exitY=0.017;entryX=0.5;entryY=1;rounded=0;entryDx=0;entryDy=0;exitDx=0;exitDy=0;exitPerimeter=0;" target="iHnE8Kcey03Ngcy6U75X-23" value="Team Overall Grade">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1350" y="710" />
+              <mxPoint x="1250" y="690" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="iHnE8Kcey03Ngcy6U75X-34" edge="1" parent="1" source="iHnE8Kcey03Ngcy6U75X-23" style="curved=1;startArrow=none;endArrow=block;exitX=1;exitY=0;entryX=0.5;entryY=1;rounded=0;exitDx=0;exitDy=0;entryDx=0;entryDy=0;entryPerimeter=0;" target="iHnE8Kcey03Ngcy6U75X-24" value="Final Individual Grade">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1340" y="360" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
