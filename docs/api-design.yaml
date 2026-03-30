@@ -1,0 +1,404 @@
+apiVersion: v1
+info:
+  title: Senior App User Registration API
+  description: >
+    Final Phase 4 API design aligned with diagram + project plan.
+    Includes user database flows, coordinator/import, student registration,
+    professor onboarding, GitHub linking, and system-level postconditions.
+  version: 1.0.0
+globalRules:
+  - "Valid student IDs must be uploaded before any student registration attempt."
+  - "Student registration must be within the coordinator-defined registration schedule."
+  - "Professors are manually registered by admin."
+  - "Professors activate their account by setting their password on initial login."
+  - "GitHub linking is only for authenticated active student accounts."
+  - "Internal User Database endpoints are system/internal flow endpoints, not actor-facing public business screens."
+  - "Sensitive values such as raw passwords, password hashes, setup tokens, and GitHub access tokens must never be returned in normal success responses."
+endpoints:
+  - id: 3.1
+    name: Import valid student IDs
+    path: /api/v1/coordinator/student-id-registry/import
+    method: POST
+    preconditions:
+      - "Requester must have coordinator role."
+      - "studentIds array must exist and must not be empty."
+      - "Import functionality must be available."
+      - "Issue 1 persistence endpoint must be callable."
+    request:
+      studentIds:
+        - "11070001000"
+        - "11070001001"
+        - "11070001002"
+    response:
+      inserted: 120
+      duplicates: 3
+      invalidFormat: 2
+    mustNotReturn:
+      - "internal DB schema details"
+      - "password data"
+      - "unrelated user records"
+    postconditions:
+      - "Uploaded valid IDs are forwarded to User Database."
+      - "Coordinator receives summary counts."
+      - "Student registration prerequisite is established."
+  - id: 3.2
+    name: Store valid student IDs in User Database
+    path: /api/v1/user-database/valid-student-ids
+    method: POST
+    preconditions:
+      - "Request must come from the coordinator import flow."
+      - "studentIds array must exist."
+      - "studentIds array must not be empty."
+      - "User Database must be available."
+      - "Student ID format rules must be defined."
+    request:
+      studentIds:
+        - "11070001000"
+        - "11070001001"
+        - "11070001002"
+    response:
+      inserted: 120
+      duplicates: 3
+      invalidFormat: 2
+    mustNotReturn:
+      - "raw student personal data"
+      - "password"
+      - "passwordHash"
+      - "userId"
+      - "setupToken"
+    postconditions:
+      - "Valid student IDs are stored in the registry."
+      - "Duplicate and invalid-format IDs are counted."
+      - "Registry becomes available for Issue 2 validation checks."
+  - id: 3.3
+    name: Validate student registration
+    path: /api/v1/students/registration-validation
+    method: POST
+    preconditions:
+      - "Valid student IDs must already have been uploaded by coordinator."
+      - "Registration schedule must be open."
+      - "studentId, email, fullName, and password must be provided."
+      - "Issue 2 must be available to validate studentId."
+      - "Email uniqueness must be checkable."
+      - "Password policy must be defined."
+      - "Issue 13 must be available for persistence after successful validation."
+    request:
+      studentId: "11070001000"
+      email: "student@university.edu"
+      fullName: "Ali Veli"
+      password: "StrongPassword123!"
+    response:
+      valid: true
+      userId: 501
+      studentId: "11070001000"
+      message: "Student account created successfully"
+    mustNotReturn:
+      - "password"
+      - "passwordHash"
+      - "internal SQL/DB errors directly"
+      - "unrelated student data"
+    postconditions:
+      - "studentId validity is checked."
+      - "alreadyRegistered state is checked."
+      - "Email uniqueness is checked."
+      - "Password strength is checked."
+      - "If valid, data is ready for account creation flow."
+      - "If invalid, no account is created."
+  - id: 3.4
+    name: Check student validation in User Database
+    path: /api/v1/user-database/students/{studentId}/validation
+    method: GET
+    preconditions:
+      - "studentId path parameter must be provided."
+      - "Valid student registry must already exist."
+      - "User Database must be reachable."
+    request:
+      studentId: "11070001000"
+    response:
+      valid: true
+      studentId: "11070001000"
+      alreadyRegistered: false
+    mustNotReturn:
+      - "email"
+      - "fullName"
+      - "password"
+      - "passwordHash"
+      - "userId unless explicitly required by another design decision"
+    postconditions:
+      - "System determines whether studentId exists in valid registry."
+      - "System determines whether studentId is already registered."
+      - "Result becomes usable by Issue 4."
+  - id: 3.5
+    name: Create student account in User Database
+    path: /api/v1/user-database/students
+    method: POST
+    preconditions:
+      - "Issue 4 validation must have succeeded."
+      - "Issue 13 persistence endpoint must be available."
+      - "Password hashing capability must be available."
+    request:
+      studentId: "11070001000"
+      email: "student@university.edu"
+      fullName: "Ali Veli"
+      passwordHash: "hashed_password_value"
+    response:
+      userId: 501
+      studentId: "11070001000"
+      message: "Student account created successfully"
+    mustNotReturn:
+      - "raw password"
+      - "passwordHash"
+      - "internal token/state objects"
+    postconditions:
+      - "Password is hashed."
+      - "Account creation request is sent to Issue 13 persistence layer."
+      - "Student account becomes active."
+      - "Student can later use GitHub linking flow."
+  - id: 3.6
+    name: Register professor account
+    path: /api/v1/admin/professors
+    method: POST
+    preconditions:
+      - "Requester must have admin role."
+      - "email, fullName, and department must be provided."
+      - "Professor email uniqueness must be checkable."
+      - "Issue 14 must be available."
+      - "Issue 7 token generation logic must be available."
+    request:
+      email: "prof@example.edu"
+      fullName: "Prof. Dr. X"
+      department: "Software Engineering"
+    response:
+      userId: 701
+      professorId: 88
+      message: "Professor account created. Password setup link generated."
+    mustNotReturn:
+      - "raw setupToken unless your team explicitly decided admin sees it"
+      - "password"
+      - "passwordHash"
+      - "confidential token store metadata"
+    postconditions:
+      - "Base professor creation flow is triggered."
+      - "Professor record is created in setup-required state."
+      - "Setup token generation flow is triggered."
+  - id: 3.7
+    name: Create professor record in User Database
+    path: /api/v1/user-database/professors
+    method: POST
+    preconditions:
+      - "Request must come from admin professor registration flow."
+      - "Email must be unique."
+      - "User Database must be available."
+    request:
+      email: "prof@example.edu"
+      fullName: "Prof. Dr. X"
+      department: "Software Engineering"
+    response:
+      userId: 701
+      professorId: 88
+      setupRequired: true
+    mustNotReturn:
+      - "password"
+      - "passwordHash"
+      - "raw setupToken"
+    postconditions:
+      - "Professor record is persisted."
+      - "setupRequired is set to true."
+      - "professorId becomes available for Issue 7."
+  - id: 3.8
+    name: Set initial professor password
+    path: /api/v1/professors/password-setup
+    method: POST
+    preconditions:
+      - "Professor must already be manually registered by admin."
+      - "Account must be in setup-required state."
+      - "setupToken and newPassword must be provided."
+      - "Issue 15 token verification must be available."
+      - "Issue 16 password update must be available."
+      - "Password policy must be defined."
+    request:
+      setupToken: "pst_xxx"
+      newPassword: "NewStrongPassword123!"
+    response:
+      message: "Password set successfully"
+    mustNotReturn:
+      - "setupToken"
+      - "newPassword"
+      - "passwordHash"
+      - "GitHub-related data"
+    postconditions:
+      - "Token is verified."
+      - "Password is validated and hashed."
+      - "User Database password update is triggered."
+      - "Professor account moves to active state."
+  - id: 3.9
+    name: Verify password setup token
+    path: /api/v1/password-setup-token-store/verify
+    method: POST
+    preconditions:
+      - "setupToken must be provided."
+      - "Token storage must be reachable."
+      - "Token must previously have been generated by Issue 7."
+    request:
+      setupToken: "pst_xxx"
+    response:
+      valid: true
+      professorId: 88
+      message: "Setup token verified"
+    mustNotReturn:
+      - "password"
+      - "passwordHash"
+      - "full professor private record"
+    postconditions:
+      - "Token validity, used-state, and expiration are checked."
+      - "professorId is obtained when valid."
+      - "Result becomes consumable by Issue 8."
+  - id: 3.10
+    name: Update professor password in User Database
+    path: /api/v1/user-database/professors/{professorId}/password
+    method: PATCH
+    preconditions:
+      - "Token verification must already have succeeded."
+      - "professorId must refer to an existing professor."
+      - "passwordHash must be provided."
+      - "User Database must be reachable."
+    request:
+      passwordHash: "hashed_new_password_value"
+    response:
+      professorId: 88
+      message: "Professor password updated successfully"
+    mustNotReturn:
+      - "raw password"
+      - "passwordHash"
+      - "setupToken"
+    postconditions:
+      - "Password is updated in hashed form."
+      - "setupRequired/inactive state is cleared according to your design."
+      - "Professor becomes eligible for normal login."
+  - id: 3.11
+    name: Start GitHub account linking
+    path: /api/v1/students/me/github/link
+    method: GET
+    preconditions:
+      - "Requester must be an authenticated student."
+      - "Student account must already exist and be active."
+      - "GitHub OAuth config must exist."
+      - "Student must be allowed to perform linking."
+    response:
+      authorizationUrl: "https://github.com/login/oauth/authorize?client_id=..."
+    mustNotReturn:
+      - "GitHub access token"
+      - "client secret"
+      - "internal OAuth state storage details"
+    postconditions:
+      - "OAuth state is generated and stored temporarily."
+      - "Student can be redirected to GitHub."
+      - "Issue 10 becomes the next expected step."
+  - id: 3.12
+    name: Handle GitHub OAuth callback
+    path: /api/v1/auth/github/callback
+    method: GET
+    preconditions:
+      - "Student must already have started OAuth linking via Issue 9."
+      - "Callback must include code and state."
+      - "Stored OAuth state must exist."
+      - "GitHub token exchange must be configured."
+    request:
+      code: "..."
+      state: "..."
+    response:
+      githubLinked: true
+      githubUsername: "student-gh"
+    mustNotReturn:
+      - "GitHub access token"
+      - "GitHub client secret"
+      - "internal state secrets"
+    postconditions:
+      - "state is verified."
+      - "authorization code is exchanged for GitHub access token."
+      - "access token becomes available to Issue 11."
+      - "on failure, no link record is stored and no student update occurs."
+  - id: 3.13
+    name: Store linked GitHub account
+    path: /api/v1/linked-github-account-store/links
+    method: POST
+    preconditions:
+      - "GitHub callback verification must already have succeeded."
+      - "GitHub profile data must already be available."
+      - "studentId, githubId, and githubUsername must be available."
+    request:
+      studentId: 501
+      githubId: "12345678"
+      githubUsername: "student-gh"
+    response:
+      linked: true
+      message: "GitHub account link stored successfully"
+    mustNotReturn:
+      - "GitHub access token"
+      - "OAuth state secrets"
+      - "unrelated student data"
+    postconditions:
+      - "GitHub linkage record is stored persistently."
+      - "Link record becomes consistent with Issue 18 student update."
+  - id: 3.14
+    name: Update student GitHub link in User Database
+    path: /api/v1/user-database/students/{studentId}/github-link
+    method: PATCH
+    preconditions:
+      - "studentId must refer to an existing student account."
+      - "GitHub identity must already be verified."
+      - "githubUsername must be available."
+      - "User Database must be reachable."
+    request:
+      githubUsername: "student-gh"
+      githubLinked: true
+    response:
+      studentId: 501
+      githubLinked: true
+      message: "Student GitHub link updated successfully"
+    mustNotReturn:
+      - "GitHub access token"
+      - "password"
+      - "passwordHash"
+      - "OAuth state"
+    postconditions:
+      - "Student record is updated with githubUsername."
+      - "githubLinked is set to true."
+      - "Student account becomes ready for later JIRA/GitHub integration usage."
+  - id: 3.15
+    name: Code Quality and SonarLint Compliance Review
+    path: "N/A"
+    method: "N/A"
+    preconditions:
+      - "All feature issues must already be implemented."
+      - "Shared naming/response conventions must already exist."
+    response:
+      qualityReviewCompleted: true
+    mustNotReturn:
+      - "endpoint business data"
+      - "user-sensitive values"
+    postconditions:
+      - "SonarLint/code-quality review is completed."
+      - "Major consistency and quality issues are fixed."
+      - "Project is ready for demo/final review."
+commonStatusCodes:
+  - 200: OK
+  - 201: Created
+  - 400: Bad Request
+  - 401: Unauthorized
+  - 403: Forbidden
+  - 404: Not Found
+  - 409: Conflict
+  - 410: Gone
+  - 422: Unprocessable Entity
+flowAlignmentSummary:
+  studentIdImport:
+    - Issue 3 -> Issue 1 -> Issue 2
+  studentRegistration:
+    - Issue 4 -> Issue 5 -> Issue 13
+  professorRegistration:
+    - Issue 6 -> Issue 14 -> Issue 7
+  professorInitialPasswordSetup:
+    - Issue 8 -> Issue 15 -> Issue 16
+  gitHubLinking:
+    - Issue 9 -> Issue 10 -> Issue 11 -> Issue 17 -> Issue 18
