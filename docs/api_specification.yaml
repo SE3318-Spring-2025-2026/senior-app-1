@@ -47,13 +47,30 @@ components:
         role: { type: string, enum: [STUDENT, ADVISOR, COORDINATOR, ADMIN] }
         githubUsername: { type: string, nullable: true }
 
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+        code: { type: string }
+
     Group:
       type: object
+      description: Student project group shell used across formation and advisor flows.
       properties:
-        id: { type: string }
-        name: { type: string }
-        leaderId: { type: string }
-        advisorId: { type: string, nullable: true }
+        id:
+          type: string
+          example: grp_123e4567-e89b-12d3-a456-426614174000
+        name:
+          type: string
+          example: AI Capstone Team
+        leaderId:
+          type: string
+          example: stu_leader_01
+        advisorId:
+          type: string
+          nullable: true
+          example: prof_88
         members:
           type: array
           items: { type: string }
@@ -65,6 +82,7 @@ components:
 
     Invitation:
       type: object
+      description: Invitation sent from a leader to a prospective member.
       properties:
         id: { type: string }
         groupId: { type: string }
@@ -73,8 +91,12 @@ components:
 
     AdvisorRequest:
       type: object
+      description: Request to pair a group with an advisor, including lifecycle status.
       properties:
-        id: { type: string }
+        id:
+          type: string
+          description: Advisor request identifier.
+          example: adr_01HB1AV8Y7BR9H2D5S8G
         groupId: { type: string }
         advisorId: { type: string }
         status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
@@ -165,19 +187,41 @@ paths:
   /auth/register/student:
     post:
       tags: ["1.0 User Registration"]
-      summary: Register as a student
+      summary: Register as a student (Process 1.1)
+      description: Validates student ID and creates a new account.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [studentId]
+              required: [studentId, email, fullName, password]
               properties:
                 studentId: { type: string }
+                email: { type: string, format: email }
+                fullName: { type: string }
+                password: { type: string }
       responses:
         201: { description: Student created }
+        400: { description: Invalid input or already registered }
         403: { description: Student ID not eligible }
+
+  /auth/github/callback:
+    get:
+      tags: ["1.0 User Registration"]
+      summary: Handle GitHub OAuth callback (Process 1.2)
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: GitHub linked successfully }
+        401: { description: Invalid state or code }
 
   /auth/register/professor:
     post:
@@ -212,6 +256,24 @@ paths:
                 properties:
                   resetLink: { type: string }
 
+  /professors/password-setup:
+    post:
+      tags: ["1.0 User Registration"]
+      summary: Set initial professor password (Process 1.4)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [setupToken, newPassword]
+              properties:
+                setupToken: { type: string }
+                newPassword: { type: string }
+      responses:
+        200: { description: Password set successfully }
+        400: { description: Invalid token or password }
+
   /auth/github/link:
     get:
       tags: ["1.0 User Registration"]
@@ -223,7 +285,8 @@ paths:
   /coordinator/eligible-ids:
     post:
       tags: ["1.0 User Registration"]
-      summary: Upload valid student IDs
+      summary: Upload valid student IDs (Process 1.5)
+      description: Bulk upload of student IDs allowed to register.
       security: [{ cookieAuth: [] }]
       requestBody:
         content:
@@ -231,6 +294,37 @@ paths:
             schema: { type: string, format: binary }
       responses:
         200: { description: IDs uploaded }
+
+  /api/v1/coordinator/student-id-registry/import:
+    post:
+      tags: ["1.0 User Registration"]
+      summary: Import valid student IDs
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [studentIds]
+              properties:
+                studentIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        200:
+          description: IDs imported
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  inserted: { type: integer }
+                  duplicates: { type: integer }
+                  invalidFormat: { type: integer }
+        400: { description: Invalid input or import not allowed }
+        403: { description: Coordinator role required }
 
   # --- 2.0 Group Formation ---
   /groups:
@@ -275,7 +369,7 @@ paths:
   /invitations/{invitationId}/respond:
     patch:
       tags: ["2.0 Group Formation"]
-      summary: Accept or deny group invitation
+      summary: Accept or deny group invitation (Process 2.3)
       security: [{ cookieAuth: [] }]
       parameters:
         - name: invitationId
@@ -293,6 +387,20 @@ paths:
                 action: { type: string, enum: [ACCEPT, DENY] }
       responses:
         200: { description: Membership updated if accepted }
+
+  /groups/{groupId}/membership/finalize:
+    post:
+      tags: ["2.0 Group Formation"]
+      summary: Finalize group membership (Process 2.4)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: Membership finalized }
+        400: { description: Cannot finalize membership }
 
   /coordinator/groups/{groupId}/members:
     patch:
