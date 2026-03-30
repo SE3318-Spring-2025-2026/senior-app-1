@@ -60,7 +60,25 @@ The admin manages the system and performs administrative operations.
 * All critical actions (e.g., grading, group changes, deliverable submissions) must be auditable, with a full history available to admins and coordinators.
 * The system must be designed for maintainability, with modular code and clear documentation to allow onboarding of new developers within 2 weeks.
 * Privacy: All personal data must comply with GDPR or equivalent privacy standards, including the right to data deletion and export.
-* The system must be able to scale horizontally to support increased user load during peak periods (e.g., submission deadlines).
+* The system supports horizontal scaling to support increased user load during peak periods (e.g., submission deadlines).
+
+---
+
+## 5. Documentation & API Specifications
+
+### Data Flow Diagrams (DFD)
+- [Level 1 Overview](dfd_senior_project.drawio): High-level view of the entire system and its 6 core processes.
+- [2.0 Group Formation](dfd_group_formation.drawio): Details student group creation, member invitations, and advisor requests.
+- [3.0 Mentor Matching](dfd_mentor_matching.drawio): Details the lifecycle of advisor-group relationships, including transfers and releases.
+- [4.0 Deliverable Management](dfd_deliverable_management.drawio): Covers rubric creation and deliverable submission/review.
+- [5.0 Sprint Monitoring](dfd_sprint_monitoring.drawio): Shows integration with JIRA/GitHub and AI-assisted validation.
+- [6.0 Final Evaluation](dfd_final_evaluation.drawio): Details the calculation of team and individual grade scalars.
+- [User Registration](dfd_user_registiration.drawio): Details the student and professor onboarding process.
+
+### API Specifications (OpenAPI 3.0)
+- [Main API Specification](api_specification.yaml): The comprehensive API for all system modules.
+- [Group Formation API](api_group_formation.yaml): Specialized endpoints for Process 2.0 (Group creation, invites, and advisor requests).
+- [Mentor Matching API](api_mentor_matching.yaml): Specialized endpoints for Process 3.0 (Advisor management and coordinator actions).
 
 ---
 

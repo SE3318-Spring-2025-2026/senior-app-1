@@ -1,0 +1,563 @@
+openapi: 3.0.3
+info:
+  title: Senior Project Management System API
+  description: API specification for the Senior Project Management System, based on Level 2 DFDs and functional requirements.
+  version: 1.0.0
+servers:
+  - url: https://api.senior-project.edu/v1
+    description: Production server
+
+tags:
+  - name: 1.0 User Registration
+    description: Student and Professor registration, GitHub linking.
+  - name: 2.0 Group Formation
+    description: Group creation, invitations, and initial advisor requests.
+  - name: 3.0 Mentor Matching
+    description: Advanced advisor management, requests, releases, and transfers.
+  - name: 4.0 Deliverable Management
+    description: Rubrics, document submissions (Proposal/SoW), and committee reviews.
+  - name: 5.0 Sprint Monitoring
+    description: JIRA/GitHub integrations and AI-assisted validation.
+  - name: 6.0 Final Evaluation
+    description: Grade capture, scalar calculations, and final results.
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+    githubOAuth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://github.com/login/oauth/authorize
+          tokenUrl: https://github.com/login/oauth/access_token
+          scopes:
+            read:user: Access to GitHub username
+            repo: Access to repositories
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [STUDENT, ADVISOR, COORDINATOR, ADMIN] }
+        githubUsername: { type: string, nullable: true }
+
+    Group:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        leaderId: { type: string }
+        advisorId: { type: string, nullable: true }
+        members:
+          type: array
+          items: { type: string }
+        integrations:
+          type: object
+          properties:
+            githubOrg: { type: string }
+            jiraWorkspace: { type: string }
+
+    Invitation:
+      type: object
+      properties:
+        id: { type: string }
+        groupId: { type: string }
+        inviteeId: { type: string }
+        status: { type: string, enum: [PENDING, ACCEPTED, REJECTED] }
+
+    AdvisorRequest:
+      type: object
+      properties:
+        id: { type: string }
+        groupId: { type: string }
+        advisorId: { type: string }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+
+    Deliverable:
+      type: object
+      properties:
+        id: { type: string }
+        groupId: { type: string }
+        type: { type: string, enum: [PROPOSAL, SOW] }
+        content: { type: string, description: "Markdown content" }
+        images: { type: array, items: { type: string, format: uri } }
+        submittedAt: { type: string, format: date-time }
+
+    GradingRubric:
+      type: object
+      properties:
+        id: { type: string }
+        deliverableType: { type: string }
+        criteria:
+          type: array
+          items:
+            type: object
+            properties:
+              question: { type: string }
+              type: { type: string, enum: [BINARY, SOFT] }
+              weight: { type: number }
+
+    Grade:
+      type: object
+      properties:
+        id: { type: string }
+        groupId: { type: string }
+        studentId: { type: string, nullable: true }
+        deliverableId: { type: string, nullable: true }
+        score: { type: string, description: "Numeric score or Letter grade" }
+        comments: { type: string }
+        gradeType: { type: string, enum: [ADVISOR_SOFT, COMMITTEE_FINAL, PEER_REVIEW] }
+
+    SprintSync:
+      type: object
+      properties:
+        id: { type: string }
+        groupId: { type: string }
+        sprintNumber: { type: integer }
+        jiraStories:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              points: { type: number }
+              status: { type: string }
+              assigneeId: { type: string }
+        githubPrs:
+          type: array
+          items:
+            type: object
+            properties:
+              prNumber: { type: integer }
+              authorId: { type: string }
+              status: { type: string }
+              additions: { type: integer }
+              deletions: { type: integer }
+        aiValidation:
+          type: object
+          properties:
+            score: { type: number }
+            feedback: { type: string }
+            validatedAt: { type: string, format: date-time }
+
+    ScalarCalculation:
+      type: object
+      properties:
+        groupId: { type: string }
+        teamScalar: { type: number }
+        individualContributions:
+          type: array
+          items:
+            type: object
+            properties:
+              studentId: { type: string }
+              contributionRatio: { type: number }
+              finalScalar: { type: number }
+
+paths:
+  # --- 1.0 User Registration ---
+  /auth/register/student:
+    post:
+      tags: ["1.0 User Registration"]
+      summary: Register as a student
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [studentId]
+              properties:
+                studentId: { type: string }
+      responses:
+        201: { description: Student created }
+        403: { description: Student ID not eligible }
+
+  /auth/register/professor:
+    post:
+      tags: ["1.0 User Registration"]
+      summary: Admin registers a professor
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email]
+              properties:
+                name: { type: string }
+                email: { type: string }
+      responses:
+        201: { description: Professor registered, one-time link generated }
+
+  /auth/github/link:
+    get:
+      tags: ["1.0 User Registration"]
+      summary: Initiate GitHub account linking
+      security: [{ githubOAuth: [] }]
+      responses:
+        302: { description: Redirect to GitHub }
+
+  /coordinator/eligible-ids:
+    post:
+      tags: ["1.0 User Registration"]
+      summary: Upload valid student IDs
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        content:
+          text/csv:
+            schema: { type: string, format: binary }
+      responses:
+        200: { description: IDs uploaded }
+
+  # --- 2.0 Group Formation ---
+  /groups:
+    post:
+      tags: ["2.0 Group Formation"]
+      summary: Create a new group shell
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        201: { description: Group created }
+
+  /groups/{groupId}/invitations:
+    post:
+      tags: ["2.0 Group Formation"]
+      summary: Dispatch group invitations
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [studentIds]
+              properties:
+                studentIds: { type: array, items: { type: string } }
+      responses:
+        200: { description: Invitations sent }
+
+  /invitations/{invitationId}/respond:
+    patch:
+      tags: ["2.0 Group Formation"]
+      summary: Accept or deny group invitation
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [ACCEPT, DENY] }
+      responses:
+        200: { description: Membership updated if accepted }
+
+  # --- 3.0 Mentor Matching ---
+  /groups/{groupId}/advisor-request:
+    post:
+      tags: ["3.0 Mentor Matching", "2.0 Group Formation"]
+      summary: Request an advisor for the group
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [professorId]
+              properties:
+                professorId: { type: string }
+      responses:
+        201: { description: Request submitted }
+
+  /advisor/requests/{requestId}/decision:
+    patch:
+      tags: ["3.0 Mentor Matching"]
+      summary: Advisor approves or rejects a request
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [APPROVE, REJECT] }
+      responses:
+        200: { description: Request resolved }
+
+  /advisor/release:
+    post:
+      tags: ["3.0 Mentor Matching"]
+      summary: Advisor releases a group (Process 3.3)
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [groupId]
+              properties:
+                groupId: { type: string }
+      responses:
+        200: { description: Advisor freed }
+
+  /coordinator/sanitize-groups:
+    post:
+      tags: ["3.0 Mentor Matching"]
+      summary: Disband orphaned groups without advisors (Process 3.5)
+      security: [{ cookieAuth: [] }]
+      responses:
+        200:
+          description: Sanitization complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disbandedGroupIds: { type: array, items: { type: string } }
+
+  /coordinator/groups/{groupId}/transfer:
+    patch:
+      tags: ["3.0 Mentor Matching"]
+      summary: Coordinator transfers group to a new advisor
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newAdvisorId]
+              properties:
+                newAdvisorId: { type: string }
+      responses:
+        200: { description: Advisor updated }
+
+  # --- 4.0 Deliverable Management ---
+  /coordinator/rubrics:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: Define a new deliverable rubric
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GradingRubric' }
+      responses:
+        201: { description: Rubric created }
+
+  /groups/{groupId}/deliverables:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: Submit a deliverable (Proposal/SoW)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, content]
+              properties:
+                type: { type: string, enum: [PROPOSAL, SOW] }
+                content: { type: string }
+                imageUrls: { type: array, items: { type: string } }
+      responses:
+        201: { description: Deliverable submitted }
+
+  /committee/submissions/{submissionId}/grade:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: Committee reviews and grades submission (Process 4.4)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: submissionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scores, comments]
+              properties:
+                scores:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      criterionId: { type: string }
+                      value: { type: number }
+                comments: { type: string }
+      responses:
+        200: { description: Grades stored }
+
+  # --- 5.0 Sprint Monitoring ---
+  /groups/{groupId}/integrations:
+    put:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: Bind JIRA and GitHub integrations
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                jiraWorkspace: { type: string }
+                githubOrg: { type: string }
+                jiraPat: { type: string }
+                githubPat: { type: string }
+      responses:
+        200: { description: Integrations configured }
+
+  /system/sync/sprint:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: Trigger daily sync of JIRA/GitHub data
+      security: [{ cookieAuth: [] }]
+      responses:
+        202: { description: Sync started }
+
+  /groups/{groupId}/sprints/{sprintNumber}/sync:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: Trigger JIRA/GitHub sync for a sprint (Process 5.2, 5.3)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sprintNumber
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        200:
+          description: Sync successful
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SprintSync' }
+
+  /groups/{groupId}/sprints/{sprintNumber}/validate:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: Trigger AI implementation validation (Process 5.4)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sprintNumber
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        200:
+          description: AI Validation complete
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SprintSync' }
+
+  # --- 6.0 Final Evaluation ---
+  /groups/{groupId}/final-grades/advisor:
+    post:
+      tags: ["6.0 Final Evaluation"]
+      summary: Capture advisor soft grades (Process 6.1)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  studentId: { type: string }
+                  grade: { type: string, enum: [A, B, C, D, F] }
+      responses:
+        200: { description: Advisor grades captured }
+
+  /groups/{groupId}/final-grades/calculate:
+    post:
+      tags: ["6.0 Final Evaluation"]
+      summary: Calculate final scalars and grades (Process 6.2, 6.3, 6.4)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Calculations complete
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScalarCalculation' }
