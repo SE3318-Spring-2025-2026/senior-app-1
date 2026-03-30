@@ -1,6 +1,6 @@
-<mxfile host="drawio-plugin" modified="2026-03-30T11:45:00.000Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" version="22.1.22" etag="FinalEvaluationEtag" type="embed">
+<mxfile host="drawio-plugin" modified="2026-03-30T08:51:10.825Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" etag="uhhYyeeG9p0uM7dFtRoS" version="22.1.22" type="embed">
   <diagram id="dfd-6-final-evaluation" name="Level 2 - 6.0 Final Evaluation">
-    <mxGraphModel dx="331" dy="2573" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" math="0" shadow="0">
+    <mxGraphModel dx="1122" dy="2152" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -85,18 +85,16 @@
         <mxCell id="f5" value="Sync Metrics (SP, Work)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" parent="1" source="D4" target="P63" edge="1">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="1445" y="685" />
-              <mxPoint x="1445" y="800" />
-              <mxPoint x="550" y="800" />
-              <mxPoint x="550" y="628" />
+              <mxPoint x="450" y="680" />
             </Array>
           </mxGeometry>
         </mxCell>
         <mxCell id="f6" value="Contribution Ratios" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" parent="1" source="P63" target="P64" edge="1">
-          <mxGeometry relative="1" as="geometry">
+          <mxGeometry x="-0.5245" relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="415" y="628" />
             </Array>
+            <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="f7" value="Store Final Grades" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" parent="1" source="P64" target="D3" edge="1">
