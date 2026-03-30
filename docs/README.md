@@ -68,7 +68,7 @@ The admin manages the system and performs administrative operations.
 
 ### Data Flow Diagrams (DFD)
 - [Level 1 Overview](dfd_senior_project.drawio): High-level view of the entire system and its 6 core processes.
-- [2.0 Group Formation](dfd_group_formation.drawio): Details student group creation, member invitations, and advisor requests.
+- [2.0 Group Formation](dfd_group_formation.drawio): Details student group creation, member invitations, and coordinator-led membership adjustments.
 - [3.0 Mentor Matching](dfd_mentor_matching.drawio): Details the lifecycle of advisor-group relationships, including transfers and releases.
 - [4.0 Deliverable Management](dfd_deliverable_management.drawio): Covers rubric creation and deliverable submission/review.
 - [5.0 Sprint Monitoring](dfd_sprint_monitoring.drawio): Shows integration with JIRA/GitHub and AI-assisted validation.
@@ -120,13 +120,13 @@ The admin manages the system and performs administrative operations.
 | Student creates a group | Frontend + Backend | Group Name, Team Leader ID |
 | Leader invites members | Frontend + Notifications | Student IDs |
 | Members approve/deny | Frontend + Notifications | Approval status |
-| Leader requests Advisor | Frontend + Notifications | Professor ID |
-| Advisor accepts request | Advisor Panel | Acceptance status |
+| Coordinator manually edits group | Coordinator Panel | Student ID, Add/Remove action |
 
 ### 3. Mentor Matching
 | PROCESS STEP | SYSTEM COMPONENT | DATA REQUIRED |
 | :--- | :--- | :--- |
 | Team Leader makes Advisee Request | Frontend + Notifications | Selected Professor ID |
+| Team Leader withdraws request | Frontend + Backend | Request ID |
 | Advisor receives notification | Advisor Panel + Notifications | Requesting Group details |
 | Advisor approves/rejects request | Advisor Panel + Notifications | Approval/Rejection status |
 | Advisor releases team | Advisor Panel + Notifications | Release confirmation for new requests |
@@ -138,6 +138,7 @@ The admin manages the system and performs administrative operations.
 | :--- | :--- | :--- |
 | Coordinator creates rubric | Frontend + Backend | Questions, Binary/Soft criteria |
 | Coordinator sets weights | Frontend + Backend | Deliverable %, Sprint associations |
+| Coordinator assigns committee | Coordinator Panel | Committee ID, Group IDs |
 | Group submits Proposal/SoW | Markdown Editor | Text document, Images, Metadata |
 | Committee reviews submission | Frontend + Backend | Comments, Grading picker |
 

@@ -1,6 +1,6 @@
-<mxfile host="drawio-plugin" modified="2026-03-30T08:52:42.849Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" etag="-z8fvBVIWxuRcEJJ0Pbx" version="22.1.22" type="embed" pages="2">
+<mxfile host="drawio-plugin" modified="2026-03-30T09:46:17.064Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" etag="8YvE6xhroFVwqNAlr3LZ" version="22.1.22" type="embed" pages="2">
   <diagram id="context-diag" name="Level 0 - Context Diagram">
-    <mxGraphModel dx="1122" dy="852" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+    <mxGraphModel dx="1122" dy="895" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -57,7 +57,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="e_tl_out" value="Decision Notification (Approved / Rejected), Release Notification (Advisor Freed), Transfer Notification" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;" parent="1" source="P0" target="TL" edge="1">
+        <mxCell id="e_tl_out" value="Decision Notification, Release Notification, Transfer Notification, Invitation Response Notify" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;" parent="1" source="P0" target="TL" edge="1">
           <mxGeometry x="0.3015" relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="670" y="290" />
@@ -97,7 +97,7 @@
             <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="e_c_in" value="valid ID&#39;s, Transfer Command (Group ID, New Advisor ID), Rubrics, Weights" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;" parent="1" source="C" target="P0" edge="1">
+        <mxCell id="e_c_in" value="valid ID&#39;s, Transfer Command, Rubrics, Weights, Manual Group Edits" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;" parent="1" source="C" target="P0" edge="1">
           <mxGeometry x="-0.1746" relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="830" y="120" />
@@ -196,7 +196,7 @@
     </mxGraphModel>
   </diagram>
   <diagram id="overview-diag" name="Level 1 - Overview">
-    <mxGraphModel dx="2722" dy="852" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1400" background="none" math="0" shadow="0">
+    <mxGraphModel dx="2722" dy="895" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1400" background="none" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -288,27 +288,33 @@
         <mxCell id="l1_3" value="password callback" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="P1" target="A1" edge="1">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="1100" y="160" />
-              <mxPoint x="1100" y="320" />
+              <mxPoint x="1160" y="230" />
+              <mxPoint x="1160" y="320" />
             </Array>
           </mxGeometry>
         </mxCell>
         <mxCell id="l1_4" value="Store User" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="P1" target="D1" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="l1_5" value="Log Event" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;dashed=1;" parent="1" source="P1" target="D6" edge="1">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="1420" y="200" />
-              <mxPoint x="1420" y="430" />
+              <mxPoint x="1360" y="200" />
+              <mxPoint x="1360" y="200" />
             </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_5" value="Log Event" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;dashed=1;" parent="1" source="P1" target="D6" edge="1">
+          <mxGeometry x="-0.271" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1540" y="220" />
+              <mxPoint x="1540" y="430" />
+            </Array>
+            <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="l2_1" value="Name, Invites" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="TL1" target="P2" edge="1">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="430" y="320" />
-              <mxPoint x="430" y="320" />
+              <mxPoint x="260" y="330" />
+              <mxPoint x="260" y="330" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -342,19 +348,18 @@
         <mxCell id="l3_1" value="Advisee Request (Prof ID, Group ID)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="TL1" target="P3" edge="1">
           <mxGeometry x="-0.4222" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="-150" y="410" />
-              <mxPoint x="290" y="410" />
-              <mxPoint x="290" y="460" />
+              <mxPoint x="-150" y="440" />
             </Array>
             <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="l3_2" value="Transfer Command (Group ID, New Advisor ID)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="C1" target="P3" edge="1">
-          <mxGeometry relative="1" as="geometry">
+          <mxGeometry x="-0.6017" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="1060" y="140" />
+              <mxPoint x="1060" y="150" />
               <mxPoint x="1060" y="440" />
             </Array>
+            <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="l3_3" value="Approve / Reject Decision, Release Confirmation" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="A1" target="P3" edge="1">
@@ -376,11 +381,12 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="l4_1" value="Rubrics, Weights" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="C1" target="P4" edge="1">
-          <mxGeometry relative="1" as="geometry">
+          <mxGeometry x="-0.7232" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="1030" y="160" />
+              <mxPoint x="1030" y="170" />
               <mxPoint x="1030" y="580" />
             </Array>
+            <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="l4_2" value="Proposal, SoW" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="TL1" target="P4" edge="1">
@@ -410,8 +416,8 @@
         <mxCell id="l4_5" value="Log Event" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;dashed=1;" parent="1" source="P4" target="D6" edge="1">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="1420" y="570" />
-              <mxPoint x="1420" y="450" />
+              <mxPoint x="1650" y="570" />
+              <mxPoint x="1650" y="450" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -436,16 +442,17 @@
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="500" y="170" />
-              <mxPoint x="500" y="440" />
+              <mxPoint x="500" y="470" />
             </Array>
           </mxGeometry>
         </mxCell>
         <mxCell id="l1_a_in" value="setup token + new password" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="A1" target="P1" edge="1">
-          <mxGeometry relative="1" as="geometry">
+          <mxGeometry x="-0.6471" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="1160" y="300" />
-              <mxPoint x="1160" y="130" />
+              <mxPoint x="970" y="300" />
+              <mxPoint x="970" y="160" />
             </Array>
+            <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="l3_tl_out" value="Decision Notification (Approved / Rejected), Release Notification (Advisor Freed), Transfer Notification" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="P3" target="TL1" edge="1">
@@ -457,7 +464,7 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="l3_a_out" value="Request Notification (Group Details), New Assignment Notification" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="P3" target="A1" edge="1">
-          <mxGeometry x="0.3425" relative="1" as="geometry">
+          <mxGeometry x="0.3699" relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="1480" y="410" />
             </Array>
@@ -530,14 +537,14 @@
             <Array as="points">
               <mxPoint x="1600" y="750" />
               <mxPoint x="1600" y="980" />
-              <mxPoint x="800" y="980" />
+              <mxPoint x="820" y="980" />
             </Array>
           </mxGeometry>
         </mxCell>
         <mxCell id="l6_3" value="Store Final Grade" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="P6" target="D3" edge="1">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="810" y="1000" />
+              <mxPoint x="790" y="1000" />
               <mxPoint x="1620" y="1000" />
               <mxPoint x="1620" y="900" />
             </Array>
@@ -549,6 +556,25 @@
               <mxPoint x="560" y="880" />
               <mxPoint x="560" y="130" />
             </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1_c2" value="Manual Group Edits" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="C1" target="P2" edge="1">
+          <mxGeometry x="-0.5593" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="990" y="130" />
+              <mxPoint x="990" y="240" />
+              <mxPoint x="800" y="240" />
+            </Array>
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l2_5" value="Notify Response" style="edgeStyle=orthogonalEdgeStyle;rounded=1;fontSize=11;" parent="1" source="P2" target="TL1" edge="1">
+          <mxGeometry x="0.3542" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="330" y="310" />
+              <mxPoint x="330" y="310" />
+            </Array>
+            <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
       </root>

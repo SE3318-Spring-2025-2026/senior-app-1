@@ -11,7 +11,7 @@ tags:
   - name: 1.0 User Registration
     description: Student and Professor registration, GitHub linking.
   - name: 2.0 Group Formation
-    description: Group creation, invitations, and initial advisor requests.
+    description: Group creation, invitations, and coordinator-led membership adjustments.
   - name: 3.0 Mentor Matching
     description: Advanced advisor management, requests, releases, and transfers.
   - name: 4.0 Deliverable Management
@@ -197,6 +197,21 @@ paths:
       responses:
         201: { description: Professor registered, one-time link generated }
 
+  /admin/reset-link:
+    post:
+      tags: ["1.0 User Registration"]
+      summary: Generate one-time-use password reset link
+      security: [{ cookieAuth: [] }]
+      responses:
+        201:
+          description: Reset link generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resetLink: { type: string }
+
   /auth/github/link:
     get:
       tags: ["1.0 User Registration"]
@@ -279,10 +294,33 @@ paths:
       responses:
         200: { description: Membership updated if accepted }
 
+  /coordinator/groups/{groupId}/members:
+    patch:
+      tags: ["2.0 Group Formation"]
+      summary: Coordinator manually adds or removes students from a group
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, studentId]
+              properties:
+                action: { type: string, enum: [ADD, REMOVE] }
+                studentId: { type: string }
+      responses:
+        200: { description: Membership updated }
+
   # --- 3.0 Mentor Matching ---
   /groups/{groupId}/advisor-request:
     post:
-      tags: ["3.0 Mentor Matching", "2.0 Group Formation"]
+      tags: ["3.0 Mentor Matching"]
       summary: Request an advisor for the group
       security: [{ cookieAuth: [] }]
       parameters:
@@ -301,6 +339,18 @@ paths:
                 professorId: { type: string }
       responses:
         201: { description: Request submitted }
+
+    delete:
+      tags: ["3.0 Mentor Matching"]
+      summary: Withdraw a pending advisor request
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        204: { description: Request withdrawn }
 
   /advisor/requests/{requestId}/decision:
     patch:
@@ -391,6 +441,24 @@ paths:
             schema: { $ref: '#/components/schemas/GradingRubric' }
       responses:
         201: { description: Rubric created }
+
+  /coordinator/committees/assign:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: Assign groups to a committee
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [committeeId, groupIds]
+              properties:
+                committeeId: { type: string }
+                groupIds: { type: array, items: { type: string } }
+      responses:
+        200: { description: Assignments updated }
 
   /groups/{groupId}/deliverables:
     post:

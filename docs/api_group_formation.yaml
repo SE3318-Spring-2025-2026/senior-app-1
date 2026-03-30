@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Senior Project Management System - Group Formation API
-  description: API specification for Process 2.0 Group Formation, based on Level 2 DFD. Includes detailed payload contracts and common error shapes to simplify implementation.
+  description: API specification for Process 2.0 Group Formation, based on Level 2 DFD. Includes group creation, student invitations, and coordinator-led membership adjustments.
   version: 1.0.1
 servers:
   - url: https://api.senior-project.edu/v1
@@ -9,7 +9,7 @@ servers:
 
 tags:
   - name: 2.0 Group Formation
-    description: Operations for creating groups, inviting members, and initial advisor requests.
+    description: Operations for creating groups, inviting members, and coordinator-led membership adjustments.
 
 components:
   securitySchemes:
@@ -69,29 +69,6 @@ components:
           type: string
           description: Current invitation status.
           enum: [PENDING, ACCEPTED, REJECTED]
-          example: PENDING
-
-    AdvisorRequest:
-      type: object
-      description: Request from a leader to a professor to become the group advisor.
-      required: [id, groupId, professorId, status]
-      properties:
-        id:
-          type: string
-          description: Advisor request identifier.
-          example: adr_01HB1AV8Y7BR9H2D5S8G
-        groupId:
-          type: string
-          description: Group requesting the advisor.
-          example: grp_123e4567-e89b-12d3-a456-426614174000
-        professorId:
-          type: string
-          description: Target professor ID.
-          example: prof_88
-        status:
-          type: string
-          description: Current request status.
-          enum: [PENDING, APPROVED, REJECTED]
           example: PENDING
 
     Error:
@@ -294,105 +271,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /groups/{groupId}/advisor-request:
-    post:
+  /groups/{groupId}/membership/coordinator:
+    patch:
       tags: ["2.0 Group Formation"]
-      summary: Manage advisor request (Process 2.5)
-      description: Leader requests a professor to be the group advisor.
+      summary: Manual group membership adjustment (Process 2.5)
+      description: Coordinator manually adds or removes students from a group.
       security: [{ cookieAuth: [] }]
       parameters:
         - name: groupId
           in: path
           required: true
-          description: Group requesting an advisor.
+          description: Group to modify.
           schema: { type: string }
       requestBody:
         required: true
-        description: Target professor to request.
         content:
           application/json:
             schema:
               type: object
-              required: [professorId]
+              required: [action, studentId]
               properties:
-                professorId:
+                action:
                   type: string
-                  description: Professor to request as advisor.
-                  example: prof_88
-      responses:
-        201:
-          description: Request submitted to the professor.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdvisorRequest'
-        400:
-          description: Invalid request (e.g., duplicate pending request).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        401:
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        404:
-          description: Group or professor not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /advisor/requests/{requestId}/response:
-    patch:
-      tags: ["2.0 Group Formation"]
-      summary: Advisor response to request (Process 2.5)
-      description: Advisor accepts or rejects the group request.
-      security: [{ cookieAuth: [] }]
-      parameters:
-        - name: requestId
-          in: path
-          required: true
-          description: Advisor request identifier.
-          schema: { type: string }
-      requestBody:
-        required: true
-        description: Advisor decision for the request.
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [decision]
-              properties:
-                decision:
+                  enum: [ADD, REMOVE]
+                studentId:
                   type: string
-                  description: Advisor action for the request.
-                  enum: [APPROVE, REJECT]
-                  example: APPROVE
+                  description: Student ID to add or remove.
       responses:
         200:
-          description: Request resolved and group updated.
+          description: Membership updated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AdvisorRequest'
-        400:
-          description: Invalid state transition (e.g., already resolved).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        401:
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/Group'
+        403:
+          description: Forbidden - Coordinator only.
         404:
-          description: Advisor request not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+          description: Group or student not found.

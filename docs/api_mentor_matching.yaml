@@ -110,6 +110,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+    delete:
+      tags: ["3.0 Mentor Matching"]
+      summary: Withdraw advisor request (Process 3.1)
+      description: Leader withdraws a pending advisor request before it is resolved.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          description: Group withdrawing the request.
+          schema: { type: string }
+      responses:
+        204:
+          description: Request withdrawn successfully.
+        400:
+          description: No pending request to withdraw.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        401:
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        404:
+          description: Group not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /advisor/requests/{requestId}/decision:
     patch:
       tags: ["3.0 Mentor Matching"]
