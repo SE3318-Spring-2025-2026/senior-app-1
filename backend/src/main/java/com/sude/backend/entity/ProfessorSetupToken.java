@@ -1,4 +1,4 @@
-package com.sude.backend.entity; 
+package com.sude.backend.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
@@ -32,5 +32,31 @@ public class ProfessorSetupToken {
         this.expiresAt = LocalDateTime.now().plusDays(1);
     }
 
-    // getters & setters (IDE generate et 🔥)
+   public Long getId() {
+    return id;
+}
+
+public String getToken() {
+    return token;
+}
+
+public boolean isUsed() {
+    return used;
+}
+
+public void setUsed(boolean used) {
+    this.used = used;
+}
+
+public LocalDateTime getCreatedAt() {
+    return createdAt;
+}
+
+public LocalDateTime getExpiresAt() {
+    return expiresAt;
+}
+
+public Professor getProfessor() {
+    return professor;
+}
 }

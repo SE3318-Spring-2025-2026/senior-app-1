@@ -4,7 +4,7 @@ import com.sude.backend.entity.Professor;
 import com.sude.backend.service.ProfessorService;
 import com.sude.backend.service.ProfessorSetupTokenService;
 import org.springframework.web.bind.annotation.*;
-
+import com.sude.backend.dto.ProfessorSetupRequest;
 @RestController
 @RequestMapping("/api/v1/admin")
 public class AdminController {
@@ -33,4 +33,18 @@ public class AdminController {
     public String generateSetupToken(@PathVariable Long professorId) {
         return professorSetupTokenService.generateToken(professorId);
     }
+
+    // Issue 8
+  @PostMapping("/setup")
+public String setupProfessor(@RequestBody ProfessorSetupRequest request) {
+    try {
+        professorSetupTokenService.setupProfessor(
+                request.getToken(),
+                request.getPassword()
+        );
+        return "Professor setup completed";
+    } catch (RuntimeException e) {
+        return e.getMessage(); // 👈 önemli
+    }
+}
 }

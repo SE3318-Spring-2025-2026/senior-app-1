@@ -12,8 +12,10 @@ public class Professor {
     private String email;
     private String fullName;
     private String department;
-
+    private String password;
     private boolean setupRequired;
+
+   
 
     // BOŞ CONSTRUCTOR (ŞART)
     public Professor() {}
@@ -59,4 +61,9 @@ public class Professor {
     public void setSetupRequired(boolean setupRequired) {
         this.setupRequired = setupRequired;
     }
+    public void setPassword(String password) {
+    this.password = password;
+}
+
+
 }
