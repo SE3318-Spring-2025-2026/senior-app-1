@@ -1,7 +1,8 @@
 package com.sude.backend.controller;
-import org.springframework.stereotype.Controller;
+
 import com.sude.backend.entity.Professor;
 import com.sude.backend.service.ProfessorService;
+import com.sude.backend.service.ProfessorSetupTokenService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -9,11 +10,15 @@ import org.springframework.web.bind.annotation.*;
 public class AdminController {
 
     private final ProfessorService professorService;
+    private final ProfessorSetupTokenService professorSetupTokenService;
 
-    public AdminController(ProfessorService professorService) {
+    public AdminController(ProfessorService professorService,
+                           ProfessorSetupTokenService professorSetupTokenService) {
         this.professorService = professorService;
+        this.professorSetupTokenService = professorSetupTokenService;
     }
 
+    // Issue 6
     @PostMapping("/professors")
     public Professor createProfessor(@RequestBody Professor request) {
         return professorService.createProfessor(
@@ -21,5 +26,11 @@ public class AdminController {
                 request.getFullName(),
                 request.getDepartment()
         );
+    }
+
+    // Issue 7
+    @PostMapping("/generate-setup-token/{professorId}")
+    public String generateSetupToken(@PathVariable Long professorId) {
+        return professorSetupTokenService.generateToken(professorId);
     }
 }
