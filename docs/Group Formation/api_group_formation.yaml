@@ -1,0 +1,253 @@
+openapi: 3.0.3
+info:
+  title: Senior Project Management System - Group Formation API
+  description: "API specification for Process 2.0 Group Formation, based strictly on the Level 2 DFD. Maps directly to P21-P25 and interacts with D1 (User DB), D2 (Group DB), D6 (Audit Logs), and D8 (Pending Invitations)."
+  version: 1.1.0
+servers:
+  - url: https://api.senior-project.edu/v1
+    description: Production server
+
+tags:
+  - name: 2.0 Group Formation
+    description: "Operations for creating groups, inviting members, and coordinator-led membership adjustments based on the DFD."
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+
+  schemas:
+    Group:
+      type: object
+      description: "Student project group shell (D2: Group DB)."
+      required: [id, name, leaderId, memberIds]
+      properties:
+        id:
+          type: string
+          description: "Opaque group identifier (UUID or ULID)."
+          example: grp_123e4567-e89b-12d3-a456-426614174000
+        name:
+          type: string
+          description: "Human-friendly group name (f1)."
+          example: AI Capstone Team
+        leaderId:
+          type: string
+          description: "Student ID of the designated group leader."
+          example: stu_leader_01
+        memberIds:
+          type: array
+          description: "All confirmed members."
+          items:
+            type: string
+            example: stu_member_02
+        advisorId:
+          type: string
+          nullable: true
+          description: "Assigned advisor ID when approved; null until confirmed."
+          example: prof_88
+
+    Invitation:
+      type: object
+      description: "Invitation sent from a leader to a prospective member (D8: Pending Invitations)."
+      required: [id, groupId, studentId, status]
+      properties:
+        id:
+          type: string
+          description: "Invitation identifier."
+          example: inv_01H9Z8YJV7M0CKS0Q9K3
+        groupId:
+          type: string
+          description: "Target group ID."
+          example: grp_123e4567-e89b-12d3-a456-426614174000
+        studentId:
+          type: string
+          description: "Invitee student ID."
+          example: stu_member_03
+        status:
+          type: string
+          description: "Current invitation status."
+          enum: [PENDING, ACCEPTED, REJECTED]
+          example: PENDING
+
+    Error:
+      type: object
+      description: "Standard error envelope."
+      required: [message, code]
+      properties:
+        message:
+          type: string
+          description: "Human-friendly error message."
+          example: Group not found
+        code:
+          type: string
+          description: "Machine-friendly error code for programmatic handling."
+          example: GROUP_NOT_FOUND
+
+paths:
+  /groups:
+    post:
+      tags: ["2.0 Group Formation"]
+      summary: "P21 Create Group Shell"
+      description: |
+        Processes 'f1: Group Name' to create an empty group record (f2: Initial Group Entry) in D2.
+        **Side Effects:** Logs group creation to D6: Audit Logs (f13).
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: "Human-friendly group name."
+                  example: AI Capstone Team
+      responses:
+        "201":
+          description: "Group created successfully."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        "400":
+          description: "Invalid payload (e.g., duplicate name)."
+        "401":
+          description: "Authentication required."
+
+  /groups/{groupId}/invitations:
+    post:
+      tags: ["2.0 Group Formation"]
+      summary: "P22 Dispatch Invitations"
+      description: |
+        Takes 'f3: Invites' from the Team Leader, validates them against 'f4: User Profiles' (D1). 
+        **Side Effects:** Writes 'f5: Store Pending Invites' to D8 and triggers 'f6: Invite Notification' to the student.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [studentIds]
+              properties:
+                studentIds:
+                  type: array
+                  minItems: 1
+                  items: { type: string, example: stu_member_02 }
+      responses:
+        "201":
+          description: "Invitations successfully validated and dispatched."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invitation'
+        "400":
+          description: "Validation failed (e.g., student not found in D1, or already in a group)."
+        "404":
+          description: "Group not found in D2."
+
+  /invitations/{invitationId}/response:
+    patch:
+      tags: ["2.0 Group Formation"]
+      summary: "P23 Process Invitee Response"
+      description: |
+        Takes 'f7: Approve / Deny' from Student. Fetches and updates D8: Pending Invitations.
+        **Side Effects:** Logs action to D6 (f14). Triggers internal 'f10: Membership Update' flow to P24 if accepted.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response]
+              properties:
+                response:
+                  type: string
+                  enum: [ACCEPT, REJECT]
+      responses:
+        "200":
+          description: "Response processed; D8 status updated."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        "400":
+          description: "Invalid state transition (e.g., already responded)."
+        "404":
+          description: "Invitation not found in D8."
+
+  /groups/{groupId}/membership/finalize:
+    post:
+      tags: ["2.0 Group Formation"]
+      summary: "P24 Finalize Group Membership"
+      description: |
+        Resolves the 'f10: Membership Update' flow. 
+        **Side Effects:** Writes 'f11: Update Group Data' to D2 and fires 'f12: Notify Response' to the Team Leader.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: "Membership finalized in D2."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        "400":
+          description: "Cannot finalize (e.g., missing members)."
+
+  /groups/{groupId}/membership/coordinator:
+    patch:
+      tags: ["2.0 Group Formation"]
+      summary: "P25 Manual Group Management"
+      description: |
+        Processes 'f15: Manual Edit Command' from the Coordinator.
+        **Side Effects:** Directly pushes 'f19: Update Membership' to D2 and writes 'f21: Log Group Edit' to D6.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, studentId]
+              properties:
+                action:
+                  type: string
+                  enum: [ADD, REMOVE]
+                studentId:
+                  type: string
+      responses:
+        "200":
+          description: "Manual membership override applied to D2."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        "403":
+          description: "Forbidden - Coordinator role required."

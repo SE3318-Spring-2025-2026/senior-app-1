@@ -1,0 +1,104 @@
+<mxfile host="drawio-plugin" modified="2026-04-01T14:04:15.222Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" version="22.1.22" etag="VDxlxJFJS3ggQjbnV-Oi" type="embed">
+  <diagram id="VK8pst_Ry-VVGOA2uA2_" name="Page-1">
+    <mxGraphModel dx="1122" dy="955" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="layer_ui" value="Frontend (React / UI Hooks)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;startSize=20;verticalAlign=top;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="20" y="20" width="1060" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="layer_api" value="Backend (Next.js API &amp; Services)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;dashed=1;startSize=20;verticalAlign=top;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="20" y="300" width="1060" height="340" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_group" value="&lt;b&gt;GroupService&lt;/b&gt;&lt;br&gt;&amp;lt;&amp;lt;Business Logic&amp;gt;&amp;gt;&lt;hr&gt;- db: PrismaClient&lt;br&gt;- notifySvc: NotificationService&lt;br&gt;- auditSvc: AuditService&lt;hr&gt;+ createShell(name: string, leaderId: string): Promise&amp;lt;Group&amp;gt;&lt;br&gt;+ validateProfiles(ids: string[]): Promise&amp;lt;boolean&amp;gt;&lt;br&gt;+ dispatchInvites(groupId: string, ids: string[]): Promise&amp;lt;void&amp;gt;&lt;br&gt;+ processResponse(inviteId: string, accept: boolean): Promise&amp;lt;void&amp;gt;&lt;br&gt;+ finalizeMembership(groupId: string, studentId: string): Promise&amp;lt;void&amp;gt;&lt;br&gt;+ executeOverride(groupId: string, studentId: string, action: string): Promise&amp;lt;void&amp;gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;" parent="layer_api" vertex="1">
+          <mxGeometry x="10" y="30" width="420" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="layer_data" value="Data Models (TypeScript Interfaces / ORM Entities)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;startSize=20;verticalAlign=top;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="20" y="660" width="1060" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="model_invite" value="&lt;b&gt;&amp;lt;&amp;lt;Entity&amp;gt;&amp;gt;&lt;br&gt;Invitation (D8)&lt;/b&gt;&lt;hr&gt;+ id: string&lt;br&gt;+ groupId: string&lt;br&gt;+ inviteeId: string&lt;br&gt;+ status: &#39;PENDING&#39;|&#39;APPROVED&#39;|&#39;DENIED&#39;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#ffffff;strokeColor=#000000;" parent="layer_data" vertex="1">
+          <mxGeometry x="780" y="40" width="240" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_comp" value="&lt;b&gt;GroupFormationPage&lt;/b&gt;&lt;br&gt;&amp;lt;&amp;lt;React Component&amp;gt;&amp;gt;&lt;hr&gt;- hook: useGroupFormation&lt;hr&gt;+ render()&lt;br&gt;+ onSubmitGroup()&lt;br&gt;+ onSendInvites()&lt;br&gt;+ onReviewInvite()" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#e1d5e7;strokeColor=#9673a6;" parent="1" vertex="1">
+          <mxGeometry x="60" y="60" width="220" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_hook" value="&lt;b&gt;useGroupFormation&lt;/b&gt;&lt;br&gt;&amp;lt;&amp;lt;Custom Hook&amp;gt;&amp;gt;&lt;hr&gt;+ group: Group | null&lt;br&gt;+ errorState: string | null&lt;br&gt;+ notifications: Notification[]&lt;hr&gt;+ createGroupShell(name: string)&lt;br&gt;+ validateAndInvite(ids: string[])&lt;br&gt;+ handleInviteResponse(id: string, accept: boolean)&lt;br&gt;+ manualOverride(studentId: string, action: string)" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#e1d5e7;strokeColor=#9673a6;" parent="1" vertex="1">
+          <mxGeometry x="340" y="60" width="320" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="api_client" value="&lt;b&gt;GroupAPIClient&lt;/b&gt;&lt;br&gt;&amp;lt;&amp;lt;HTTP Wrapper&amp;gt;&amp;gt;&lt;hr&gt;+ postGroup(payload): Promise&amp;lt;Group&amp;gt;&lt;br&gt;+ postInvites(payload): Promise&amp;lt;void&amp;gt;&lt;br&gt;+ patchInviteStatus(payload): Promise&amp;lt;void&amp;gt;&lt;br&gt;+ postOverride(payload): Promise&amp;lt;void&amp;gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" vertex="1">
+          <mxGeometry x="720" y="60" width="280" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="api_ctrl" value="&lt;b&gt;GroupFormationController&lt;/b&gt;&lt;br&gt;&amp;lt;&amp;lt;API Route Handler&amp;gt;&amp;gt;&lt;hr&gt;- groupService: GroupService&lt;hr&gt;+ handleCreateGroup(req, res)&lt;br&gt;+ handleDispatchInvites(req, res)&lt;br&gt;+ handleInviteResponse(req, res)&lt;br&gt;+ handleManualOverride(req, res)" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="720" y="340" width="280" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_notif" value="&lt;b&gt;NotificationService&lt;/b&gt;&lt;br&gt;&amp;lt;&amp;lt;Utility&amp;gt;&amp;gt;&lt;hr&gt;+ queueInviteAlert(targetId: string, groupId: string)&lt;br&gt;+ queueRejectionAlert(leaderId: string, inviteeId: string)" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="240" y="550" width="420" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="model_user" value="&lt;b&gt;&amp;lt;&amp;lt;Entity&amp;gt;&amp;gt;&lt;br&gt;User (D1)&lt;/b&gt;&lt;hr&gt;+ id: string&lt;br&gt;+ studentId: string&lt;br&gt;+ role: &#39;STUDENT&#39;|&#39;COORD&#39;&lt;br&gt;+ githubUsername: string" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#ffffff;strokeColor=#000000;" parent="1" vertex="1">
+          <mxGeometry x="60" y="700" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="model_group" value="&lt;b&gt;&amp;lt;&amp;lt;Entity&amp;gt;&amp;gt;&lt;br&gt;Group (D2)&lt;/b&gt;&lt;hr&gt;+ id: string&lt;br&gt;+ name: string&lt;br&gt;+ teamLeaderId: string&lt;br&gt;+ advisorId: string | null" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#ffffff;strokeColor=#000000;" parent="1" vertex="1">
+          <mxGeometry x="300" y="700" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="model_member" value="&lt;b&gt;&amp;lt;&amp;lt;Entity&amp;gt;&amp;gt;&lt;br&gt;GroupMember&lt;/b&gt;&lt;hr&gt;+ id: string&lt;br&gt;+ groupId: string&lt;br&gt;+ studentId: string&lt;br&gt;+ joinedAt: Date" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#ffffff;strokeColor=#000000;" parent="1" vertex="1">
+          <mxGeometry x="540" y="700" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="model_audit" value="&lt;b&gt;&amp;lt;&amp;lt;Entity&amp;gt;&amp;gt;&lt;br&gt;AuditLog (D6)&lt;/b&gt;&lt;hr&gt;+ id: string&lt;br&gt;+ action: string&lt;br&gt;+ actorId: string&lt;br&gt;+ targetId: string&lt;br&gt;+ timestamp: Date" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#ffffff;strokeColor=#000000;" parent="1" vertex="1">
+          <mxGeometry x="300" y="840" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="model_notif" value="&lt;b&gt;&amp;lt;&amp;lt;Entity&amp;gt;&amp;gt;&lt;br&gt;Notification (D9)&lt;/b&gt;&lt;hr&gt;+ id: string&lt;br&gt;+ userId: string&lt;br&gt;+ message: string&lt;br&gt;+ isRead: boolean&lt;br&gt;+ createdAt: Date" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#ffffff;strokeColor=#000000;" parent="1" vertex="1">
+          <mxGeometry x="540" y="840" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ui_hook" style="endArrow=classic;html=1;exitX=1;exitY=0.5;" parent="1" source="ui_comp" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="340" y="130" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_hook_api" style="endArrow=classic;html=1;exitX=0.999;exitY=0.413;entryX=0.006;entryY=0.627;exitDx=0;exitDy=0;exitPerimeter=0;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="ui_hook" target="api_client" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_ctrl" value="HTTP Request" style="endArrow=classic;html=1;dashed=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="api_client" target="api_ctrl" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ctrl_svc" style="endArrow=classic;html=1;exitX=-0.008;exitY=0.311;entryX=1;entryY=0.25;exitDx=0;exitDy=0;entryDx=0;entryDy=0;exitPerimeter=0;" parent="1" source="api_ctrl" target="svc_group" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_svc_notif" style="endArrow=classic;html=1;exitX=0.25;exitY=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitDx=0;exitDy=0;" parent="1" source="svc_group" target="svc_notif" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="135" y="585" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_member_group" style="endArrow=none;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" parent="1" source="model_member" target="model_group" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_svc_groupdb" value="creates/updates" style="endArrow=classic;html=1;dashed=1;exitX=0.159;exitY=1.012;entryX=0.25;entryY=0;exitDx=0;exitDy=0;exitPerimeter=0;entryDx=0;entryDy=0;" parent="1" source="svc_group" target="model_group" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="97" y="650" />
+              <mxPoint x="350" y="650" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_svc_invitedb" value="manages" style="endArrow=classic;html=1;dashed=1;exitX=1.004;exitY=0.908;entryX=0.5;entryY=0;exitDx=0;exitDy=0;exitPerimeter=0;" parent="1" source="svc_group" target="model_invite" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="920" y="520" />
+              <mxPoint x="920" y="620" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_svc_notifdb" value="writes" style="endArrow=classic;html=1;dashed=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" parent="1" target="model_notif" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="660" y="600" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="770" y="600" />
+              <mxPoint x="770" y="905" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

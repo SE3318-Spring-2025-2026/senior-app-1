@@ -1,0 +1,150 @@
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="900" pageHeight="1000" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+
+    <mxCell id="ll_co" value="Coordinator" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="50" y="40" width="100" height="900" as="geometry" />
+    </mxCell>
+
+    <mxCell id="ll_tl" value="Team Leader" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="200" y="40" width="100" height="900" as="geometry" />
+    </mxCell>
+
+    <mxCell id="ll_sys" value="System&#xa;(2.0 Group Formation)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="350" y="40" width="100" height="900" as="geometry" />
+    </mxCell>
+
+    <mxCell id="ll_stu" value="Student" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="500" y="40" width="100" height="900" as="geometry" />
+    </mxCell>
+
+    <mxCell id="ll_db" value="Databases&#xa;(D1, D2, D6, D8)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFC59E;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="660" y="40" width="100" height="900" as="geometry" />
+    </mxCell>
+
+    <mxCell id="m1" value="Group Name [f1]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="250" y="100" as="sourcePoint" />
+        <mxPoint x="400" y="100" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m2" value="Initial Group Entry (D2) [f2]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="140" as="sourcePoint" />
+        <mxPoint x="710" y="140" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m3" value="Log Group Creation (D6) [f13]" style="html=1;verticalAlign=bottom;endArrow=block;dashed=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="180" as="sourcePoint" />
+        <mxPoint x="710" y="180" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m4" value="Invites (Student IDs) [f3]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="250" y="230" as="sourcePoint" />
+        <mxPoint x="400" y="230" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m5" value="Fetch User Profiles (D1) [f4]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="270" as="sourcePoint" />
+        <mxPoint x="710" y="270" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m6" value="Store Pending Invites (D8) [f5]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="310" as="sourcePoint" />
+        <mxPoint x="710" y="310" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m7" value="Invite Notification [f6]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="350" as="sourcePoint" />
+        <mxPoint x="550" y="350" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m8" value="Approve / Deny [f7]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="550" y="410" as="sourcePoint" />
+        <mxPoint x="400" y="410" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m9" value="Fetch Invite Details (D8) [f8]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="450" as="sourcePoint" />
+        <mxPoint x="710" y="450" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m10" value="Resolved Invitation (D8) [f9]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="490" as="sourcePoint" />
+        <mxPoint x="710" y="490" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m11" value="Log Invite Actions (D6) [f14]" style="html=1;verticalAlign=bottom;endArrow=block;dashed=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="530" as="sourcePoint" />
+        <mxPoint x="710" y="530" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m12" value="Membership Update [f10]" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="570" as="sourcePoint" />
+        <mxPoint x="400" y="600" as="targetPoint" />
+        <Array as="points">
+          <mxPoint x="440" y="570" />
+          <mxPoint x="440" y="600" />
+        </Array>
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m13" value="Update Group Data (D2) [f11]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="640" as="sourcePoint" />
+        <mxPoint x="710" y="640" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m14" value="Notify Response [f12]" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="680" as="sourcePoint" />
+        <mxPoint x="250" y="680" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m15" value="Manual Edit Command [f15]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="100" y="740" as="sourcePoint" />
+        <mxPoint x="400" y="740" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m16" value="Update Membership (D2) [f19]" style="html=1;verticalAlign=bottom;endArrow=block;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="780" as="sourcePoint" />
+        <mxPoint x="710" y="780" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="m17" value="Log Group Edit (D6) [f21]" style="html=1;verticalAlign=bottom;endArrow=block;dashed=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="400" y="820" as="sourcePoint" />
+        <mxPoint x="710" y="820" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+
+  </root>
+</mxGraphModel>
