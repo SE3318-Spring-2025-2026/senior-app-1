@@ -1,16 +1,14 @@
-const mongoose = require('mongoose');
 const crypto = require('crypto');
+const sequelize = require('../db');
 const User = require('../models/User');
 const Professor = require('../models/Professor');
 
 class ProfessorService {
   async registerProfessor(email, fullName, department) {
-    const session = await mongoose.startSession();
+    const transaction = await sequelize.transaction();
 
     try {
-      session.startTransaction();
-
-      const existingUser = await User.findOne({ email }).session(session);
+      const existingUser = await User.findOne({ where: { email }, transaction });
       if (existingUser) {
         throw new Error('User with this email already exists');
       }
@@ -23,33 +21,30 @@ class ProfessorService {
 
       const passwordSetupTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-      const user = new User({
+      const user = await User.create({
         email,
         fullName,
         role: 'PROFESSOR',
         status: 'PASSWORD_SETUP_REQUIRED',
         passwordSetupTokenHash,
         passwordSetupTokenExpiresAt,
-      });
+      }, { transaction });
 
-      await user.save({ session });
-
-      const professor = new Professor({
-        user: user._id,
+      const professor = await Professor.create({
+        userId: user.id,
         department,
-      });
+      }, { transaction });
 
-      await professor.save({ session });
-      await session.commitTransaction();
+      await transaction.commit();
 
       return {
-        userId: user._id,
-        professorId: professor._id,
+        userId: user.id,
+        professorId: professor.id,
       };
     } catch (error) {
-      await session.abortTransaction();
+      await transaction.rollback();
 
-      if (error.code === 11000 && error.keyPattern?.email) {
+      if (error.name === 'SequelizeUniqueConstraintError' && error.errors.some(e => e.path === 'email')) {
         const duplicateError = new Error('User with this email already exists');
         duplicateError.code = 11000;
         duplicateError.keyPattern = { email: 1 };
@@ -57,8 +52,6 @@ class ProfessorService {
       }
 
       throw error;
-    } finally {
-      session.endSession();
     }
   }
 }

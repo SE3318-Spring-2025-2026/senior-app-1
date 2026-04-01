@@ -1,20 +1,31 @@
 require('dotenv').config();
-const mongoose = require('mongoose');
+const sequelize = require('./db');
 const User = require('./models/User');
 
 async function createAdmin() {
-  await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/senior-app');
-  
-  const admin = new User({
-    email: 'admin@example.com',
-    fullName: 'Admin User',
-    role: 'ADMIN',
-    status: 'ACTIVE',
-  });
-  
-  await admin.save();
-  console.log('Admin user created with id:', admin._id);
-  mongoose.connection.close();
+  try {
+    await sequelize.authenticate();
+    await sequelize.sync();
+
+    const [admin, created] = await User.findOrCreate({
+      where: { email: 'admin@example.com' },
+      defaults: {
+        fullName: 'Admin User',
+        role: 'ADMIN',
+        status: 'ACTIVE',
+      },
+    });
+
+    if (created) {
+      console.log('Admin user created with id:', admin.id);
+    } else {
+      console.log('Admin user already exists with id:', admin.id);
+    }
+  } catch (error) {
+    console.error('Failed to create admin:', error);
+  } finally {
+    await sequelize.close();
+  }
 }
 
 createAdmin().catch(console.error);

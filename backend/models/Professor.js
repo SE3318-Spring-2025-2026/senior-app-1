@@ -1,17 +1,30 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../db');
+const User = require('./User');
 
-const professorSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
+const Professor = sequelize.define('Professor', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: User,
+      key: 'id',
+    },
     unique: true,
   },
   department: {
-    type: String,
-    required: true,
-    trim: true,
+    type: DataTypes.STRING,
+    allowNull: false,
   },
 });
 
-module.exports = mongoose.model('Professor', professorSchema);
+// Define associations
+User.hasOne(Professor, { foreignKey: 'userId' });
+Professor.belongsTo(User, { foreignKey: 'userId' });
+
+module.exports = Professor;
