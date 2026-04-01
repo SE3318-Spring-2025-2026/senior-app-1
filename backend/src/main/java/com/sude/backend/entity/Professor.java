@@ -1,6 +1,7 @@
 package com.sude.backend.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 
 @Entity
 public class Professor {
@@ -14,6 +15,8 @@ public class Professor {
     private String department;
 
     private boolean setupRequired;
+    private String setupToken;
+    private LocalDateTime setupTokenExpires;
 
     // BOŞ CONSTRUCTOR (ŞART)
     public Professor() {}
@@ -58,5 +61,21 @@ public class Professor {
 
     public void setSetupRequired(boolean setupRequired) {
         this.setupRequired = setupRequired;
+    }
+
+    public String getSetupToken() {
+        return setupToken;
+    }
+
+    public void setSetupToken(String setupToken) {
+        this.setupToken = setupToken;
+    }
+
+    public LocalDateTime getSetupTokenExpires() {
+        return setupTokenExpires;
+    }
+
+    public void setSetupTokenExpires(LocalDateTime setupTokenExpires) {
+        this.setupTokenExpires = setupTokenExpires;
     }
 }

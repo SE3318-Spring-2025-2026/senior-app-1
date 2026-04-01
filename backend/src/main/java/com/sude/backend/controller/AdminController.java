@@ -15,11 +15,16 @@ public class AdminController {
     }
 
     @PostMapping("/professors")
-    public Professor createProfessor(@RequestBody Professor request) {
-        return professorService.createProfessor(
+    public ProfessorCreationResponse createProfessor(@RequestBody Professor request) {
+        Professor professor = professorService.createProfessor(
                 request.getEmail(),
                 request.getFullName(),
                 request.getDepartment()
+        );
+        return new ProfessorCreationResponse(
+                professor.getId(),
+                "Professor account created. Setup token generated.",
+                true
         );
     }
 }
