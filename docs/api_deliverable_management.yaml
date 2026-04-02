@@ -1,0 +1,198 @@
+openapi: 3.0.3
+info:
+  title: Senior Project Management System - Deliverable Management API
+  description: API specification for Process 4.0 Deliverable Management, based on Level 2 DFD. Enriched with explicit payload contracts, security schemas, and reusable errors to align with team standards.
+  version: 1.0.1
+servers:
+  - url: https://api.senior-project.edu/v1
+    description: Production server
+
+tags:
+  - name: 4.0 Deliverable Management
+    description: Management of project deliverables, rubrics, submissions, and committee grading.
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+
+  schemas:
+    Error:
+      type: object
+      description: Standard error envelope for all endpoints.
+      required: [message]
+      properties:
+        message:
+          type: string
+          description: Human-friendly error message.
+          example: Deliverable not found
+        code:
+          type: string
+          description: Machine-friendly error code.
+          example: DELIVERABLE_NOT_FOUND
+
+paths:
+  /deliverables/rubrics:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: Define Deliverable Rubrics (Process 4.1)
+      description: Coordinator sets the evaluation rubric criteria (binary/soft).
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliverable_type, rubric_criteria]
+              properties:
+                deliverable_type:
+                  type: string
+                  example: "Proposal"
+                rubric_criteria:
+                  type: string
+                  example: "Soft Grading"
+      responses:
+        '201':
+          description: Rubric successfully stored.
+        '400':
+          description: Invalid input data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required or not a Coordinator.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /deliverables/weights:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: Configure Grading Weights (Process 4.2)
+      description: Coordinator sets sprint associations and weight percentages.
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliverable_type, weight_percentage]
+              properties:
+                deliverable_type:
+                  type: string
+                  example: "Proposal"
+                weight_percentage:
+                  type: integer
+                  example: 15
+      responses:
+        '201':
+          description: Weights successfully updated.
+        '400':
+          description: Invalid input data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required or not a Coordinator.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /deliverables/submit:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: Submit Deliverable (Process 4.3)
+      description: Team Leader submits the markdown and images for Proposal or SoW.
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [group_id, deliverable_type, markdown_content]
+              properties:
+                group_id:
+                  type: string
+                  example: "grp_123e4567-e89b-12d3-a456-426614174000"
+                deliverable_type:
+                  type: string
+                  example: "SoW"
+                markdown_content:
+                  type: string
+                  example: "# Statement of Work \n Project details here..."
+      responses:
+        '201':
+          description: Deliverable successfully stored.
+        '400':
+          description: Invalid submission (e.g., missed deadline).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /deliverables/{id}/review-and-grade:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: Review and Grade Submission (Process 4.4)
+      description: Committee leaves comments via picker and assigns a grade.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Deliverable submission identifier.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [committee_member_id, grade_value]
+              properties:
+                committee_member_id:
+                  type: string
+                  example: "prof_88"
+                comment_text:
+                  type: string
+                  example: "Good use of diagrams."
+                grade_value:
+                  type: integer
+                  example: 94
+      responses:
+        '201':
+          description: Grade and comments successfully stored.
+        '400':
+          description: Invalid grading data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required or not a Committee member.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Deliverable not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
