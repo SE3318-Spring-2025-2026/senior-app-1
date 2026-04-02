@@ -22,8 +22,12 @@ const registerProfessor = [
         department
       );
 
-      // DOĞRU RESPONSE
-      return res.status(201).json(result);
+      return res.status(201).json({
+        userId: result.userId,
+        professorId: result.professorId,
+        setupTokenGenerated: result.setupTokenGenerated,
+        message: 'Professor account created. Password setup link generated.'
+      });
 
     } catch (error) {
       if (error.message === 'User with this email already exists') {

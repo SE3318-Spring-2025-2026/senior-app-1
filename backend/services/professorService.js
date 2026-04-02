@@ -52,7 +52,7 @@ class ProfessorService {
       }, { transaction });
 
       // 6. Create Professor
-      await Professor.create({
+      const professor = await Professor.create({
         userId: user.id,
         department,
       }, { transaction });
@@ -62,12 +62,23 @@ class ProfessorService {
 
       // ISSUE'NUN İSTEDİĞİ RESPONSE
       return {
+        userId: user.id,
+        professorId: professor.id,
+        setupRequired: true,
         setupTokenGenerated: true,
         message: 'Password setup link has been generated'
       };
 
     } catch (error) {
       await transaction.rollback();
+
+      if (
+        error.name === 'SequelizeUniqueConstraintError' &&
+        error.errors?.some((e) => e.path === 'email')
+      ) {
+        throw new Error('User with this email already exists');
+      }
+
       throw error;
     }
   }
