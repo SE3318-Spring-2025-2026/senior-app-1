@@ -17,7 +17,9 @@ sequelize.authenticate()
 
 // Routes
 const adminRoutes = require('./routes/admin');
+const userDatabaseRoutes = require('./routes/userDatabase');
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/user-database', userDatabaseRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
