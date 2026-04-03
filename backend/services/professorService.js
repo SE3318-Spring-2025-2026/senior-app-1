@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const { Op } = require('sequelize');
 const sequelize = require('../db');
 const User = require('../models/User');
 const Professor = require('../models/Professor');
@@ -6,7 +8,7 @@ const Professor = require('../models/Professor');
 class ProfessorService {
 
   generateSecureToken() {
-    return crypto.randomBytes(32).toString('hex'); // 64 char
+    return `pst_${crypto.randomBytes(32).toString('hex')}`;
   }
 
   hashToken(token) {
@@ -14,6 +16,17 @@ class ProfessorService {
       .createHash('sha256')
       .update(token)
       .digest('hex');
+  }
+
+  isValidPassword(password) {
+    if (typeof password !== 'string') {
+      return false;
+    }
+
+    const passwordPolicy =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+
+    return passwordPolicy.test(password);
   }
 
   async registerProfessor(email, fullName, department) {
@@ -70,6 +83,46 @@ class ProfessorService {
       await transaction.rollback();
       throw error;
     }
+  }
+
+  async setInitialPassword(setupToken, newPassword) {
+    if (!setupToken || typeof setupToken !== 'string') {
+      throw new Error('INVALID_SETUP_TOKEN');
+    }
+
+    if (!this.isValidPassword(newPassword)) {
+      throw new Error('INVALID_PASSWORD_POLICY');
+    }
+
+    const passwordSetupTokenHash = this.hashToken(setupToken);
+
+    const user = await User.findOne({
+      where: {
+        role: 'PROFESSOR',
+        status: 'PASSWORD_SETUP_REQUIRED',
+        passwordSetupTokenHash,
+        passwordSetupTokenExpiresAt: {
+          [Op.gt]: new Date(),
+        },
+      },
+    });
+
+    if (!user) {
+      throw new Error('INVALID_SETUP_TOKEN');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await user.update({
+      password: hashedPassword,
+      status: 'ACTIVE',
+      passwordSetupTokenHash: null,
+      passwordSetupTokenExpiresAt: null,
+    });
+
+    return {
+      message: 'Password set successfully',
+    };
   }
 }
 
