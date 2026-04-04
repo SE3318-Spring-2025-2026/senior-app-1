@@ -145,6 +145,139 @@ test('professor can set an initial password with a valid setup token', async () 
   assert.equal(updatedProfessorUser.passwordSetupTokenExpiresAt, null);
 });
 
+test('password setup token verification enforces admin auth and returns valid true or false correctly', async () => {
+  const unauthenticated = await request('/api/v1/password-setup-token-store/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      setupToken: 'pst_missing_auth',
+    }),
+  });
+
+  assert.equal(unauthenticated.response.status, 401);
+
+  const student = await User.create({
+    email: 'verify-student@example.edu',
+    fullName: 'Verify Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001000',
+  });
+
+  const forbidden = await request('/api/v1/password-setup-token-store/verify', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(student)),
+    },
+    body: JSON.stringify({
+      setupToken: 'pst_forbidden',
+    }),
+  });
+
+  assert.equal(forbidden.response.status, 403);
+
+  const admin = await User.create({
+    email: 'verify-admin@example.edu',
+    fullName: 'Verify Admin',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(await authHeaderFor(admin)),
+  };
+
+  const validSetupToken = 'pst_valid_token';
+  const validProfessorUser = await User.create({
+    email: 'verify-prof@example.edu',
+    fullName: 'Verify Professor',
+    role: 'PROFESSOR',
+    status: 'PASSWORD_SETUP_REQUIRED',
+    passwordSetupTokenHash: professorService.hashToken(validSetupToken),
+    passwordSetupTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+  });
+
+  const validProfessor = await Professor.create({
+    userId: validProfessorUser.id,
+    department: 'Software Engineering',
+  });
+
+  const validResult = await request('/api/v1/password-setup-token-store/verify', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      setupToken: validSetupToken,
+    }),
+  });
+
+  assert.equal(validResult.response.status, 200);
+  assert.deepEqual(validResult.json, {
+    valid: true,
+    professorId: validProfessor.id,
+    message: 'Setup token verified',
+  });
+
+  const expiredSetupToken = 'pst_expired_token';
+  const expiredProfessorUser = await User.create({
+    email: 'expired-prof@example.edu',
+    fullName: 'Expired Professor',
+    role: 'PROFESSOR',
+    status: 'PASSWORD_SETUP_REQUIRED',
+    passwordSetupTokenHash: professorService.hashToken(expiredSetupToken),
+    passwordSetupTokenExpiresAt: new Date(Date.now() - 60 * 60 * 1000),
+  });
+
+  await Professor.create({
+    userId: expiredProfessorUser.id,
+    department: 'Software Engineering',
+  });
+
+  const expiredResult = await request('/api/v1/password-setup-token-store/verify', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      setupToken: expiredSetupToken,
+    }),
+  });
+
+  assert.equal(expiredResult.response.status, 200);
+  assert.deepEqual(expiredResult.json, {
+    valid: false,
+    message: 'Setup token is invalid, expired, or already used',
+  });
+
+  const usedSetupToken = 'pst_used_token';
+  const usedProfessorUser = await User.create({
+    email: 'used-prof@example.edu',
+    fullName: 'Used Professor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    passwordSetupTokenHash: professorService.hashToken(usedSetupToken),
+    passwordSetupTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+  });
+
+  await Professor.create({
+    userId: usedProfessorUser.id,
+    department: 'Software Engineering',
+  });
+
+  const usedResult = await request('/api/v1/password-setup-token-store/verify', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      setupToken: usedSetupToken,
+    }),
+  });
+
+  assert.equal(usedResult.response.status, 200);
+  assert.deepEqual(usedResult.json, {
+    valid: false,
+    message: 'Setup token is invalid, expired, or already used',
+  });
+});
+
 test('internal professor record endpoint requires admin auth, persists record, and rejects duplicates', async () => {
   const unauthenticated = await request('/api/v1/user-database/professors', {
     method: 'POST',
