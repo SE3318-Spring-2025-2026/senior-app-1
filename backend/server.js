@@ -26,6 +26,7 @@ sequelize.authenticate()
   .then(() => ensureValidStudentRegistry())
   .then(() => console.log("Database synced"))
   .catch(err => console.log("Database error:", err));
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

@@ -6,6 +6,82 @@ const User = require('../models/User');
 const Professor = require('../models/Professor');
 
 class ProfessorService {
+  normalizeEmail(email) {
+    return email.trim().toLowerCase();
+  }
+
+  async createProfessorUserAndRecord(email, fullName, department, options = {}) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      const normalizedEmail = this.normalizeEmail(email);
+      const existingUser = await User.findOne({
+        where: { email: normalizedEmail },
+        transaction,
+      });
+
+      if (existingUser) {
+        const duplicateError = new Error('User with this email already exists');
+        duplicateError.code = 'DUPLICATE_EMAIL';
+        throw duplicateError;
+      }
+
+      const userPayload = {
+        email: normalizedEmail,
+        fullName: fullName.trim(),
+        role: 'PROFESSOR',
+        status: 'PASSWORD_SETUP_REQUIRED',
+      };
+
+      if (options.passwordSetupTokenHash) {
+        userPayload.passwordSetupTokenHash = options.passwordSetupTokenHash;
+      }
+
+      if (options.passwordSetupTokenExpiresAt) {
+        userPayload.passwordSetupTokenExpiresAt = options.passwordSetupTokenExpiresAt;
+      }
+
+      const user = await User.create({
+        ...userPayload,
+      }, { transaction });
+
+      const professor = await Professor.create({
+        userId: user.id,
+        department: department.trim(),
+      }, { transaction });
+
+      await transaction.commit();
+
+      return { user, professor };
+    } catch (error) {
+      await transaction.rollback();
+
+      if (
+        error.name === 'SequelizeUniqueConstraintError' &&
+        error.errors?.some((entry) => entry.path === 'email')
+      ) {
+        const duplicateError = new Error('User with this email already exists');
+        duplicateError.code = 'DUPLICATE_EMAIL';
+        throw duplicateError;
+      }
+
+      throw error;
+    }
+  }
+
+  async createProfessorRecord(email, fullName, department) {
+    const { user, professor } = await this.createProfessorUserAndRecord(
+      email,
+      fullName,
+      department,
+    );
+
+    return {
+      userId: user.id,
+      professorId: professor.id,
+      setupRequired: true,
+    };
+  }
 
   generateSecureToken() {
     return `pst_${crypto.randomBytes(32).toString('hex')}`;
@@ -51,51 +127,71 @@ class ProfessorService {
       message: 'Professor password updated successfully',
     };
   }
-  async registerProfessor(email, fullName, department) {
-    const transaction = await sequelize.transaction();
 
-    try {
-      // 1. Check existing user
-      const existingUser = await User.findOne({
-        where: { email },
-        transaction
-      });
+  async verifySetupToken(setupToken) {
+    if (!setupToken || typeof setupToken !== 'string') {
+      return {
+        valid: false,
+        message: 'Setup token is invalid, expired, or already used',
+      };
+    }
 
-      if (existingUser) {
-        throw new Error('User with this email already exists');
-      }
+    const passwordSetupTokenHash = this.hashToken(setupToken);
 
-      // 2. Generate token
-      const rawSetupToken = this.generateSecureToken();
-
-      // 3. Hash token
-      const passwordSetupTokenHash = this.hashToken(rawSetupToken);
-
-      // 4. Expiration (24 saat)
-      const passwordSetupTokenExpiresAt = new Date(
-        Date.now() + 24 * 60 * 60 * 1000
-      );
-
-      // 5. Create User
-      const user = await User.create({
-        email,
-        fullName,
+    const user = await User.findOne({
+      where: {
         role: 'PROFESSOR',
         status: 'PASSWORD_SETUP_REQUIRED',
         passwordSetupTokenHash,
-        passwordSetupTokenExpiresAt,
-      }, { transaction });
+        passwordSetupTokenExpiresAt: {
+          [Op.gt]: new Date(),
+        },
+      },
+    });
 
-      // 6. Create Professor
-      const professor = await Professor.create({
-        userId: user.id,
+    if (!user) {
+      return {
+        valid: false,
+        message: 'Setup token is invalid, expired, or already used',
+      };
+    }
+
+    const professor = await Professor.findOne({
+      where: { userId: user.id },
+    });
+
+    if (!professor) {
+      return {
+        valid: false,
+        message: 'Setup token is invalid, expired, or already used',
+      };
+    }
+
+    return {
+      valid: true,
+      professorId: professor.id,
+      message: 'Setup token verified',
+    };
+  }
+
+  async registerProfessor(email, fullName, department) {
+    const rawSetupToken = this.generateSecureToken();
+    const passwordSetupTokenHash = this.hashToken(rawSetupToken);
+    const passwordSetupTokenExpiresAt = new Date(
+      Date.now() + 24 * 60 * 60 * 1000
+    );
+
+    try {
+      const { user, professor } = await this.createProfessorUserAndRecord(
+        email,
+        fullName,
         department,
-      }, { transaction });
+        {
+          passwordSetupTokenHash,
+          passwordSetupTokenExpiresAt,
+        },
+      );
 
-      // 7. Commit
-      await transaction.commit();
-
-      // ISSUE'NUN İSTEDİĞİ RESPONSE
       return {
         userId: user.id,
         professorId: professor.id,
@@ -103,17 +199,7 @@ class ProfessorService {
         setupTokenGenerated: true,
         message: 'Password setup link has been generated'
       };
-
     } catch (error) {
-      await transaction.rollback();
-
-      if (
-        error.name === 'SequelizeUniqueConstraintError' &&
-        error.errors?.some((e) => e.path === 'email')
-      ) {
-        throw new Error('User with this email already exists');
-      }
-
       throw error;
     }
   }
