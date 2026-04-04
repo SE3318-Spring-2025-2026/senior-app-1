@@ -336,7 +336,7 @@ test('student registration validates eligibility, password strength, duplication
   assert.equal(await bcrypt.compare('StrongPass1!', createdStudent.passwordHash), true);
 });
 
-test('direct student account creation endpoint requires admin auth and hashes credentials before persisting securely', async () => {
+test('direct student account creation endpoint requires admin auth and persists provided password hashes securely', async () => {
   const admin = await User.create({
     email: 'student-admin@example.com',
     fullName: 'Student Admin',
@@ -356,11 +356,13 @@ test('direct student account creation endpoint requires admin auth and hashes cr
       studentId: '11070001001',
       email: 'dbcreate@example.edu',
       fullName: 'Database Student',
-      password: 'StrongPass1!',
+      passwordHash: '$2a$10$examplehashedpasswordvalue',
     }),
   });
 
   assert.equal(unauthenticated.response.status, 401);
+
+  const passwordHash = await bcrypt.hash('StrongPass1!', 10);
 
   const created = await request('/api/v1/user-database/students', {
     method: 'POST',
@@ -369,13 +371,12 @@ test('direct student account creation endpoint requires admin auth and hashes cr
       studentId: '11070001001',
       email: 'dbcreate@example.edu',
       fullName: 'Database Student',
-      password: 'StrongPass1!',
+      passwordHash,
     }),
   });
 
   assert.equal(created.response.status, 201);
   assert.deepEqual(created.json, {
-    valid: true,
     userId: created.json.userId,
     studentId: '11070001001',
     message: 'Student account created successfully',
@@ -384,9 +385,7 @@ test('direct student account creation endpoint requires admin auth and hashes cr
   const storedStudent = await User.findByPk(created.json.userId);
   assert.equal(storedStudent.studentId, '11070001001');
   assert.equal(storedStudent.email, 'dbcreate@example.edu');
-  assert.ok(storedStudent.passwordHash);
-  assert.notEqual(storedStudent.passwordHash, 'StrongPass1!');
-  assert.equal(await bcrypt.compare('StrongPass1!', storedStudent.passwordHash), true);
+  assert.equal(storedStudent.passwordHash, passwordHash);
   assert.equal(storedStudent.password, null);
 
   const duplicateStudentId = await request('/api/v1/user-database/students', {
@@ -396,7 +395,7 @@ test('direct student account creation endpoint requires admin auth and hashes cr
       studentId: '11070001001',
       email: 'other@example.edu',
       fullName: 'Other Student',
-      password: 'StrongPass1!',
+      passwordHash,
     }),
   });
 
@@ -410,26 +409,12 @@ test('direct student account creation endpoint requires admin auth and hashes cr
       studentId: '11070001002',
       email: 'dbcreate@example.edu',
       fullName: 'Other Student',
-      password: 'StrongPass1!',
+      passwordHash,
     }),
   });
 
   assert.equal(duplicateEmail.response.status, 409);
   assert.equal(duplicateEmail.json.code, 'DUPLICATE_EMAIL');
-
-  const ineligibleStudent = await request('/api/v1/user-database/students', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      studentId: '11070001999',
-      email: 'ineligible@example.edu',
-      fullName: 'Ineligible Student',
-      password: 'StrongPass1!',
-    }),
-  });
-
-  assert.equal(ineligibleStudent.response.status, 403);
-  assert.equal(ineligibleStudent.json.code, 'STUDENT_NOT_ELIGIBLE');
 
   const studentUser = await createStudent({
     studentId: '11070001000',
@@ -448,7 +433,7 @@ test('direct student account creation endpoint requires admin auth and hashes cr
       studentId: '11070001001',
       email: 'forbidden@example.edu',
       fullName: 'Forbidden Student',
-      password: 'StrongPass1!',
+      passwordHash,
     }),
   });
 

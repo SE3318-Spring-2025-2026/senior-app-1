@@ -177,10 +177,29 @@ components:
         studentId: "11070001000"
         message: Student account created successfully
 
+    CreateStudentAccountInUserDatabaseResponse:
+      type: object
+      description: Internal response returned when a student account record is persisted successfully.
+      required: [userId, studentId, message]
+      properties:
+        userId:
+          type: integer
+          example: 501
+        studentId:
+          type: string
+          example: "11070001000"
+        message:
+          type: string
+          example: Student account created successfully
+      example:
+        userId: 501
+        studentId: "11070001000"
+        message: Student account created successfully
+
     CreateStudentAccountInUserDatabaseRequest:
       type: object
-      description: Internal request that receives validated student registration data and persists the new account.
-      required: [studentId, email, fullName, password]
+      description: Internal request that receives validated student registration data with a hashed password and persists the new account.
+      required: [studentId, email, fullName, passwordHash]
       properties:
         studentId:
           type: string
@@ -192,15 +211,14 @@ components:
         fullName:
           type: string
           example: Ali Veli
-        password:
+        passwordHash:
           type: string
-          format: password
-          example: StrongPassword123!
+          example: hashed_password_value
       example:
         studentId: "11070001000"
         email: student@university.edu
         fullName: Ali Veli
-        password: StrongPassword123!
+        passwordHash: hashed_password_value
 
     RegisterProfessorRequest:
       type: object
@@ -495,7 +513,7 @@ paths:
     post:
       tags: ["User Database", "Internal"]
       summary: Internal - Create student account in user database
-      description: Receives validated student registration data, hashes the password, and saves the new student account.
+      description: Receives validated student registration data with a hashed password and saves the new student account.
       operationId: createStudentAccountInUserDatabase
       requestBody:
         required: true
@@ -508,16 +526,16 @@ paths:
               studentId: "11070001000"
               email: student@university.edu
               fullName: Ali Veli
-              password: StrongPassword123!
+              passwordHash: hashed_password_value
       responses:
         201:
           description: Student account created successfully.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateStudentAccountResponse'
+                $ref: '#/components/schemas/CreateStudentAccountInUserDatabaseResponse'
         400:
-          description: Missing or malformed student account fields, or weak password.
+          description: Missing or malformed student account fields.
           content:
             application/json:
               schema:
