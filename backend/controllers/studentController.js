@@ -1,6 +1,8 @@
 const { body, validationResult } = require('express-validator');
 const githubLinkService = require('../services/githubLinkService');
 const studentAccountService = require('../services/studentAccountService');
+const StudentRegistrationError = require('../errors/studentRegistrationError');
+const studentRegistrationService = require('../services/studentRegistrationService');
 const studentService = require('../services/studentService');
 
 function shouldRedirectToFrontend(req) {
@@ -39,63 +41,107 @@ function buildRegistrationValidationError(field) {
   }
 }
 
-const registerStudentValidation = [
+function buildCreateStudentAccountError(field) {
+  switch (field) {
+    case 'studentId':
+      return { code: 'INVALID_STUDENT_ID', message: 'Student ID must be an 11-digit number.' };
+    case 'email':
+      return { code: 'INVALID_EMAIL', message: 'Email address is invalid.' };
+    case 'fullName':
+      return { code: 'INVALID_FULL_NAME', message: 'Full name must be at least 3 characters.' };
+    case 'passwordHash':
+      return { code: 'INVALID_PASSWORD_HASH', message: 'passwordHash is required.' };
+    default:
+      return { code: 'INVALID_CREATE_STUDENT_INPUT', message: 'Student account input is invalid.' };
+  }
+}
+
+const registrationRules = [
   body('studentId').isString().trim().matches(/^[0-9]{11}$/),
   body('email').isEmail().normalizeEmail(),
   body('fullName').isString().trim().isLength({ min: 3 }),
   body('password').isString().isLength({ min: 8 }),
+];
+
+function getRegistrationValidationError(req) {
+  const errors = validationResult(req);
+  if (errors.isEmpty()) {
+    return null;
+  }
+
+  return buildRegistrationValidationError(errors.array()[0].path);
+}
+
+const registerStudentValidation = [
+  ...registrationRules,
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      const validationError = buildRegistrationValidationError(errors.array()[0].path);
+    const validationError = getRegistrationValidationError(req);
+    if (validationError) {
       return res.status(400).json(validationError);
     }
 
     const { studentId, email, fullName, password } = req.body;
 
-    // Registration is intentionally layered: first format checks, then business rules
-    // like eligibility, duplicate student IDs, duplicate emails, and password strength.
-    if (!(await studentService.isStudentIdEligible(studentId))) {
-      return res.status(403).json({
-        code: 'STUDENT_NOT_ELIGIBLE',
-        message: 'Student ID is not eligible for registration.',
+    try {
+      await studentRegistrationService.validateRegistrationDetails({
+        studentId,
+        email,
+        fullName,
+        password,
       });
+
+      return res.status(200).json({
+        valid: true,
+        studentId,
+        message: 'Validation passed',
+      });
+    } catch (error) {
+      if (error instanceof StudentRegistrationError) {
+        return res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
+      throw error;
+    }
+  },
+];
+
+const registerStudent = [
+  ...registrationRules,
+  async (req, res) => {
+    const validationError = getRegistrationValidationError(req);
+    if (validationError) {
+      return res.status(400).json(validationError);
     }
 
-    if (await studentService.isStudentRegistered(studentId)) {
-      return res.status(409).json({
-        code: 'ALREADY_REGISTERED',
-        message: 'Student is already registered.',
+    const { studentId, email, fullName, password } = req.body;
+
+    try {
+      const student = await studentRegistrationService.validateAndCreateStudent({
+        studentId,
+        email,
+        fullName,
+        password,
       });
-    }
 
-    if (await studentService.findStudentByEmail(email)) {
-      return res.status(409).json({
-        code: 'DUPLICATE_EMAIL',
-        message: 'Email is already in use.',
+      return res.status(201).json({
+        valid: true,
+        userId: student.id,
+        studentId: student.studentId,
+        message: 'Student account created successfully',
       });
+    } catch (error) {
+      if (error instanceof StudentRegistrationError) {
+        return res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
+      throw error;
     }
-
-    if (!studentService.validatePasswordStrength(password)) {
-      return res.status(400).json({
-        code: 'WEAK_PASSWORD',
-        message: 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character.',
-      });
-    }
-
-    const student = await studentAccountService.createStudentAccountFromValidatedData({
-      studentId,
-      email,
-      fullName,
-      password,
-    });
-
-    return res.status(201).json({
-      valid: true,
-      userId: student.id,
-      studentId: student.studentId,
-      message: 'Student account created successfully',
-    });
   },
 ];
 
@@ -107,9 +153,8 @@ const createStudentAccount = [
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      const validationError = buildRegistrationValidationError(errors.array()[0].path);
-      const status = validationError.code === 'WEAK_PASSWORD' ? 422 : 400;
-      return res.status(status).json(validationError);
+      const validationError = buildCreateStudentAccountError(errors.array()[0].path);
+      return res.status(400).json(validationError);
     }
 
     const {
@@ -373,6 +418,7 @@ module.exports = {
   createStudentAccount,
   getStudentValidation,
   handleGitHubCallback,
+  registerStudent,
   registerStudentValidation,
   startGitHubLink,
   storeLinkedGitHubAccount,
