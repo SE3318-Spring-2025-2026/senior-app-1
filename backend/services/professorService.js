@@ -105,6 +105,29 @@ class ProfessorService {
     return passwordPolicy.test(password);
   }
 
+  async updateProfessorPassword(professorId, passwordHash) {
+    const professor = await Professor.findByPk(professorId, {
+      include: [{ model: User }],
+    });
+
+    if (!professor || !professor.User) {
+      throw new Error('PROFESSOR_NOT_FOUND');
+    }
+
+    await professor.User.update({
+      password: passwordHash,
+      passwordHash,
+      status: 'ACTIVE',
+      passwordSetupTokenHash: null,
+      passwordSetupTokenExpiresAt: null,
+    });
+
+    return {
+      professorId: professor.id,
+      message: 'Professor password updated successfully',
+    };
+  }
+
   async verifySetupToken(setupToken) {
     if (!setupToken || typeof setupToken !== 'string') {
       return {
@@ -152,13 +175,8 @@ class ProfessorService {
   }
 
   async registerProfessor(email, fullName, department) {
-    // 1. Generate token
     const rawSetupToken = this.generateSecureToken();
-
-    // 2. Hash token
     const passwordSetupTokenHash = this.hashToken(rawSetupToken);
-
-    // 3. Expiration (24 saat)
     const passwordSetupTokenExpiresAt = new Date(
       Date.now() + 24 * 60 * 60 * 1000
     );
@@ -174,7 +192,6 @@ class ProfessorService {
         },
       );
 
-      // ISSUE'NUN ISTEDIGI RESPONSE
       return {
         userId: user.id,
         professorId: professor.id,
@@ -182,7 +199,6 @@ class ProfessorService {
         setupTokenGenerated: true,
         message: 'Password setup link has been generated'
       };
-
     } catch (error) {
       throw error;
     }

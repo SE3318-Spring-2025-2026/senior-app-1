@@ -371,6 +371,94 @@ test('internal professor record endpoint requires admin auth, persists record, a
   });
 });
 
+test('internal professor password update requires admin auth and activates the professor account', async () => {
+  const professorUser = await User.create({
+    email: 'patch-prof@example.edu',
+    fullName: 'Patch Professor',
+    role: 'PROFESSOR',
+    status: 'PASSWORD_SETUP_REQUIRED',
+    passwordSetupTokenHash: professorService.hashToken('pst_patch_token'),
+    passwordSetupTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+  });
+
+  const professor = await Professor.create({
+    userId: professorUser.id,
+    department: 'Software Engineering',
+  });
+
+  const passwordHash = await bcrypt.hash('StrongPass1!', 10);
+
+  const unauthenticated = await request(`/api/v1/user-database/professors/${professor.id}/password`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ passwordHash }),
+  });
+
+  assert.equal(unauthenticated.response.status, 401);
+
+  const student = await User.create({
+    email: 'student-patch@example.edu',
+    fullName: 'Student Patch',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001009',
+  });
+
+  const forbidden = await request(`/api/v1/user-database/professors/${professor.id}/password`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(student)),
+    },
+    body: JSON.stringify({ passwordHash }),
+  });
+
+  assert.equal(forbidden.response.status, 403);
+
+  const admin = await User.create({
+    email: 'admin-patch@example.edu',
+    fullName: 'Admin Patch',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+
+  const success = await request(`/api/v1/user-database/professors/${professor.id}/password`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(admin)),
+    },
+    body: JSON.stringify({ passwordHash }),
+  });
+
+  assert.equal(success.response.status, 200);
+  assert.deepEqual(success.json, {
+    professorId: professor.id,
+    message: 'Professor password updated successfully',
+  });
+
+  const updatedUser = await User.findByPk(professorUser.id);
+  assert.equal(updatedUser.status, 'ACTIVE');
+  assert.equal(updatedUser.password, passwordHash);
+  assert.equal(updatedUser.passwordHash, passwordHash);
+  assert.equal(updatedUser.passwordSetupTokenHash, null);
+  assert.equal(updatedUser.passwordSetupTokenExpiresAt, null);
+
+  const notFound = await request('/api/v1/user-database/professors/999999/password', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(admin)),
+    },
+    body: JSON.stringify({ passwordHash }),
+  });
+
+  assert.equal(notFound.response.status, 404);
+  assert.deepEqual(notFound.json, {
+    message: 'Professor not found',
+  });
+});
+
 test('student registration validates eligibility, password strength, duplication, and success', async () => {
   const weakPassword = await request('/api/v1/students/registration-validation', {
     method: 'POST',
