@@ -13,7 +13,9 @@ const sequelize = require('../db');
 const app = require('../app');
 require('../models');
 const { User, Professor, LinkedGitHubAccount, OAuthState } = require('../models');
-const { ensureValidStudentRegistry } = require('../services/studentService');
+const StudentRegistrationError = require('../errors/studentRegistrationError');
+const studentRegistrationService = require('../services/studentRegistrationService');
+const { createStudent, ensureValidStudentRegistry } = require('../services/studentService');
 const professorService = require('../services/professorService');
 
 let server;
@@ -183,8 +185,19 @@ test('student registration validates eligibility, password strength, duplication
     }),
   });
 
-  assert.equal(created.response.status, 201);
-  assert.equal(created.json.valid, true);
+  assert.equal(created.response.status, 200);
+  assert.deepEqual(created.json, {
+    valid: true,
+    studentId: '11070001000',
+    message: 'Validation passed',
+  });
+
+  await createStudent({
+    studentId: '11070001000',
+    email: 'student3@example.edu',
+    fullName: 'Mehmet Veli',
+    password: 'StrongPass1!',
+  });
 
   const alreadyRegistered = await request('/api/v1/students/registration-validation', {
     method: 'POST',
@@ -265,22 +278,72 @@ test('internal student account creation endpoint persists validated data with ha
   assert.equal(duplicateStudent.json.code, 'ALREADY_REGISTERED');
 });
 
-test('github linking flow rejects unauthenticated requests and links account after callback', async () => {
-  const registration = await request('/api/v1/students/registration-validation', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001000',
-      email: 'student@example.edu',
-      fullName: 'GitHub Student',
+test('student registration service validates data before creating the account', async () => {
+  await assert.rejects(
+    studentRegistrationService.validateRegistrationDetails({
+      studentId: '11070001999',
+      email: 'student5@example.edu',
+      fullName: 'Invalid Registry',
       password: 'StrongPass1!',
     }),
+    (error) => {
+      assert.ok(error instanceof StudentRegistrationError);
+      assert.equal(error.status, 403);
+      assert.equal(error.code, 'STUDENT_NOT_ELIGIBLE');
+      return true;
+    },
+  );
+
+  const validated = await studentRegistrationService.validateRegistrationDetails({
+    studentId: '11070001002',
+    email: 'CaseSensitive@Example.edu',
+    fullName: '  Valid Student  ',
+    password: 'StrongPass1!',
+  });
+
+  assert.deepEqual(validated, {
+    studentId: '11070001002',
+    email: 'casesensitive@example.edu',
+    fullName: 'Valid Student',
+    password: 'StrongPass1!',
+  });
+
+  const createdStudent = await studentRegistrationService.validateAndCreateStudent({
+    studentId: '11070001002',
+    email: 'CaseSensitive@Example.edu',
+    fullName: '  Valid Student  ',
+    password: 'StrongPass1!',
+  });
+
+  assert.equal(createdStudent.studentId, '11070001002');
+  assert.equal(createdStudent.email, 'casesensitive@example.edu');
+
+  await assert.rejects(
+    studentRegistrationService.validateRegistrationDetails({
+      studentId: '11070001001',
+      email: 'CASESENSITIVE@example.edu',
+      fullName: 'Duplicate Email',
+      password: 'StrongPass1!',
+    }),
+    (error) => {
+      assert.ok(error instanceof StudentRegistrationError);
+      assert.equal(error.status, 409);
+      assert.equal(error.code, 'DUPLICATE_EMAIL');
+      return true;
+    },
+  );
+});
+
+test('github linking flow rejects unauthenticated requests and links account after callback', async () => {
+  const student = await createStudent({
+    studentId: '11070001000',
+    email: 'student@example.edu',
+    fullName: 'GitHub Student',
+    password: 'StrongPass1!',
   });
 
   const unauthenticated = await request('/api/v1/students/me/github/link');
   assert.equal(unauthenticated.response.status, 401);
-
-  const student = await User.findByPk(registration.json.userId);
   const authenticated = await request('/api/v1/students/me/github/link', {
     headers: await authHeaderFor(student),
   });
@@ -322,18 +385,12 @@ test('github linking flow rejects unauthenticated requests and links account aft
 });
 
 test('github callback redirects browser clients back to frontend with success state', async () => {
-  const registration = await request('/api/v1/students/registration-validation', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001002',
-      email: 'redirect@example.edu',
-      fullName: 'Redirect Student',
-      password: 'StrongPass1!',
-    }),
+  const student = await createStudent({
+    studentId: '11070001002',
+    email: 'redirect@example.edu',
+    fullName: 'Redirect Student',
+    password: 'StrongPass1!',
   });
-
-  const student = await User.findByPk(registration.json.userId);
   const authenticated = await request('/api/v1/students/me/github/link', {
     headers: await authHeaderFor(student),
   });
@@ -352,15 +409,11 @@ test('github callback redirects browser clients back to frontend with success st
 });
 
 test('manual linked account store and github patch endpoint update student status', async () => {
-  await request('/api/v1/students/registration-validation', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001001',
-      email: 'manual@example.edu',
-      fullName: 'Manual Student',
-      password: 'StrongPass1!',
-    }),
+  await createStudent({
+    studentId: '11070001001',
+    email: 'manual@example.edu',
+    fullName: 'Manual Student',
+    password: 'StrongPass1!',
   });
 
   const storeResult = await request('/api/v1/linked-github-account-store/links', {
