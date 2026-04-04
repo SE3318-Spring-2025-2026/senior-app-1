@@ -1,404 +1,1093 @@
-apiVersion: v1
+openapi: 3.0.3
 info:
-  title: Senior App User Registration API
-  description: >
-    Final Phase 4 API design aligned with diagram + project plan.
-    Includes user database flows, coordinator/import, student registration,
-    professor onboarding, GitHub linking, and system-level postconditions.
+  title: Senior Project Management System - User Registration API
+  description: API specification for the backend user registration module of the Senior Project Management System. Covers student ID import, student registration validation, professor onboarding, password setup, and GitHub account linking.
   version: 1.0.0
-globalRules:
-  - "Valid student IDs must be uploaded before any student registration attempt."
-  - "Student registration must be within the coordinator-defined registration schedule."
-  - "Professors are manually registered by admin."
-  - "Professors activate their account by setting their password on initial login."
-  - "GitHub linking is only for authenticated active student accounts."
-  - "Internal User Database endpoints are system/internal flow endpoints, not actor-facing public business screens."
-  - "Sensitive values such as raw passwords, password hashes, setup tokens, and GitHub access tokens must never be returned in normal success responses."
-endpoints:
-  - id: 3.1
-    name: Import valid student IDs
-    path: /api/v1/coordinator/student-id-registry/import
-    method: POST
-    preconditions:
-      - "Requester must have coordinator role."
-      - "studentIds array must exist and must not be empty."
-      - "Import functionality must be available."
-      - "Issue 1 persistence endpoint must be callable."
-    request:
-      studentIds:
-        - "11070001000"
-        - "11070001001"
-        - "11070001002"
-    response:
-      inserted: 120
-      duplicates: 3
-      invalidFormat: 2
-    mustNotReturn:
-      - "internal DB schema details"
-      - "password data"
-      - "unrelated user records"
-    postconditions:
-      - "Uploaded valid IDs are forwarded to User Database."
-      - "Coordinator receives summary counts."
-      - "Student registration prerequisite is established."
-  - id: 3.2
-    name: Store valid student IDs in User Database
-    path: /api/v1/user-database/valid-student-ids
-    method: POST
-    preconditions:
-      - "Request must come from the coordinator import flow."
-      - "studentIds array must exist."
-      - "studentIds array must not be empty."
-      - "User Database must be available."
-      - "Student ID format rules must be defined."
-    request:
-      studentIds:
-        - "11070001000"
-        - "11070001001"
-        - "11070001002"
-    response:
-      inserted: 120
-      duplicates: 3
-      invalidFormat: 2
-    mustNotReturn:
-      - "raw student personal data"
-      - "password"
-      - "passwordHash"
-      - "userId"
-      - "setupToken"
-    postconditions:
-      - "Valid student IDs are stored in the registry."
-      - "Duplicate and invalid-format IDs are counted."
-      - "Registry becomes available for Issue 2 validation checks."
-  - id: 3.3
-    name: Validate student registration
-    path: /api/v1/students/registration-validation
-    method: POST
-    preconditions:
-      - "Valid student IDs must already have been uploaded by coordinator."
-      - "Registration schedule must be open."
-      - "studentId, email, fullName, and password must be provided."
-      - "Issue 2 must be available to validate studentId."
-      - "Email uniqueness must be checkable."
-      - "Password policy must be defined."
-      - "Issue 13 must be available for persistence after successful validation."
-    request:
-      studentId: "11070001000"
-      email: "student@university.edu"
-      fullName: "Ali Veli"
-      password: "StrongPassword123!"
-    response:
-      valid: true
-      userId: 501
-      studentId: "11070001000"
-      message: "Student account created successfully"
-    mustNotReturn:
-      - "password"
-      - "passwordHash"
-      - "internal SQL/DB errors directly"
-      - "unrelated student data"
-    postconditions:
-      - "studentId validity is checked."
-      - "alreadyRegistered state is checked."
-      - "Email uniqueness is checked."
-      - "Password strength is checked."
-      - "If valid, data is ready for account creation flow."
-      - "If invalid, no account is created."
-  - id: 3.4
-    name: Check student validation in User Database
-    path: /api/v1/user-database/students/{studentId}/validation
-    method: GET
-    preconditions:
-      - "studentId path parameter must be provided."
-      - "Valid student registry must already exist."
-      - "User Database must be reachable."
-    request:
-      studentId: "11070001000"
-    response:
-      valid: true
-      studentId: "11070001000"
-      alreadyRegistered: false
-    mustNotReturn:
-      - "email"
-      - "fullName"
-      - "password"
-      - "passwordHash"
-      - "userId unless explicitly required by another design decision"
-    postconditions:
-      - "System determines whether studentId exists in valid registry."
-      - "System determines whether studentId is already registered."
-      - "Result becomes usable by Issue 4."
-  - id: 3.5
-    name: Create student account in User Database
-    path: /api/v1/user-database/students
-    method: POST
-    preconditions:
-      - "Issue 4 validation must have succeeded."
-      - "Issue 13 persistence endpoint must be available."
-      - "Password hashing capability must be available."
-    request:
-      studentId: "11070001000"
-      email: "student@university.edu"
-      fullName: "Ali Veli"
-      passwordHash: "hashed_password_value"
-    response:
-      userId: 501
-      studentId: "11070001000"
-      message: "Student account created successfully"
-    mustNotReturn:
-      - "raw password"
-      - "passwordHash"
-      - "internal token/state objects"
-    postconditions:
-      - "Password is hashed."
-      - "Account creation request is sent to Issue 13 persistence layer."
-      - "Student account becomes active."
-      - "Student can later use GitHub linking flow."
-  - id: 3.6
-    name: Register professor account
-    path: /api/v1/admin/professors
-    method: POST
-    preconditions:
-      - "Requester must have admin role."
-      - "email, fullName, and department must be provided."
-      - "Professor email uniqueness must be checkable."
-      - "Issue 14 must be available."
-      - "Issue 7 token generation logic must be available."
-    request:
-      email: "prof@example.edu"
-      fullName: "Prof. Dr. X"
-      department: "Software Engineering"
-    response:
-      userId: 701
-      professorId: 88
-      message: "Professor account created. Password setup link generated."
-    mustNotReturn:
-      - "raw setupToken unless your team explicitly decided admin sees it"
-      - "password"
-      - "passwordHash"
-      - "confidential token store metadata"
-    postconditions:
-      - "Base professor creation flow is triggered."
-      - "Professor record is created in setup-required state."
-      - "Setup token generation flow is triggered."
-  - id: 3.7
-    name: Create professor record in User Database
-    path: /api/v1/user-database/professors
-    method: POST
-    preconditions:
-      - "Request must come from admin professor registration flow."
-      - "Email must be unique."
-      - "User Database must be available."
-    request:
-      email: "prof@example.edu"
-      fullName: "Prof. Dr. X"
-      department: "Software Engineering"
-    response:
-      userId: 701
-      professorId: 88
-      setupRequired: true
-    mustNotReturn:
-      - "password"
-      - "passwordHash"
-      - "raw setupToken"
-    postconditions:
-      - "Professor record is persisted."
-      - "setupRequired is set to true."
-      - "professorId becomes available for Issue 7."
-  - id: 3.8
-    name: Set initial professor password
-    path: /api/v1/professors/password-setup
-    method: POST
-    preconditions:
-      - "Professor must already be manually registered by admin."
-      - "Account must be in setup-required state."
-      - "setupToken and newPassword must be provided."
-      - "Issue 15 token verification must be available."
-      - "Issue 16 password update must be available."
-      - "Password policy must be defined."
-    request:
-      setupToken: "pst_xxx"
-      newPassword: "NewStrongPassword123!"
-    response:
-      message: "Password set successfully"
-    mustNotReturn:
-      - "setupToken"
-      - "newPassword"
-      - "passwordHash"
-      - "GitHub-related data"
-    postconditions:
-      - "Token is verified."
-      - "Password is validated and hashed."
-      - "User Database password update is triggered."
-      - "Professor account moves to active state."
-  - id: 3.9
-    name: Verify password setup token
-    path: /api/v1/password-setup-token-store/verify
-    method: POST
-    preconditions:
-      - "setupToken must be provided."
-      - "Token storage must be reachable."
-      - "Token must previously have been generated by Issue 7."
-    request:
-      setupToken: "pst_xxx"
-    response:
-      valid: true
-      professorId: 88
-      message: "Setup token verified"
-    mustNotReturn:
-      - "password"
-      - "passwordHash"
-      - "full professor private record"
-    postconditions:
-      - "Token validity, used-state, and expiration are checked."
-      - "professorId is obtained when valid."
-      - "Result becomes consumable by Issue 8."
-  - id: 3.10
-    name: Update professor password in User Database
-    path: /api/v1/user-database/professors/{professorId}/password
-    method: PATCH
-    preconditions:
-      - "Token verification must already have succeeded."
-      - "professorId must refer to an existing professor."
-      - "passwordHash must be provided."
-      - "User Database must be reachable."
-    request:
-      passwordHash: "hashed_new_password_value"
-    response:
-      professorId: 88
-      message: "Professor password updated successfully"
-    mustNotReturn:
-      - "raw password"
-      - "passwordHash"
-      - "setupToken"
-    postconditions:
-      - "Password is updated in hashed form."
-      - "setupRequired/inactive state is cleared according to your design."
-      - "Professor becomes eligible for normal login."
-  - id: 3.11
-    name: Start GitHub account linking
-    path: /api/v1/students/me/github/link
-    method: GET
-    preconditions:
-      - "Requester must be an authenticated student."
-      - "Student account must already exist and be active."
-      - "GitHub OAuth config must exist."
-      - "Student must be allowed to perform linking."
-    response:
-      authorizationUrl: "https://github.com/login/oauth/authorize?client_id=..."
-    mustNotReturn:
-      - "GitHub access token"
-      - "client secret"
-      - "internal OAuth state storage details"
-    postconditions:
-      - "OAuth state is generated and stored temporarily."
-      - "Student can be redirected to GitHub."
-      - "Issue 10 becomes the next expected step."
-  - id: 3.12
-    name: Handle GitHub OAuth callback
-    path: /api/v1/auth/github/callback
-    method: GET
-    preconditions:
-      - "Student must already have started OAuth linking via Issue 9."
-      - "Callback must include code and state."
-      - "Stored OAuth state must exist."
-      - "GitHub token exchange must be configured."
-    request:
-      code: "..."
-      state: "..."
-    response:
-      githubLinked: true
-      githubUsername: "student-gh"
-    mustNotReturn:
-      - "GitHub access token"
-      - "GitHub client secret"
-      - "internal state secrets"
-    postconditions:
-      - "state is verified."
-      - "authorization code is exchanged for GitHub access token."
-      - "access token becomes available to Issue 11."
-      - "on failure, no link record is stored and no student update occurs."
-  - id: 3.13
-    name: Store linked GitHub account
-    path: /api/v1/linked-github-account-store/links
-    method: POST
-    preconditions:
-      - "GitHub callback verification must already have succeeded."
-      - "GitHub profile data must already be available."
-      - "studentId, githubId, and githubUsername must be available."
-    request:
-      studentId: 501
-      githubId: "12345678"
-      githubUsername: "student-gh"
-    response:
-      linked: true
-      message: "GitHub account link stored successfully"
-    mustNotReturn:
-      - "GitHub access token"
-      - "OAuth state secrets"
-      - "unrelated student data"
-    postconditions:
-      - "GitHub linkage record is stored persistently."
-      - "Link record becomes consistent with Issue 18 student update."
-  - id: 3.14
-    name: Update student GitHub link in User Database
-    path: /api/v1/user-database/students/{studentId}/github-link
-    method: PATCH
-    preconditions:
-      - "studentId must refer to an existing student account."
-      - "GitHub identity must already be verified."
-      - "githubUsername must be available."
-      - "User Database must be reachable."
-    request:
-      githubUsername: "student-gh"
-      githubLinked: true
-    response:
-      studentId: 501
-      githubLinked: true
-      message: "Student GitHub link updated successfully"
-    mustNotReturn:
-      - "GitHub access token"
-      - "password"
-      - "passwordHash"
-      - "OAuth state"
-    postconditions:
-      - "Student record is updated with githubUsername."
-      - "githubLinked is set to true."
-      - "Student account becomes ready for later JIRA/GitHub integration usage."
-  - id: 3.15
-    name: Code Quality and SonarLint Compliance Review
-    path: "N/A"
-    method: "N/A"
-    preconditions:
-      - "All feature issues must already be implemented."
-      - "Shared naming/response conventions must already exist."
-    response:
-      qualityReviewCompleted: true
-    mustNotReturn:
-      - "endpoint business data"
-      - "user-sensitive values"
-    postconditions:
-      - "SonarLint/code-quality review is completed."
-      - "Major consistency and quality issues are fixed."
-      - "Project is ready for demo/final review."
-commonStatusCodes:
-  - 200: OK
-  - 201: Created
-  - 400: Bad Request
-  - 401: Unauthorized
-  - 403: Forbidden
-  - 404: Not Found
-  - 409: Conflict
-  - 410: Gone
-  - 422: Unprocessable Entity
-flowAlignmentSummary:
-  studentIdImport:
-    - Issue 3 -> Issue 1 -> Issue 2
-  studentRegistration:
-    - Issue 4 -> Issue 5 -> Issue 13
-  professorRegistration:
-    - Issue 6 -> Issue 14 -> Issue 7
-  professorInitialPasswordSetup:
-    - Issue 8 -> Issue 15 -> Issue 16
-  gitHubLinking:
-    - Issue 9 -> Issue 10 -> Issue 11 -> Issue 17 -> Issue 18
+servers:
+  - url: https://api.senior-project.edu/v1
+    description: Production server
+
+tags:
+  - name: Coordinator
+    description: Coordinator-facing endpoints for student ID registry import.
+  - name: Student
+    description: Student-facing registration and GitHub linking endpoints.
+  - name: Admin
+    description: Admin-facing professor onboarding endpoints.
+  - name: Professor
+    description: Professor-facing initial password setup endpoint.
+  - name: User Database
+    description: Internal User Database service endpoints.
+  - name: Password Setup Token Store
+    description: Internal token verification endpoint.
+  - name: Linked GitHub Account Store
+    description: Internal GitHub link persistence endpoint.
+  - name: Internal
+    description: Internal service-to-service operations, not actor-facing public business screens.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    internalBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: ServiceToken
+
+  schemas:
+    ErrorResponse:
+      type: object
+      description: Standard error envelope for all endpoints.
+      required: [message, errorCode]
+      properties:
+        message:
+          type: string
+          description: Human-readable error message.
+          example: Validation failed
+        errorCode:
+          type: string
+          description: Machine-readable error code.
+          example: VALIDATION_FAILED
+
+    StudentIdListRequest:
+      type: object
+      description: List of student IDs to import into the registry.
+      required: [studentIds]
+      properties:
+        studentIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            example: "11070001000"
+      example:
+        studentIds: ["11070001000", "11070001001", "11070001002"]
+
+    StudentIdImportResult:
+      type: object
+      description: Summary result for student ID import or storage operations.
+      required: [inserted, duplicates, invalidFormat]
+      properties:
+        inserted:
+          type: integer
+          example: 120
+        duplicates:
+          type: integer
+          example: 3
+        invalidFormat:
+          type: integer
+          example: 2
+      example:
+        inserted: 120
+        duplicates: 3
+        invalidFormat: 2
+
+    StudentValidationResponse:
+      type: object
+      description: Validation state of a student ID in the registry.
+      required: [valid, studentId, alreadyRegistered]
+      properties:
+        valid:
+          type: boolean
+          example: true
+        studentId:
+          type: string
+          example: "11070001000"
+        alreadyRegistered:
+          type: boolean
+          example: false
+      example:
+        valid: true
+        studentId: "11070001000"
+        alreadyRegistered: false
+
+    StudentRegistrationValidationRequest:
+      type: object
+      description: Public request to validate student registration details before account creation.
+      required: [studentId, email, fullName, password]
+      properties:
+        studentId:
+          type: string
+          example: "11070001000"
+        email:
+          type: string
+          format: email
+          example: student@university.edu
+        fullName:
+          type: string
+          example: Ali Veli
+        password:
+          type: string
+          format: password
+          example: StrongPassword123!
+      example:
+        studentId: "11070001000"
+        email: student@university.edu
+        fullName: Ali Veli
+        password: StrongPassword123!
+
+    ValidationPassedResponse:
+      type: object
+      description: Success response returned when registration validation passes.
+      required: [valid, studentId, message]
+      properties:
+        valid:
+          type: boolean
+          example: true
+        studentId:
+          type: string
+          example: "11070001000"
+        message:
+          type: string
+          example: Validation passed
+      example:
+        valid: true
+        studentId: "11070001000"
+        message: Validation passed
+
+    CreateStudentAccountResponse:
+      type: object
+      description: Response returned when a student account is created successfully.
+      required: [valid, userId, studentId, message]
+      properties:
+        valid:
+          type: boolean
+          example: true
+        userId:
+          type: integer
+          example: 501
+        studentId:
+          type: string
+          example: "11070001000"
+        message:
+          type: string
+          example: Student account created successfully
+      example:
+        valid: true
+        userId: 501
+        studentId: "11070001000"
+        message: Student account created successfully
+
+    RegisterProfessorRequest:
+      type: object
+      description: Admin request to register a professor base account.
+      required: [email, fullName, department]
+      properties:
+        email:
+          type: string
+          format: email
+          example: prof@example.edu
+        fullName:
+          type: string
+          example: Prof. Dr. X
+        department:
+          type: string
+          example: Software Engineering
+      example:
+        email: prof@example.edu
+        fullName: Prof. Dr. X
+        department: Software Engineering
+
+    RegisterProfessorResponse:
+      type: object
+      description: Response returned after the admin registers a professor base account.
+      required: [userId, professorId, message]
+      properties:
+        userId:
+          type: integer
+          example: 701
+        professorId:
+          type: integer
+          example: 88
+        message:
+          type: string
+          example: Professor account created. Password setup link generated.
+      example:
+        userId: 701
+        professorId: 88
+        message: Professor account created. Password setup link generated.
+
+    CreateProfessorRecordResponse:
+      type: object
+      description: Internal persistence response for professor record creation.
+      required: [userId, professorId, setupRequired]
+      properties:
+        userId:
+          type: integer
+          example: 701
+        professorId:
+          type: integer
+          example: 88
+        setupRequired:
+          type: boolean
+          example: true
+      example:
+        userId: 701
+        professorId: 88
+        setupRequired: true
+
+    ProfessorPasswordSetupRequest:
+      type: object
+      description: Request for professor initial password setup.
+      required: [setupToken, newPassword]
+      properties:
+        setupToken:
+          type: string
+          example: pst_xxx
+        newPassword:
+          type: string
+          format: password
+          example: NewStrongPassword123!
+      example:
+        setupToken: pst_xxx
+        newPassword: NewStrongPassword123!
+
+    SimpleMessageResponse:
+      type: object
+      description: Generic success response containing only a message.
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Password set successfully
+      example:
+        message: Password set successfully
+
+    VerifySetupTokenRequest:
+      type: object
+      description: Internal request to verify a professor setup token.
+      required: [setupToken]
+      properties:
+        setupToken:
+          type: string
+          example: pst_xxx
+      example:
+        setupToken: pst_xxx
+
+    VerifySetupTokenResponse:
+      type: object
+      description: Internal response showing whether a setup token is valid.
+      required: [valid, professorId, message]
+      properties:
+        valid:
+          type: boolean
+          example: true
+        professorId:
+          type: integer
+          example: 88
+        message:
+          type: string
+          example: Setup token verified
+      example:
+        valid: true
+        professorId: 88
+        message: Setup token verified
+
+    UpdateProfessorPasswordRequest:
+      type: object
+      description: Internal request to update professor password after token verification.
+      required: [passwordHash]
+      properties:
+        passwordHash:
+          type: string
+          example: hashed_new_password_value
+      example:
+        passwordHash: hashed_new_password_value
+
+    UpdateProfessorPasswordResponse:
+      type: object
+      description: Internal response for professor password update.
+      required: [professorId, message]
+      properties:
+        professorId:
+          type: integer
+          example: 88
+        message:
+          type: string
+          example: Professor password updated successfully
+      example:
+        professorId: 88
+        message: Professor password updated successfully
+
+    GitHubAuthorizationUrlResponse:
+      type: object
+      description: Authorization URL used to begin GitHub account linking.
+      required: [authorizationUrl]
+      properties:
+        authorizationUrl:
+          type: string
+          format: uri
+          example: https://github.com/login/oauth/authorize?client_id=...
+      example:
+        authorizationUrl: https://github.com/login/oauth/authorize?client_id=...
+
+    GitHubCallbackVerificationResponse:
+      type: object
+      description: Response indicating that the GitHub callback was verified successfully and the GitHub account was linked.
+      required: [callbackVerified, githubLinked, githubUsername]
+      properties:
+        callbackVerified:
+          type: boolean
+          example: true
+        githubLinked:
+          type: boolean
+          example: true
+        githubUsername:
+          type: string
+          example: student-gh
+      example:
+        callbackVerified: true
+        githubLinked: true
+        githubUsername: student-gh
+
+    StoreLinkedGitHubAccountRequest:
+      type: object
+      description: Internal request to persist linked GitHub account information.
+      required: [studentId, githubId, githubUsername]
+      properties:
+        studentId:
+          type: integer
+          example: 501
+        githubId:
+          type: string
+          example: "12345678"
+        githubUsername:
+          type: string
+          example: student-gh
+      example:
+        studentId: 501
+        githubId: "12345678"
+        githubUsername: student-gh
+
+    StoreLinkedGitHubAccountResponse:
+      type: object
+      description: Internal response for storing a linked GitHub account.
+      required: [linked, message]
+      properties:
+        linked:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: GitHub account link stored successfully
+      example:
+        linked: true
+        message: GitHub account link stored successfully
+
+    UpdateStudentGitHubLinkRequest:
+      type: object
+      description: Internal request to mark a student account as GitHub-linked.
+      required: [githubUsername, githubLinked]
+      properties:
+        githubUsername:
+          type: string
+          example: student-gh
+        githubLinked:
+          type: boolean
+          example: true
+      example:
+        githubUsername: student-gh
+        githubLinked: true
+
+    UpdateStudentGitHubLinkResponse:
+      type: object
+      description: Internal response for updating student GitHub link state.
+      required: [studentId, githubLinked, message]
+      properties:
+        studentId:
+          type: string
+          example: "11070001000"
+        githubLinked:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Student GitHub link updated successfully
+      example:
+        studentId: "11070001000"
+        githubLinked: true
+        message: Student GitHub link updated successfully
+
+paths:
+  /api/v1/user-database/valid-student-ids:
+    post:
+      tags: ["User Database", "Internal"]
+      summary: Internal - Store valid student IDs in the User Database
+      description: Stores valid student IDs in the internal student registry. This endpoint supports the coordinator import flow and is not actor-facing.
+      operationId: storeValidStudentIds
+      security: [{ internalBearerAuth: [] }]
+      requestBody:
+        required: true
+        description: Student IDs to persist in the valid ID registry.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudentIdListRequest'
+            example:
+              studentIds: ["11070001000", "11070001001", "11070001002"]
+      responses:
+        201:
+          description: Student IDs stored successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentIdImportResult'
+        400:
+          description: Invalid request body or malformed student IDs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Internal authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Caller is not allowed to access this internal endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        422:
+          description: Student ID registry request cannot be processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/user-database/students/{studentId}/validation:
+    get:
+      tags: ["User Database", "Internal"]
+      summary: Internal - Check whether a student ID is valid and already registered
+      description: Checks whether the given student ID exists in the valid registry and whether a student account already exists for it. Current implementation exposes this endpoint without a separate internal-auth layer.
+      operationId: validateStudentIdInUserDatabase
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          description: Student identifier to validate.
+          schema: { type: string }
+      responses:
+        200:
+          description: Validation result returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentValidationResponse'
+        400:
+          description: Invalid student ID format.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Internal authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Caller is not allowed to access this internal endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        404:
+          description: Student ID registry entry not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/coordinator/student-id-registry/import:
+    post:
+      tags: ["Coordinator"]
+      summary: Coordinator uploads valid student IDs and receives import summary
+      description: Coordinator-only endpoint used before any student registration attempt. Uploaded valid student IDs are processed and summarized for insertion, duplicates, and invalid formats.
+      operationId: importValidStudentIds
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        description: List of valid student IDs uploaded by coordinator.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudentIdListRequest'
+            example:
+              studentIds: ["11070001000", "11070001001", "11070001002"]
+      responses:
+        201:
+          description: Student ID import completed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentIdImportResult'
+        400:
+          description: Invalid request body or malformed student IDs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Only coordinators can import valid student IDs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        422:
+          description: Import request violates business validation rules.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/students/registration-validation:
+    post:
+      tags: ["Student"]
+      summary: Validate student registration details
+      description: Validates student ID eligibility, alreadyRegistered state, email uniqueness, and password policy. If validation succeeds, the API returns a validation success response without creating the account.
+      operationId: validateStudentRegistration
+      requestBody:
+        required: true
+        description: Student registration details to validate.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudentRegistrationValidationRequest'
+            example:
+              studentId: "11070001000"
+              email: student@university.edu
+              fullName: Ali Veli
+              password: StrongPassword123!
+      responses:
+        200:
+          description: Validation passed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationPassedResponse'
+        400:
+          description: Missing or malformed registration fields, or weak password.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        409:
+          description: Student is already registered or email is already in use.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Student ID is not eligible for registration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/students/register:
+    post:
+      tags: ["Student"]
+      summary: Create student account
+      description: Creates the student account after applying the same business validation rules used by the registration validation endpoint.
+      operationId: registerStudentAccount
+      requestBody:
+        required: true
+        description: Student registration details to create the account.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudentRegistrationValidationRequest'
+            example:
+              studentId: "11070001000"
+              email: student@university.edu
+              fullName: Ali Veli
+              password: StrongPassword123!
+      responses:
+        201:
+          description: Student account created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateStudentAccountResponse'
+        400:
+          description: Missing or malformed registration fields, or weak password.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Student ID is not eligible for registration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        409:
+          description: Student is already registered or email is already in use.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/professors:
+    post:
+      tags: ["Admin"]
+      summary: Admin registers professor base account
+      description: Admin-only endpoint that creates the professor base account. Setup token generation is internal business logic and is not exposed as a separate REST endpoint.
+      operationId: registerProfessorBaseAccount
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        description: Professor base account data.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterProfessorRequest'
+            example:
+              email: prof@example.edu
+              fullName: Prof. Dr. X
+              department: Software Engineering
+      responses:
+        201:
+          description: Professor base account created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterProfessorResponse'
+        400:
+          description: Invalid professor registration request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Only admins can register professors.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        409:
+          description: Professor email is already registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        422:
+          description: Professor registration violates business validation rules.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/user-database/professors:
+    post:
+      tags: ["User Database", "Internal"]
+      summary: Internal - Create professor record in the User Database
+      description: Internal persistence endpoint used by the admin professor registration flow. This endpoint is not actor-facing.
+      operationId: createProfessorRecord
+      security: [{ internalBearerAuth: [] }]
+      requestBody:
+        required: true
+        description: Professor record data to persist.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterProfessorRequest'
+            example:
+              email: prof@example.edu
+              fullName: Prof. Dr. X
+              department: Software Engineering
+      responses:
+        201:
+          description: Professor record created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateProfessorRecordResponse'
+        400:
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Internal authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Caller is not allowed to access this internal endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        409:
+          description: Professor record already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        422:
+          description: Professor record cannot be created from supplied data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/professors/password-setup:
+    post:
+      tags: ["Professor"]
+      summary: Professor sets initial password using setup token
+      description: Professor initial password setup endpoint. Does not require normal login, but requires a valid setup token in the request body.
+      operationId: setupProfessorPassword
+      requestBody:
+        required: true
+        description: Setup token and new password.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfessorPasswordSetupRequest'
+            example:
+              setupToken: pst_xxx
+              newPassword: NewStrongPassword123!
+      responses:
+        200:
+          description: Password set successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleMessageResponse'
+        400:
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        404:
+          description: Setup token or professor record not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        422:
+          description: Password setup request violates business validation rules.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/password-setup-token-store/verify:
+    post:
+      tags: ["Password Setup Token Store", "Internal"]
+      summary: Internal - Verify whether a professor setup token is valid
+      description: Internal endpoint that checks whether the setup token is valid, unused, and not expired.
+      operationId: verifyProfessorSetupToken
+      security: [{ internalBearerAuth: [] }]
+      requestBody:
+        required: true
+        description: Setup token to verify.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifySetupTokenRequest'
+            example:
+              setupToken: pst_xxx
+      responses:
+        200:
+          description: Setup token verified successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifySetupTokenResponse'
+        400:
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Internal authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Caller is not allowed to access this internal endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        404:
+          description: Setup token not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        422:
+          description: Setup token is invalid, expired, or already used.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/user-database/professors/{professorId}/password:
+    patch:
+      tags: ["User Database", "Internal"]
+      summary: Internal - Update professor password after successful token verification
+      description: Internal endpoint that updates the professor password after token verification. Accepts only passwordHash and never returns sensitive password data.
+      operationId: updateProfessorPassword
+      security: [{ internalBearerAuth: [] }]
+      parameters:
+        - name: professorId
+          in: path
+          required: true
+          description: Professor identifier.
+          schema: { type: integer }
+      requestBody:
+        required: true
+        description: New professor password hash.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfessorPasswordRequest'
+            example:
+              passwordHash: hashed_new_password_value
+      responses:
+        200:
+          description: Professor password updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateProfessorPasswordResponse'
+        400:
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Internal authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Caller is not allowed to access this internal endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        404:
+          description: Professor record not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        422:
+          description: Password update request cannot be processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/students/me/github/link:
+    get:
+      tags: ["Student"]
+      summary: Start GitHub account linking flow for authenticated active student
+      description: Authenticated active student endpoint that generates the GitHub authorization URL. Fetching GitHub profile data and completing account link persistence continue internally after callback verification.
+      operationId: startGitHubLinking
+      security: [{ bearerAuth: [] }]
+      responses:
+        200:
+          description: Authorization URL generated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitHubAuthorizationUrlResponse'
+        401:
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Only authenticated active students can start GitHub linking.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/github/callback:
+    get:
+      tags: ["Student"]
+      summary: Handle GitHub OAuth callback verification
+      description: Validates the callback state and exchanges the authorization code for an access token internally. GitHub access tokens and client secrets are never returned in the success response.
+      operationId: handleGitHubCallback
+      parameters:
+        - name: code
+          in: query
+          required: true
+          description: GitHub OAuth authorization code.
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          description: OAuth state value.
+          schema: { type: string }
+      responses:
+        200:
+          description: GitHub callback verified successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitHubCallbackVerificationResponse'
+        400:
+          description: Missing or malformed callback parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Callback verification failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        422:
+          description: Callback cannot be processed because of OAuth validation failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/linked-github-account-store/links:
+    post:
+      tags: ["Linked GitHub Account Store", "Internal"]
+      summary: Internal - Persist linked GitHub account information
+      description: Internal endpoint that stores verified GitHub account data after callback handling and profile retrieval succeed. Current implementation exposes this endpoint without a separate internal-auth layer.
+      operationId: storeLinkedGitHubAccount
+      requestBody:
+        required: true
+        description: Linked GitHub account data to persist.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreLinkedGitHubAccountRequest'
+            example:
+              studentId: 501
+              githubId: "12345678"
+              githubUsername: student-gh
+      responses:
+        200:
+          description: Linked GitHub account stored successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreLinkedGitHubAccountResponse'
+        400:
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Internal authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Caller is not allowed to access this internal endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        409:
+          description: GitHub account link already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        422:
+          description: GitHub link cannot be stored from supplied data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/user-database/students/{studentId}/github-link:
+    patch:
+      tags: ["User Database", "Internal"]
+      summary: Internal - Mark a student account as GitHub-linked
+      description: Internal endpoint that updates the student record after the GitHub account link is verified and persisted. Current implementation exposes this endpoint without a separate internal-auth layer.
+      operationId: updateStudentGitHubLink
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          description: Student user identifier.
+          schema: { type: integer }
+      requestBody:
+        required: true
+        description: GitHub link state to persist in the student record.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStudentGitHubLinkRequest'
+            example:
+              githubUsername: student-gh
+              githubLinked: true
+      responses:
+        200:
+          description: Student GitHub link updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateStudentGitHubLinkResponse'
+        400:
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Internal authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Caller is not allowed to access this internal endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        404:
+          description: Student record not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        422:
+          description: GitHub link update cannot be processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
