@@ -51,6 +51,13 @@ components:
           description: Machine-readable error code.
           example: VALIDATION_FAILED
 
+    GitHubLinkErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+      example:
+        message: GitHub account is already linked for this student.
+        errorCode: GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT
+
     StudentIdListRequest:
       type: object
       description: List of student IDs to import into the registry.
@@ -986,7 +993,7 @@ paths:
     get:
       tags: ["Student"]
       summary: Start GitHub account linking flow for authenticated active student
-      description: Authenticated active student endpoint that generates the GitHub authorization URL. Fetching GitHub profile data and completing account link persistence continue internally after callback verification.
+      description: Authenticated active student endpoint that generates the GitHub authorization URL. Fetching GitHub profile data and completing account link persistence continue internally after callback verification. In development mode, when GitHub OAuth credentials are not configured in the backend environment, the implementation may return a local mock callback URL so the rest of the linking flow can still be exercised without the real GitHub authorize screen.
       operationId: startGitHubLinking
       security: [{ bearerAuth: [] }]
       responses:
@@ -1013,7 +1020,7 @@ paths:
     get:
       tags: ["Student"]
       summary: Handle GitHub OAuth callback verification
-      description: Validates the callback state and exchanges the authorization code for an access token internally. GitHub access tokens and client secrets are never returned in the success response.
+      description: Validates the callback state and exchanges the authorization code for an access token internally. GitHub access tokens and client secrets are never returned in the success response. In development mode without GitHub OAuth credentials, the flow may complete through a local mock callback path.
       operationId: handleGitHubCallback
       parameters:
         - name: code
@@ -1039,14 +1046,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        401:
-          description: Callback verification failed.
+        404:
+          description: Student record not found.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        409:
+          description: GitHub account is already linked, including duplicate relink attempts for the same student.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitHubLinkErrorResponse'
         422:
           description: Callback cannot be processed because of OAuth validation failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        500:
+          description: Callback processing failed because of an unexpected backend error.
           content:
             application/json:
               schema:
@@ -1095,11 +1114,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         409:
-          description: GitHub account link already exists.
+          description: GitHub account link already exists, including duplicate relink attempts for the same student.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/GitHubLinkErrorResponse'
         422:
           description: GitHub link cannot be stored from supplied data.
           content:
