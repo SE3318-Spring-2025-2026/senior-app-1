@@ -7,7 +7,7 @@ async function createStudentAccountRecord({ studentId, email, fullName, password
     studentId,
     email: studentService.normalizeEmail(email),
     fullName: fullName.trim(),
-    passwordHash,
+    passwordHash: passwordHash.trim(),
     role: 'STUDENT',
     status: 'ACTIVE',
   });
