@@ -44,7 +44,7 @@ components:
         id: { type: string }
         name: { type: string }
         email: { type: string, format: email }
-        role: { type: string, enum: [STUDENT, ADVISOR, COORDINATOR, ADMIN] }
+        role: { type: string, enum: [STUDENT, PROFESSOR, COORDINATOR, ADMIN] }
         githubUsername: { type: string, nullable: true }
 
     Error:
@@ -184,11 +184,11 @@ components:
 
 paths:
   # --- 1.0 User Registration ---
-  /auth/register/student:
+  /api/v1/students/registration-validation:
     post:
       tags: ["1.0 User Registration"]
-      summary: Register as a student (Process 1.1)
-      description: Validates student ID and creates a new account.
+      summary: Validate registration details and create a student account (Process 1.1)
+      description: Validates student ID eligibility, email uniqueness, password policy, and creates the student account in the same request.
       requestBody:
         required: true
         content:
@@ -202,11 +202,12 @@ paths:
                 fullName: { type: string }
                 password: { type: string }
       responses:
-        201: { description: Student created }
-        400: { description: Invalid input or already registered }
+        201: { description: Student account created successfully }
+        400: { description: Invalid input or weak password }
         403: { description: Student ID not eligible }
+        409: { description: Student already registered or email already in use }
 
-  /auth/github/callback:
+  /api/v1/auth/github/callback:
     get:
       tags: ["1.0 User Registration"]
       summary: Handle GitHub OAuth callback (Process 1.2)
@@ -221,9 +222,11 @@ paths:
           schema: { type: string }
       responses:
         200: { description: GitHub linked successfully }
-        401: { description: Invalid state or code }
+        400: { description: Missing or invalid callback parameters }
+        409: { description: GitHub account is already linked }
+        500: { description: Callback processing failed }
 
-  /auth/register/professor:
+  /api/v1/admin/professors:
     post:
       tags: ["1.0 User Registration"]
       summary: Admin registers a professor
@@ -234,12 +237,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, email]
+              required: [fullName, email, department]
               properties:
-                name: { type: string }
+                fullName: { type: string }
                 email: { type: string }
+                department: { type: string }
       responses:
         201: { description: Professor registered, one-time link generated }
+        409: { description: Professor email already exists }
 
   /admin/reset-link:
     post:
@@ -256,7 +261,7 @@ paths:
                 properties:
                   resetLink: { type: string }
 
-  /professors/password-setup:
+  /api/v1/professors/password-setup:
     post:
       tags: ["1.0 User Registration"]
       summary: Set initial professor password (Process 1.4)
@@ -272,15 +277,19 @@ paths:
                 newPassword: { type: string }
       responses:
         200: { description: Password set successfully }
-        400: { description: Invalid token or password }
+        400: { description: Invalid request body }
+        404: { description: Setup token is invalid, expired, or already used }
+        422: { description: Password policy validation failed }
 
-  /auth/github/link:
+  /api/v1/students/me/github/link:
     get:
       tags: ["1.0 User Registration"]
       summary: Initiate GitHub account linking
-      security: [{ githubOAuth: [] }]
+      security: [{ cookieAuth: [] }]
       responses:
-        302: { description: Redirect to GitHub }
+        200: { description: Authorization URL returned }
+        401: { description: Authentication required }
+        403: { description: Active authenticated student account required }
 
   /coordinator/eligible-ids:
     post:
