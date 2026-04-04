@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import CoordinatorStudentIdUpload from './CoordinatorStudentIdUpload';
 
 const initialForm = {
   studentId: '',
@@ -38,6 +39,7 @@ function mapErrorResponse(payload) {
 export default function App() {
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
+  const [page, setPage] = useState('student'); // 'student' or 'coordinator'
   // The token gate is deliberately temporary: it keeps #24/#25 testable without
   // introducing a full student authentication feature outside the current scope.
   const [studentToken, setStudentToken] = useState('');
@@ -222,133 +224,36 @@ export default function App() {
 
   return (
     <main className="page">
-      <section className="hero">
-        <p className="eyebrow">Senior App</p>
-        <h1>Student Registration Validation</h1>
-        <p className="subtitle">
-          Create a student account, then use the GitHub linking action with an authenticated student token for the OAuth start flow.
-        </p>
-      </section>
-
-      <section className="panel">
-        <form className="form" onSubmit={handleSubmit}>
-          <label className="field">
-            <span>Student ID</span>
-            <input
-              id="studentId"
-              name="studentId"
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength="11"
-              placeholder="11070001000"
-              value={form.studentId}
-              onChange={handleChange}
-              required
-            />
-          </label>
-
-          <label className="field">
-            <span>Full Name</span>
-            <input
-              id="fullName"
-              name="fullName"
-              type="text"
-              autoComplete="name"
-              placeholder="Ali Veli"
-              value={form.fullName}
-              onChange={handleChange}
-              required
-            />
-          </label>
-
-          <label className="field">
-            <span>Email</span>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              placeholder="student@university.edu"
-              value={form.email}
-              onChange={handleChange}
-              required
-            />
-          </label>
-
-          <label className="field">
-            <span>Password</span>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              placeholder="StrongPassword123!"
-              value={form.password}
-              onChange={handleChange}
-              required
-            />
-          </label>
-
-          <button id="submit-button" type="submit" disabled={submitting}>
-            {submitting ? 'Creating...' : 'Create Student Account'}
-          </button>
-        </form>
-
-        <div className="side-column">
-          <section className="token-panel">
-            <p className="feedback-label">GitHub Linking</p>
-            <h2>Link GitHub</h2>
-            <p className="token-copy">
-              This action is available only for authenticated active students. Until a full student auth feature exists,
-              provide a development token to test the linking flow.
+      <nav style={{ marginBottom: 24 }}>
+        <button onClick={() => setPage('student')} style={{ marginRight: 8 }}>
+          Student Registration
+        </button>
+        <button onClick={() => setPage('coordinator')}>
+          Coordinator: Valid Student ID Upload
+        </button>
+      </nav>
+      {page === 'student' ? (
+        <>
+          <section className="hero">
+            <p className="eyebrow">Senior App</p>
+            <h1>Student Registration Validation</h1>
+            <p className="subtitle">
+              Create a student account, then use the GitHub linking action with an authenticated student token for the OAuth start flow.
             </p>
-
-            <label className="field">
-              <span>Student Token</span>
-              <textarea
-                id="studentToken"
-                name="studentToken"
-                placeholder="Paste an authenticated student token"
-                spellCheck="false"
-                value={studentToken}
-                onChange={(event) => setStudentToken(event.target.value)}
-                rows="5"
-              />
-            </label>
-
-            <p className="token-note">
-              The token is used only for this session and is cleared after the callback result is processed.
-            </p>
-
-            <button type="button" onClick={handleGitHubLink} disabled={!studentToken.trim() || linking}>
-              {linking ? 'Redirecting to GitHub...' : 'Link GitHub'}
-            </button>
           </section>
-
-          <section className={`feedback feedback-${feedback.type}`} aria-live="polite">
-            <p className="feedback-label">Current Status</p>
-            <h2>{feedback.title}</h2>
-            <p>{feedback.message}</p>
-            {(feedback.studentId || feedback.result || feedback.userId) && (
-              <dl className="feedback-meta">
-                <div>
-                  <dt>Student ID</dt>
-                  <dd>{feedback.studentId || '-'}</dd>
-                </div>
-                <div>
-                  <dt>User ID</dt>
-                  <dd>{feedback.userId || '-'}</dd>
-                </div>
-                <div>
-                  <dt>Result</dt>
-                  <dd>{feedback.result || '-'}</dd>
-                </div>
-              </dl>
-            )}
+          <section className="panel">
+            {/* ...existing code... */}
+            <form className="form" onSubmit={handleSubmit}>
+              {/* ...existing code... */}
+            </form>
+            <div className="side-column">
+              {/* ...existing code... */}
+            </div>
           </section>
-        </div>
-      </section>
+        </>
+      ) : (
+        <CoordinatorStudentIdUpload />
+      )}
     </main>
   );
 }

@@ -1,3 +1,19 @@
+// GET /api/v1/user-database/students/:studentId/validation
+const studentService = require('../services/studentService');
+
+const checkStudentValidation = async (req, res) => {
+  const { studentId } = req.params;
+  if (!studentId || !/^[0-9]{11}$/.test(studentId)) {
+    return res.status(400).json({ message: 'Invalid or missing studentId' });
+  }
+
+  // Check if studentId exists in valid registry
+  const valid = await studentService.isStudentIdEligible(studentId);
+  // Check if already registered
+  const alreadyRegistered = await studentService.isStudentRegistered(studentId);
+
+  return res.json({ valid, studentId, alreadyRegistered });
+};
 const { body, validationResult } = require('express-validator');
 const professorService = require('../services/professorService');
 const studentAccountService = require('../services/studentAccountService');
@@ -105,7 +121,59 @@ const createStudentRecord = [
   },
 ];
 
+
+const ValidStudentId = require('../models/ValidStudentId');
+
+// POST /api/v1/user-database/valid-student-ids
+const storeValidStudentIds = async (req, res) => {
+  const { studentIds } = req.body;
+  if (!Array.isArray(studentIds)) {
+    return res.status(400).json({ message: 'studentIds must be an array.' });
+  }
+
+  let inserted = 0;
+  let duplicates = 0;
+  let invalidFormat = 0;
+
+  // Validate and deduplicate input
+  const seen = new Set();
+  const validFormatIds = [];
+  for (const id of studentIds) {
+    if (!/^[0-9]{11}$/.test(id)) {
+      invalidFormat++;
+      continue;
+    }
+    if (seen.has(id)) continue; // skip duplicates in input
+    seen.add(id);
+    validFormatIds.push(id);
+  }
+
+  // Check which IDs already exist
+  const existing = await ValidStudentId.findAll({
+    where: { studentId: validFormatIds },
+    attributes: ['studentId'],
+    raw: true,
+  });
+  const existingSet = new Set(existing.map(e => e.studentId));
+
+  const toInsert = validFormatIds.filter(id => !existingSet.has(id));
+  duplicates = validFormatIds.length - toInsert.length;
+
+  // Bulk insert new IDs
+  if (toInsert.length > 0) {
+    await ValidStudentId.bulkCreate(
+      toInsert.map(studentId => ({ studentId })),
+      { ignoreDuplicates: true }
+    );
+    inserted = toInsert.length;
+  }
+
+  return res.json({ inserted, duplicates, invalidFormat });
+};
+
 module.exports = {
   createProfessorRecord,
   createStudentRecord,
+  storeValidStudentIds,
+  checkStudentValidation,
 };
