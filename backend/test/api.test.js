@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 process.env.JWT_SECRET = 'test-secret';
@@ -219,6 +220,70 @@ test('student registration validates eligibility, password strength, duplication
     studentId: '11070001000',
     alreadyRegistered: true,
   });
+
+  const createdStudent = await User.findOne({
+    where: { studentId: '11070001000' },
+  });
+
+  assert.ok(createdStudent.passwordHash);
+  assert.notEqual(createdStudent.passwordHash, 'StrongPass1!');
+  assert.equal(await bcrypt.compare('StrongPass1!', createdStudent.passwordHash), true);
+});
+
+test('direct student account creation endpoint persists hashed credentials securely', async () => {
+  const passwordHash = await bcrypt.hash('StrongPass1!', 10);
+  const created = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001001',
+      email: 'dbcreate@example.edu',
+      fullName: 'Database Student',
+      passwordHash,
+    }),
+  });
+
+  assert.equal(created.response.status, 201);
+  assert.deepEqual(created.json, {
+    valid: true,
+    userId: created.json.userId,
+    studentId: '11070001001',
+    message: 'Student account created successfully',
+  });
+
+  const storedStudent = await User.findByPk(created.json.userId);
+  assert.equal(storedStudent.studentId, '11070001001');
+  assert.equal(storedStudent.email, 'dbcreate@example.edu');
+  assert.equal(storedStudent.passwordHash, passwordHash);
+  assert.equal(storedStudent.password, null);
+
+  const duplicateStudentId = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001001',
+      email: 'other@example.edu',
+      fullName: 'Other Student',
+      passwordHash,
+    }),
+  });
+
+  assert.equal(duplicateStudentId.response.status, 409);
+  assert.equal(duplicateStudentId.json.code, 'ALREADY_REGISTERED');
+
+  const duplicateEmail = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001002',
+      email: 'dbcreate@example.edu',
+      fullName: 'Other Student',
+      passwordHash,
+    }),
+  });
+
+  assert.equal(duplicateEmail.response.status, 409);
+  assert.equal(duplicateEmail.json.code, 'DUPLICATE_EMAIL');
 });
 
 test('github linking flow rejects unauthenticated requests and links account after callback', async () => {

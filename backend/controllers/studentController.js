@@ -1,5 +1,6 @@
 const { body, validationResult } = require('express-validator');
 const githubLinkService = require('../services/githubLinkService');
+const studentAccountService = require('../services/studentAccountService');
 const studentService = require('../services/studentService');
 
 function shouldRedirectToFrontend(req) {
@@ -82,11 +83,61 @@ const registerStudentValidation = [
       });
     }
 
-    const student = await studentService.createStudent({
+    const student = await studentAccountService.createStudentAccountFromValidatedData({
       studentId,
       email,
       fullName,
       password,
+    });
+
+    return res.status(201).json({
+      valid: true,
+      userId: student.id,
+      studentId: student.studentId,
+      message: 'Student account created successfully',
+    });
+  },
+];
+
+const createStudentAccount = [
+  body('studentId').isString().trim().matches(/^[0-9]{11}$/),
+  body('email').isEmail().normalizeEmail(),
+  body('fullName').isString().trim().isLength({ min: 3 }),
+  body('passwordHash').isString().trim().notEmpty(),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      const validationError = buildRegistrationValidationError(errors.array()[0].path);
+      const status = validationError.code === 'WEAK_PASSWORD' ? 422 : 400;
+      return res.status(status).json(validationError);
+    }
+
+    const {
+      studentId,
+      email,
+      fullName,
+      passwordHash,
+    } = req.body;
+
+    if (await studentService.isStudentRegistered(studentId)) {
+      return res.status(409).json({
+        code: 'ALREADY_REGISTERED',
+        message: 'Student is already registered.',
+      });
+    }
+
+    if (await studentService.findStudentByEmail(email)) {
+      return res.status(409).json({
+        code: 'DUPLICATE_EMAIL',
+        message: 'Email is already in use.',
+      });
+    }
+
+    const student = await studentAccountService.createStudentAccountRecord({
+      studentId,
+      email,
+      fullName,
+      passwordHash,
     });
 
     return res.status(201).json({
@@ -319,6 +370,7 @@ const storeLinkedGitHubAccount = [
 ];
 
 module.exports = {
+  createStudentAccount,
   getStudentValidation,
   handleGitHubCallback,
   registerStudentValidation,
