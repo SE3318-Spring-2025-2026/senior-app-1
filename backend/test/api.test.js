@@ -145,6 +145,99 @@ test('professor can set an initial password with a valid setup token', async () 
   assert.equal(updatedProfessorUser.passwordSetupTokenExpiresAt, null);
 });
 
+test('internal professor record endpoint requires admin auth, persists record, and rejects duplicates', async () => {
+  const unauthenticated = await request('/api/v1/user-database/professors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'internal-prof@example.edu',
+      fullName: 'Internal Professor',
+      department: 'Software Engineering',
+    }),
+  });
+
+  assert.equal(unauthenticated.response.status, 401);
+
+  const student = await User.create({
+    email: 'student-auth@example.edu',
+    fullName: 'Student Auth',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001000',
+  });
+
+  const forbidden = await request('/api/v1/user-database/professors', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(student)),
+    },
+    body: JSON.stringify({
+      email: 'internal-prof@example.edu',
+      fullName: 'Internal Professor',
+      department: 'Software Engineering',
+    }),
+  });
+
+  assert.equal(forbidden.response.status, 403);
+
+  const admin = await User.create({
+    email: 'admin-internal@example.edu',
+    fullName: 'Admin Internal',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(await authHeaderFor(admin)),
+  };
+
+  const created = await request('/api/v1/user-database/professors', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      email: 'Internal-Prof@Example.edu',
+      fullName: '  Internal Professor  ',
+      department: '  Software Engineering  ',
+    }),
+  });
+
+  assert.equal(created.response.status, 201);
+  assert.deepEqual(created.json, {
+    userId: created.json.userId,
+    professorId: created.json.professorId,
+    setupRequired: true,
+  });
+
+  const professorUser = await User.findByPk(created.json.userId);
+  assert.equal(professorUser.email, 'internal-prof@example.edu');
+  assert.equal(professorUser.fullName, 'Internal Professor');
+  assert.equal(professorUser.role, 'PROFESSOR');
+  assert.equal(professorUser.status, 'PASSWORD_SETUP_REQUIRED');
+  assert.equal(professorUser.passwordSetupTokenHash, null);
+
+  const professorRecord = await Professor.findByPk(created.json.professorId);
+  assert.equal(professorRecord.userId, created.json.userId);
+  assert.equal(professorRecord.department, 'Software Engineering');
+
+  const duplicate = await request('/api/v1/user-database/professors', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      email: 'internal-prof@example.edu',
+      fullName: 'Other Professor',
+      department: 'Computer Science',
+    }),
+  });
+
+  assert.equal(duplicate.response.status, 409);
+  assert.deepEqual(duplicate.json, {
+    code: 'DUPLICATE_EMAIL',
+    message: 'Email is already in use.',
+  });
+});
+
 test('student registration validates eligibility, password strength, duplication, and success', async () => {
   const weakPassword = await request('/api/v1/students/registration-validation', {
     method: 'POST',
@@ -233,25 +326,56 @@ test('student registration validates eligibility, password strength, duplication
     studentId: '11070001000',
     alreadyRegistered: true,
   });
+
+  const createdStudent = await User.findOne({
+    where: { studentId: '11070001000' },
+  });
+
+  assert.ok(createdStudent.passwordHash);
+  assert.notEqual(createdStudent.passwordHash, 'StrongPass1!');
+  assert.equal(await bcrypt.compare('StrongPass1!', createdStudent.passwordHash), true);
 });
 
-test('internal student account creation endpoint persists validated data with hashed password', async () => {
-  const passwordHash = await bcrypt.hash('StrongPass1!', 10);
+test('direct student account creation endpoint requires admin auth and hashes credentials before persisting securely', async () => {
+  const admin = await User.create({
+    email: 'student-admin@example.com',
+    fullName: 'Student Admin',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
 
-  const created = await request('/api/v1/user-database/students', {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(await authHeaderFor(admin)),
+  };
+
+  const unauthenticated = await request('/api/v1/user-database/students', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       studentId: '11070001001',
-      email: 'student-db@example.edu',
-      fullName: 'Ali Veli',
-      passwordHash,
+      email: 'dbcreate@example.edu',
+      fullName: 'Database Student',
+      password: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(unauthenticated.response.status, 401);
+
+  const created = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      studentId: '11070001001',
+      email: 'dbcreate@example.edu',
+      fullName: 'Database Student',
+      password: 'StrongPass1!',
     }),
   });
 
   assert.equal(created.response.status, 201);
-  assert.equal(typeof created.json.userId, 'number');
   assert.deepEqual(created.json, {
+    valid: true,
     userId: created.json.userId,
     studentId: '11070001001',
     message: 'Student account created successfully',
@@ -259,23 +383,76 @@ test('internal student account creation endpoint persists validated data with ha
 
   const storedStudent = await User.findByPk(created.json.userId);
   assert.equal(storedStudent.studentId, '11070001001');
-  assert.equal(storedStudent.email, 'student-db@example.edu');
-  assert.equal(storedStudent.fullName, 'Ali Veli');
-  assert.equal(storedStudent.passwordHash, passwordHash);
+  assert.equal(storedStudent.email, 'dbcreate@example.edu');
+  assert.ok(storedStudent.passwordHash);
+  assert.notEqual(storedStudent.passwordHash, 'StrongPass1!');
+  assert.equal(await bcrypt.compare('StrongPass1!', storedStudent.passwordHash), true);
+  assert.equal(storedStudent.password, null);
 
-  const duplicateStudent = await request('/api/v1/user-database/students', {
+  const duplicateStudentId = await request('/api/v1/user-database/students', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       studentId: '11070001001',
       email: 'other@example.edu',
       fullName: 'Other Student',
-      passwordHash,
+      password: 'StrongPass1!',
     }),
   });
 
-  assert.equal(duplicateStudent.response.status, 409);
-  assert.equal(duplicateStudent.json.code, 'ALREADY_REGISTERED');
+  assert.equal(duplicateStudentId.response.status, 409);
+  assert.equal(duplicateStudentId.json.code, 'ALREADY_REGISTERED');
+
+  const duplicateEmail = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      studentId: '11070001002',
+      email: 'dbcreate@example.edu',
+      fullName: 'Other Student',
+      password: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(duplicateEmail.response.status, 409);
+  assert.equal(duplicateEmail.json.code, 'DUPLICATE_EMAIL');
+
+  const ineligibleStudent = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      studentId: '11070001999',
+      email: 'ineligible@example.edu',
+      fullName: 'Ineligible Student',
+      password: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(ineligibleStudent.response.status, 403);
+  assert.equal(ineligibleStudent.json.code, 'STUDENT_NOT_ELIGIBLE');
+
+  const studentUser = await createStudent({
+    studentId: '11070001000',
+    email: 'regular-student@example.edu',
+    fullName: 'Regular Student',
+    password: 'StrongPass1!',
+  });
+
+  const forbidden = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(studentUser)),
+    },
+    body: JSON.stringify({
+      studentId: '11070001001',
+      email: 'forbidden@example.edu',
+      fullName: 'Forbidden Student',
+      password: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(forbidden.response.status, 403);
 });
 
 test('student register creates account after validation passes', async () => {

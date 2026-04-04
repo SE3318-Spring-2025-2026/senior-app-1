@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const studentService = require('./studentService');
 
@@ -12,6 +13,18 @@ async function createStudentAccountRecord({ studentId, email, fullName, password
   });
 }
 
+async function createStudentAccountFromValidatedData({ studentId, email, fullName, password }) {
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  return createStudentAccountRecord({
+    studentId,
+    email,
+    fullName,
+    passwordHash,
+  });
+}
+
 module.exports = {
+  createStudentAccountFromValidatedData,
   createStudentAccountRecord,
 };
