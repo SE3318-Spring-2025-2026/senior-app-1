@@ -6,42 +6,81 @@ const User = require('../models/User');
 const Professor = require('../models/Professor');
 
 class ProfessorService {
-  async createProfessorRecord(email, fullName, department) {
+  normalizeEmail(email) {
+    return email.trim().toLowerCase();
+  }
+
+  async createProfessorUserAndRecord(email, fullName, department, options = {}) {
     const transaction = await sequelize.transaction();
 
     try {
+      const normalizedEmail = this.normalizeEmail(email);
       const existingUser = await User.findOne({
-        where: { email },
+        where: { email: normalizedEmail },
         transaction,
       });
 
       if (existingUser) {
-        throw new Error('User with this email already exists');
+        const duplicateError = new Error('User with this email already exists');
+        duplicateError.code = 'DUPLICATE_EMAIL';
+        throw duplicateError;
+      }
+
+      const userPayload = {
+        email: normalizedEmail,
+        fullName: fullName.trim(),
+        role: 'PROFESSOR',
+        status: 'PASSWORD_SETUP_REQUIRED',
+      };
+
+      if (options.passwordSetupTokenHash) {
+        userPayload.passwordSetupTokenHash = options.passwordSetupTokenHash;
+      }
+
+      if (options.passwordSetupTokenExpiresAt) {
+        userPayload.passwordSetupTokenExpiresAt = options.passwordSetupTokenExpiresAt;
       }
 
       const user = await User.create({
-        email,
-        fullName,
-        role: 'PROFESSOR',
-        status: 'PASSWORD_SETUP_REQUIRED',
+        ...userPayload,
       }, { transaction });
 
       const professor = await Professor.create({
         userId: user.id,
-        department,
+        department: department.trim(),
       }, { transaction });
 
       await transaction.commit();
 
-      return {
-        userId: user.id,
-        professorId: professor.id,
-        setupRequired: true,
-      };
+      return { user, professor };
     } catch (error) {
       await transaction.rollback();
+
+      if (
+        error.name === 'SequelizeUniqueConstraintError' &&
+        error.errors?.some((entry) => entry.path === 'email')
+      ) {
+        const duplicateError = new Error('User with this email already exists');
+        duplicateError.code = 'DUPLICATE_EMAIL';
+        throw duplicateError;
+      }
+
       throw error;
     }
+  }
+
+  async createProfessorRecord(email, fullName, department) {
+    const { user, professor } = await this.createProfessorUserAndRecord(
+      email,
+      fullName,
+      department,
+    );
+
+    return {
+      userId: user.id,
+      professorId: professor.id,
+      setupRequired: true,
+    };
   }
 
   generateSecureToken() {
@@ -66,50 +105,29 @@ class ProfessorService {
     return passwordPolicy.test(password);
   }
   async registerProfessor(email, fullName, department) {
-    const transaction = await sequelize.transaction();
+    // 1. Generate token
+    const rawSetupToken = this.generateSecureToken();
+
+    // 2. Hash token
+    const passwordSetupTokenHash = this.hashToken(rawSetupToken);
+
+    // 3. Expiration (24 saat)
+    const passwordSetupTokenExpiresAt = new Date(
+      Date.now() + 24 * 60 * 60 * 1000
+    );
 
     try {
-      // 1. Check existing user
-      const existingUser = await User.findOne({
-        where: { email },
-        transaction
-      });
-
-      if (existingUser) {
-        throw new Error('User with this email already exists');
-      }
-
-      // 2. Generate token
-      const rawSetupToken = this.generateSecureToken();
-
-      // 3. Hash token
-      const passwordSetupTokenHash = this.hashToken(rawSetupToken);
-
-      // 4. Expiration (24 saat)
-      const passwordSetupTokenExpiresAt = new Date(
-        Date.now() + 24 * 60 * 60 * 1000
-      );
-
-      // 5. Create User
-      const user = await User.create({
+      const { user, professor } = await this.createProfessorUserAndRecord(
         email,
         fullName,
-        role: 'PROFESSOR',
-        status: 'PASSWORD_SETUP_REQUIRED',
-        passwordSetupTokenHash,
-        passwordSetupTokenExpiresAt,
-      }, { transaction });
-
-      // 6. Create Professor
-      const professor = await Professor.create({
-        userId: user.id,
         department,
-      }, { transaction });
+        {
+          passwordSetupTokenHash,
+          passwordSetupTokenExpiresAt,
+        },
+      );
 
-      // 7. Commit
-      await transaction.commit();
-
-      // ISSUE'NUN İSTEDİĞİ RESPONSE
+      // ISSUE'NUN ISTEDIGI RESPONSE
       return {
         userId: user.id,
         professorId: professor.id,
@@ -119,15 +137,6 @@ class ProfessorService {
       };
 
     } catch (error) {
-      await transaction.rollback();
-
-      if (
-        error.name === 'SequelizeUniqueConstraintError' &&
-        error.errors?.some((e) => e.path === 'email')
-      ) {
-        throw new Error('User with this email already exists');
-      }
-
       throw error;
     }
   }

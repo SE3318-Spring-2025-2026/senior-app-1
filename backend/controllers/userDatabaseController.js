@@ -9,7 +9,10 @@ const createProfessorRecord = [
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({
+        code: 'INVALID_PROFESSOR_RECORD',
+        message: 'Email, full name, and department are required.',
+      });
     }
 
     const { email, fullName, department } = req.body;
@@ -23,11 +26,17 @@ const createProfessorRecord = [
 
       return res.status(201).json(result);
     } catch (error) {
-      if (error.message === 'User with this email already exists') {
-        return res.status(409).json({ message: error.message });
+      if (error.code === 'DUPLICATE_EMAIL' || error.message === 'User with this email already exists') {
+        return res.status(409).json({
+          code: 'DUPLICATE_EMAIL',
+          message: 'Email is already in use.',
+        });
       }
 
-      return res.status(500).json({ message: 'Internal Server Error' });
+      return res.status(500).json({
+        code: 'PROFESSOR_RECORD_CREATE_FAILED',
+        message: 'Professor record could not be created.',
+      });
     }
   },
 ];

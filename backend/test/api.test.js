@@ -145,6 +145,99 @@ test('professor can set an initial password with a valid setup token', async () 
   assert.equal(updatedProfessorUser.passwordSetupTokenExpiresAt, null);
 });
 
+test('internal professor record endpoint requires admin auth, persists record, and rejects duplicates', async () => {
+  const unauthenticated = await request('/api/v1/user-database/professors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'internal-prof@example.edu',
+      fullName: 'Internal Professor',
+      department: 'Software Engineering',
+    }),
+  });
+
+  assert.equal(unauthenticated.response.status, 401);
+
+  const student = await User.create({
+    email: 'student-auth@example.edu',
+    fullName: 'Student Auth',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001000',
+  });
+
+  const forbidden = await request('/api/v1/user-database/professors', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(student)),
+    },
+    body: JSON.stringify({
+      email: 'internal-prof@example.edu',
+      fullName: 'Internal Professor',
+      department: 'Software Engineering',
+    }),
+  });
+
+  assert.equal(forbidden.response.status, 403);
+
+  const admin = await User.create({
+    email: 'admin-internal@example.edu',
+    fullName: 'Admin Internal',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(await authHeaderFor(admin)),
+  };
+
+  const created = await request('/api/v1/user-database/professors', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      email: 'Internal-Prof@Example.edu',
+      fullName: '  Internal Professor  ',
+      department: '  Software Engineering  ',
+    }),
+  });
+
+  assert.equal(created.response.status, 201);
+  assert.deepEqual(created.json, {
+    userId: created.json.userId,
+    professorId: created.json.professorId,
+    setupRequired: true,
+  });
+
+  const professorUser = await User.findByPk(created.json.userId);
+  assert.equal(professorUser.email, 'internal-prof@example.edu');
+  assert.equal(professorUser.fullName, 'Internal Professor');
+  assert.equal(professorUser.role, 'PROFESSOR');
+  assert.equal(professorUser.status, 'PASSWORD_SETUP_REQUIRED');
+  assert.equal(professorUser.passwordSetupTokenHash, null);
+
+  const professorRecord = await Professor.findByPk(created.json.professorId);
+  assert.equal(professorRecord.userId, created.json.userId);
+  assert.equal(professorRecord.department, 'Software Engineering');
+
+  const duplicate = await request('/api/v1/user-database/professors', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      email: 'internal-prof@example.edu',
+      fullName: 'Other Professor',
+      department: 'Computer Science',
+    }),
+  });
+
+  assert.equal(duplicate.response.status, 409);
+  assert.deepEqual(duplicate.json, {
+    code: 'DUPLICATE_EMAIL',
+    message: 'Email is already in use.',
+  });
+});
+
 test('student registration validates eligibility, password strength, duplication, and success', async () => {
   const weakPassword = await request('/api/v1/students/registration-validation', {
     method: 'POST',
