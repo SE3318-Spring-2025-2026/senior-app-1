@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 process.env.JWT_SECRET = 'test-secret';
@@ -219,6 +220,49 @@ test('student registration validates eligibility, password strength, duplication
     studentId: '11070001000',
     alreadyRegistered: true,
   });
+});
+
+test('internal student account creation endpoint persists validated data with hashed password', async () => {
+  const passwordHash = await bcrypt.hash('StrongPass1!', 10);
+
+  const created = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001001',
+      email: 'student-db@example.edu',
+      fullName: 'Ali Veli',
+      passwordHash,
+    }),
+  });
+
+  assert.equal(created.response.status, 201);
+  assert.equal(typeof created.json.userId, 'number');
+  assert.deepEqual(created.json, {
+    userId: created.json.userId,
+    studentId: '11070001001',
+    message: 'Student account created successfully',
+  });
+
+  const storedStudent = await User.findByPk(created.json.userId);
+  assert.equal(storedStudent.studentId, '11070001001');
+  assert.equal(storedStudent.email, 'student-db@example.edu');
+  assert.equal(storedStudent.fullName, 'Ali Veli');
+  assert.equal(storedStudent.passwordHash, passwordHash);
+
+  const duplicateStudent = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001001',
+      email: 'other@example.edu',
+      fullName: 'Other Student',
+      passwordHash,
+    }),
+  });
+
+  assert.equal(duplicateStudent.response.status, 409);
+  assert.equal(duplicateStudent.json.code, 'ALREADY_REGISTERED');
 });
 
 test('github linking flow rejects unauthenticated requests and links account after callback', async () => {
