@@ -455,7 +455,8 @@ test('internal professor password update requires admin auth and activates the p
 
   assert.equal(notFound.response.status, 404);
   assert.deepEqual(notFound.json, {
-    message: 'Professor not found',
+    code: 'PROFESSOR_NOT_FOUND',
+    message: 'Professor not found.',
   });
 });
 

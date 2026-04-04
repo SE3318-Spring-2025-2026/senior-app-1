@@ -114,9 +114,11 @@ class ProfessorService {
       throw new Error('PROFESSOR_NOT_FOUND');
     }
 
+    const normalizedPasswordHash = passwordHash.trim();
+
     await professor.User.update({
-      password: passwordHash,
-      passwordHash,
+      password: normalizedPasswordHash,
+      passwordHash: normalizedPasswordHash,
       status: 'ACTIVE',
       passwordSetupTokenHash: null,
       passwordSetupTokenExpiresAt: null,

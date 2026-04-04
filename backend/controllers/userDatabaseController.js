@@ -21,6 +21,17 @@ function buildStudentAccountError(field) {
   }
 }
 
+function buildProfessorPasswordUpdateError(field) {
+  switch (field) {
+    case 'professorId':
+      return { code: 'INVALID_PROFESSOR_ID', message: 'Professor ID must be a positive integer.' };
+    case 'passwordHash':
+      return { code: 'INVALID_PASSWORD_HASH', message: 'passwordHash is required.' };
+    default:
+      return { code: 'INVALID_UPDATE_PROFESSOR_PASSWORD_INPUT', message: 'Professor password update input is invalid.' };
+  }
+}
+
 const createProfessorRecord = [
   body('email').isEmail().normalizeEmail(),
   body('fullName').notEmpty().trim(),
@@ -112,9 +123,7 @@ const updateProfessorPassword = [
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        message: 'Invalid request body',
-      });
+      return res.status(400).json(buildProfessorPasswordUpdateError(errors.array()[0].path));
     }
 
     const { professorId } = req.params;
@@ -130,12 +139,14 @@ const updateProfessorPassword = [
     } catch (error) {
       if (error.message === 'PROFESSOR_NOT_FOUND') {
         return res.status(404).json({
-          message: 'Professor not found',
+          code: 'PROFESSOR_NOT_FOUND',
+          message: 'Professor not found.',
         });
       }
 
       return res.status(500).json({
-        message: 'Internal Server Error',
+        code: 'UPDATE_PROFESSOR_PASSWORD_FAILED',
+        message: 'Professor password could not be updated.',
       });
     }
   },
