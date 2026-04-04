@@ -1,5 +1,7 @@
 const { body, validationResult } = require('express-validator');
 const githubLinkService = require('../services/githubLinkService');
+const StudentRegistrationError = require('../errors/studentRegistrationError');
+const studentRegistrationService = require('../services/studentRegistrationService');
 const studentService = require('../services/studentService');
 
 function shouldRedirectToFrontend(req) {
@@ -52,49 +54,29 @@ const registerStudentValidation = [
 
     const { studentId, email, fullName, password } = req.body;
 
-    // Registration is intentionally layered: first format checks, then business rules
-    // like eligibility, duplicate student IDs, duplicate emails, and password strength.
-    if (!(await studentService.isStudentIdEligible(studentId))) {
-      return res.status(403).json({
-        code: 'STUDENT_NOT_ELIGIBLE',
-        message: 'Student ID is not eligible for registration.',
+    try {
+      await studentRegistrationService.validateRegistrationDetails({
+        studentId,
+        email,
+        fullName,
+        password,
       });
-    }
 
-    if (await studentService.isStudentRegistered(studentId)) {
-      return res.status(409).json({
-        code: 'ALREADY_REGISTERED',
-        message: 'Student is already registered.',
+      return res.status(200).json({
+        valid: true,
+        studentId,
+        message: 'Validation passed',
       });
+    } catch (error) {
+      if (error instanceof StudentRegistrationError) {
+        return res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
+      throw error;
     }
-
-    if (await studentService.findStudentByEmail(email)) {
-      return res.status(409).json({
-        code: 'DUPLICATE_EMAIL',
-        message: 'Email is already in use.',
-      });
-    }
-
-    if (!studentService.validatePasswordStrength(password)) {
-      return res.status(400).json({
-        code: 'WEAK_PASSWORD',
-        message: 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character.',
-      });
-    }
-
-    const student = await studentService.createStudent({
-      studentId,
-      email,
-      fullName,
-      password,
-    });
-
-    return res.status(201).json({
-      valid: true,
-      userId: student.id,
-      studentId: student.studentId,
-      message: 'Student account created successfully',
-    });
   },
 ];
 
