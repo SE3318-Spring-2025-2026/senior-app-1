@@ -29,6 +29,28 @@ class ProfessorService {
     return passwordPolicy.test(password);
   }
 
+  async updateProfessorPassword(professorId, passwordHash) {
+    const professor = await Professor.findByPk(professorId, {
+      include: [{ model: User }],
+    });
+
+    if (!professor || !professor.User) {
+      throw new Error('PROFESSOR_NOT_FOUND');
+    }
+
+    await professor.User.update({
+      password: passwordHash,
+      passwordHash,
+      status: 'ACTIVE',
+      passwordSetupTokenHash: null,
+      passwordSetupTokenExpiresAt: null,
+    });
+
+    return {
+      professorId: professor.id,
+      message: 'Professor password updated successfully',
+    };
+  }
   async registerProfessor(email, fullName, department) {
     const transaction = await sequelize.transaction();
 
