@@ -104,6 +104,53 @@ class ProfessorService {
 
     return passwordPolicy.test(password);
   }
+
+  async verifySetupToken(setupToken) {
+    if (!setupToken || typeof setupToken !== 'string') {
+      return {
+        valid: false,
+        message: 'Setup token is invalid, expired, or already used',
+      };
+    }
+
+    const passwordSetupTokenHash = this.hashToken(setupToken);
+
+    const user = await User.findOne({
+      where: {
+        role: 'PROFESSOR',
+        status: 'PASSWORD_SETUP_REQUIRED',
+        passwordSetupTokenHash,
+        passwordSetupTokenExpiresAt: {
+          [Op.gt]: new Date(),
+        },
+      },
+    });
+
+    if (!user) {
+      return {
+        valid: false,
+        message: 'Setup token is invalid, expired, or already used',
+      };
+    }
+
+    const professor = await Professor.findOne({
+      where: { userId: user.id },
+    });
+
+    if (!professor) {
+      return {
+        valid: false,
+        message: 'Setup token is invalid, expired, or already used',
+      };
+    }
+
+    return {
+      valid: true,
+      professorId: professor.id,
+      message: 'Setup token verified',
+    };
+  }
+
   async registerProfessor(email, fullName, department) {
     // 1. Generate token
     const rawSetupToken = this.generateSecureToken();
