@@ -170,6 +170,31 @@ components:
         studentId: "11070001000"
         message: Student account created successfully
 
+    CreateStudentAccountInUserDatabaseRequest:
+      type: object
+      description: Internal request that receives validated student registration data and persists the new account.
+      required: [studentId, email, fullName, password]
+      properties:
+        studentId:
+          type: string
+          example: "11070001000"
+        email:
+          type: string
+          format: email
+          example: student@university.edu
+        fullName:
+          type: string
+          example: Ali Veli
+        password:
+          type: string
+          format: password
+          example: StrongPassword123!
+      example:
+        studentId: "11070001000"
+        email: student@university.edu
+        fullName: Ali Veli
+        password: StrongPassword123!
+
     RegisterProfessorRequest:
       type: object
       description: Admin request to register a professor base account.
@@ -454,6 +479,56 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         422:
           description: Student ID registry request cannot be processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/user-database/students:
+    post:
+      tags: ["User Database", "Internal"]
+      summary: Internal - Create student account in user database
+      description: Receives validated student registration data, hashes the password, and saves the new student account.
+      operationId: createStudentAccountInUserDatabase
+      requestBody:
+        required: true
+        description: Validated student registration data to persist in the user database.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStudentAccountInUserDatabaseRequest'
+            example:
+              studentId: "11070001000"
+              email: student@university.edu
+              fullName: Ali Veli
+              password: StrongPassword123!
+      responses:
+        201:
+          description: Student account created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateStudentAccountResponse'
+        400:
+          description: Missing or malformed student account fields, or weak password.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Internal authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Caller is not allowed to access this internal endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        409:
+          description: Student is already registered or email is already in use.
           content:
             application/json:
               schema:

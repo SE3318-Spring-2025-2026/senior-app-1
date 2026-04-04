@@ -49,8 +49,11 @@ function buildCreateStudentAccountError(field) {
       return { code: 'INVALID_EMAIL', message: 'Email address is invalid.' };
     case 'fullName':
       return { code: 'INVALID_FULL_NAME', message: 'Full name must be at least 3 characters.' };
-    case 'passwordHash':
-      return { code: 'INVALID_PASSWORD_HASH', message: 'passwordHash is required.' };
+    case 'password':
+      return {
+        code: 'WEAK_PASSWORD',
+        message: 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character.',
+      };
     default:
       return { code: 'INVALID_CREATE_STUDENT_INPUT', message: 'Student account input is invalid.' };
   }
@@ -146,10 +149,7 @@ const registerStudent = [
 ];
 
 const createStudentAccount = [
-  body('studentId').isString().trim().matches(/^[0-9]{11}$/),
-  body('email').isEmail().normalizeEmail(),
-  body('fullName').isString().trim().isLength({ min: 3 }),
-  body('passwordHash').isString().trim().notEmpty(),
+  ...registrationRules,
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -161,8 +161,12 @@ const createStudentAccount = [
       studentId,
       email,
       fullName,
-      passwordHash,
+      password,
     } = req.body;
+
+    if (!studentService.validatePasswordStrength(password)) {
+      return res.status(400).json(buildCreateStudentAccountError('password'));
+    }
 
     if (await studentService.isStudentRegistered(studentId)) {
       return res.status(409).json({
@@ -178,11 +182,11 @@ const createStudentAccount = [
       });
     }
 
-    const student = await studentAccountService.createStudentAccountRecord({
+    const student = await studentAccountService.createStudentAccountFromValidatedData({
       studentId,
       email,
       fullName,
-      passwordHash,
+      password,
     });
 
     return res.status(201).json({

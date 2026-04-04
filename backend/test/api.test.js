@@ -243,8 +243,7 @@ test('student registration validates eligibility, password strength, duplication
   assert.equal(await bcrypt.compare('StrongPass1!', createdStudent.passwordHash), true);
 });
 
-test('direct student account creation endpoint persists hashed credentials securely', async () => {
-  const passwordHash = await bcrypt.hash('StrongPass1!', 10);
+test('direct student account creation endpoint hashes credentials before persisting securely', async () => {
   const created = await request('/api/v1/user-database/students', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -252,7 +251,7 @@ test('direct student account creation endpoint persists hashed credentials secur
       studentId: '11070001001',
       email: 'dbcreate@example.edu',
       fullName: 'Database Student',
-      passwordHash,
+      password: 'StrongPass1!',
     }),
   });
 
@@ -267,7 +266,9 @@ test('direct student account creation endpoint persists hashed credentials secur
   const storedStudent = await User.findByPk(created.json.userId);
   assert.equal(storedStudent.studentId, '11070001001');
   assert.equal(storedStudent.email, 'dbcreate@example.edu');
-  assert.equal(storedStudent.passwordHash, passwordHash);
+  assert.ok(storedStudent.passwordHash);
+  assert.notEqual(storedStudent.passwordHash, 'StrongPass1!');
+  assert.equal(await bcrypt.compare('StrongPass1!', storedStudent.passwordHash), true);
   assert.equal(storedStudent.password, null);
 
   const duplicateStudentId = await request('/api/v1/user-database/students', {
@@ -277,7 +278,7 @@ test('direct student account creation endpoint persists hashed credentials secur
       studentId: '11070001001',
       email: 'other@example.edu',
       fullName: 'Other Student',
-      passwordHash,
+      password: 'StrongPass1!',
     }),
   });
 
@@ -291,7 +292,7 @@ test('direct student account creation endpoint persists hashed credentials secur
       studentId: '11070001002',
       email: 'dbcreate@example.edu',
       fullName: 'Other Student',
-      passwordHash,
+      password: 'StrongPass1!',
     }),
   });
 
