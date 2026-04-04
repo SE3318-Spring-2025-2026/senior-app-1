@@ -23,7 +23,10 @@ class ProfessorService {
       return false;
     }
 
-    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(password);
+    const passwordPolicy =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+
+    return passwordPolicy.test(password);
   }
 
   async registerProfessor(email, fullName, department) {

@@ -130,22 +130,26 @@ components:
 
     ValidationPassedResponse:
       type: object
-      description: Conservative success response returned when registration validation passes.
-      required: [valid, studentId, message]
+      description: Success response returned when validation passes and the student account is created.
+      required: [valid, userId, studentId, message]
       properties:
         valid:
           type: boolean
           example: true
+        userId:
+          type: integer
+          example: 501
         studentId:
           type: string
           example: "11070001000"
         message:
           type: string
-          example: Validation passed
+          example: Student account created successfully
       example:
         valid: true
+        userId: 501
         studentId: "11070001000"
-        message: Validation passed
+        message: Student account created successfully
 
     CreateStudentAccountRequest:
       type: object
@@ -345,14 +349,22 @@ components:
 
     GitHubCallbackVerificationResponse:
       type: object
-      description: Response indicating that the GitHub callback was verified successfully.
-      required: [callbackVerified]
+      description: Response indicating that the GitHub callback was verified successfully and the GitHub account was linked.
+      required: [callbackVerified, githubLinked, githubUsername]
       properties:
         callbackVerified:
           type: boolean
           example: true
+        githubLinked:
+          type: boolean
+          example: true
+        githubUsername:
+          type: string
+          example: student-gh
       example:
         callbackVerified: true
+        githubLinked: true
+        githubUsername: student-gh
 
     StoreLinkedGitHubAccountRequest:
       type: object
@@ -409,8 +421,8 @@ components:
       required: [studentId, githubLinked, message]
       properties:
         studentId:
-          type: integer
-          example: 501
+          type: string
+          example: "11070001000"
         githubLinked:
           type: boolean
           example: true
@@ -418,7 +430,7 @@ components:
           type: string
           example: Student GitHub link updated successfully
       example:
-        studentId: 501
+        studentId: "11070001000"
         githubLinked: true
         message: Student GitHub link updated successfully
 
@@ -475,9 +487,8 @@ paths:
     get:
       tags: ["User Database", "Internal"]
       summary: Internal - Check whether a student ID is valid and already registered
-      description: Checks whether the given student ID exists in the valid registry and whether a student account already exists for it.
+      description: Checks whether the given student ID exists in the valid registry and whether a student account already exists for it. Current implementation exposes this endpoint without a separate internal-auth layer.
       operationId: validateStudentIdInUserDatabase
-      security: [{ internalBearerAuth: [] }]
       parameters:
         - name: studentId
           in: path
@@ -567,8 +578,8 @@ paths:
   /api/v1/students/registration-validation:
     post:
       tags: ["Student"]
-      summary: Validate student registration details before account creation
-      description: Validates student ID eligibility, alreadyRegistered state, email uniqueness, and password policy. Student account creation orchestration continues internally after successful validation and is not exposed as a separate REST endpoint.
+      summary: Validate student registration details and create the student account
+      description: Validates student ID eligibility, alreadyRegistered state, email uniqueness, and password policy. If validation succeeds, the student account is created in the same endpoint.
       operationId: validateStudentRegistration
       requestBody:
         required: true
@@ -583,14 +594,14 @@ paths:
               fullName: Ali Veli
               password: StrongPassword123!
       responses:
-        200:
-          description: Validation passed successfully.
+        201:
+          description: Validation passed and student account created successfully.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationPassedResponse'
         400:
-          description: Missing or malformed registration fields.
+          description: Missing or malformed registration fields, or weak password.
           content:
             application/json:
               schema:
@@ -601,8 +612,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        422:
-          description: Registration request violates business validation rules.
+        403:
+          description: Student ID is not eligible for registration.
           content:
             application/json:
               schema:
@@ -1007,9 +1018,8 @@ paths:
     post:
       tags: ["Linked GitHub Account Store", "Internal"]
       summary: Internal - Persist linked GitHub account information
-      description: Internal endpoint that stores verified GitHub account data after callback handling and profile retrieval succeed.
+      description: Internal endpoint that stores verified GitHub account data after callback handling and profile retrieval succeed. Current implementation exposes this endpoint without a separate internal-auth layer.
       operationId: storeLinkedGitHubAccount
-      security: [{ internalBearerAuth: [] }]
       requestBody:
         required: true
         description: Linked GitHub account data to persist.
@@ -1022,7 +1032,7 @@ paths:
               githubId: "12345678"
               githubUsername: student-gh
       responses:
-        201:
+        200:
           description: Linked GitHub account stored successfully.
           content:
             application/json:
@@ -1063,9 +1073,8 @@ paths:
     patch:
       tags: ["User Database", "Internal"]
       summary: Internal - Mark a student account as GitHub-linked
-      description: Internal endpoint that updates the student record after the GitHub account link is verified and persisted.
+      description: Internal endpoint that updates the student record after the GitHub account link is verified and persisted. Current implementation exposes this endpoint without a separate internal-auth layer.
       operationId: updateStudentGitHubLink
-      security: [{ internalBearerAuth: [] }]
       parameters:
         - name: studentId
           in: path

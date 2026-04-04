@@ -16,6 +16,18 @@ const ensureSqliteColumns = async () => {
   }
 };
 
+const ensureSqliteColumns = async () => {
+  const queryInterface = sequelize.getQueryInterface();
+  const userTable = await queryInterface.describeTable('Users');
+
+  if (!userTable.password) {
+    await queryInterface.addColumn('Users', 'password', {
+      type: User.getAttributes().password.type,
+      allowNull: true,
+    });
+  }
+};
+
 // Connect to SQLite and sync models
 sequelize.authenticate()
   .then(() => {
