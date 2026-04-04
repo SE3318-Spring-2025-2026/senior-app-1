@@ -98,8 +98,8 @@ export default function App() {
     setSubmitting(true);
     setFeedback({
       type: 'loading',
-      title: 'Checking registration data',
-      message: 'The form is being validated against the backend rules.',
+      title: 'Creating student account',
+      message: 'The form is being validated and the student account is being created.',
       studentId: '',
       result: '',
       userId: '',
@@ -107,7 +107,7 @@ export default function App() {
 
     try {
       // Registration UI is intentionally a thin client over the backend business rules.
-      const response = await fetch('/api/v1/students/registration-validation', {
+      const response = await fetch('/api/v1/students/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -119,10 +119,10 @@ export default function App() {
       if (response.ok) {
         setFeedback({
           type: 'success',
-          title: 'Registration validated',
+          title: 'Student registered',
           message: result.message || 'Student account created successfully',
           studentId: result.studentId || form.studentId,
-          result: result.valid ? 'Valid' : 'Unknown',
+          result: result.valid ? 'Created' : 'Unknown',
           userId: result.userId || '',
         });
         setForm(initialForm);
@@ -226,7 +226,7 @@ export default function App() {
         <p className="eyebrow">Senior App</p>
         <h1>Student Registration Validation</h1>
         <p className="subtitle">
-          Validate student registration details, then use the GitHub linking action with an authenticated student token for the OAuth start flow.
+          Create a student account, then use the GitHub linking action with an authenticated student token for the OAuth start flow.
         </p>
       </section>
 
@@ -291,7 +291,7 @@ export default function App() {
           </label>
 
           <button id="submit-button" type="submit" disabled={submitting}>
-            {submitting ? 'Validating...' : 'Validate Registration'}
+            {submitting ? 'Creating...' : 'Create Student Account'}
           </button>
         </form>
 

@@ -130,7 +130,26 @@ components:
 
     ValidationPassedResponse:
       type: object
-      description: Success response returned when validation passes and the student account is created.
+      description: Success response returned when registration validation passes.
+      required: [valid, studentId, message]
+      properties:
+        valid:
+          type: boolean
+          example: true
+        studentId:
+          type: string
+          example: "11070001000"
+        message:
+          type: string
+          example: Validation passed
+      example:
+        valid: true
+        studentId: "11070001000"
+        message: Validation passed
+
+    CreateStudentAccountResponse:
+      type: object
+      description: Response returned when a student account is created successfully.
       required: [valid, userId, studentId, message]
       properties:
         valid:
@@ -147,49 +166,6 @@ components:
           example: Student account created successfully
       example:
         valid: true
-        userId: 501
-        studentId: "11070001000"
-        message: Student account created successfully
-
-    CreateStudentAccountRequest:
-      type: object
-      description: Internal persistence request to create a student account record.
-      required: [studentId, email, fullName, passwordHash]
-      properties:
-        studentId:
-          type: string
-          example: "11070001000"
-        email:
-          type: string
-          format: email
-          example: student@university.edu
-        fullName:
-          type: string
-          example: Ali Veli
-        passwordHash:
-          type: string
-          example: hashed_password_value
-      example:
-        studentId: "11070001000"
-        email: student@university.edu
-        fullName: Ali Veli
-        passwordHash: hashed_password_value
-
-    CreateStudentAccountResponse:
-      type: object
-      description: Internal persistence response for student account creation.
-      required: [userId, studentId, message]
-      properties:
-        userId:
-          type: integer
-          example: 501
-        studentId:
-          type: string
-          example: "11070001000"
-        message:
-          type: string
-          example: Student account created successfully
-      example:
         userId: 501
         studentId: "11070001000"
         message: Student account created successfully
@@ -578,8 +554,8 @@ paths:
   /api/v1/students/registration-validation:
     post:
       tags: ["Student"]
-      summary: Validate student registration details and create the student account
-      description: Validates student ID eligibility, alreadyRegistered state, email uniqueness, and password policy. If validation succeeds, the student account is created in the same endpoint.
+      summary: Validate student registration details
+      description: Validates student ID eligibility, alreadyRegistered state, email uniqueness, and password policy. If validation succeeds, the API returns a validation success response without creating the account.
       operationId: validateStudentRegistration
       requestBody:
         required: true
@@ -594,8 +570,8 @@ paths:
               fullName: Ali Veli
               password: StrongPassword123!
       responses:
-        201:
-          description: Validation passed and student account created successfully.
+        200:
+          description: Validation passed.
           content:
             application/json:
               schema:
@@ -619,25 +595,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/user-database/students:
+  /api/v1/students/register:
     post:
-      tags: ["User Database", "Internal"]
-      summary: Internal - Create student account record
-      description: Internal persistence endpoint used after registration validation succeeds. Accepts a password hash, not a raw password.
-      operationId: createStudentAccountRecord
-      security: [{ internalBearerAuth: [] }]
+      tags: ["Student"]
+      summary: Create student account
+      description: Creates the student account after applying the same business validation rules used by the registration validation endpoint.
+      operationId: registerStudentAccount
       requestBody:
         required: true
-        description: Student account data ready for persistence.
+        description: Student registration details to create the account.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateStudentAccountRequest'
+              $ref: '#/components/schemas/StudentRegistrationValidationRequest'
             example:
               studentId: "11070001000"
               email: student@university.edu
               fullName: Ali Veli
-              passwordHash: hashed_password_value
+              password: StrongPassword123!
       responses:
         201:
           description: Student account created successfully.
@@ -646,31 +621,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateStudentAccountResponse'
         400:
-          description: Invalid request body.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        401:
-          description: Internal authentication required.
+          description: Missing or malformed registration fields, or weak password.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         403:
-          description: Caller is not allowed to access this internal endpoint.
+          description: Student ID is not eligible for registration.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         409:
-          description: Student account already exists.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        422:
-          description: Student account cannot be created from supplied data.
+          description: Student is already registered or email is already in use.
           content:
             application/json:
               schema:
