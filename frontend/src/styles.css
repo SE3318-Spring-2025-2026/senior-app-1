@@ -1,0 +1,249 @@
+:root {
+  --bg: #f3efe5;
+  --panel: rgba(255, 252, 245, 0.88);
+  --ink: #1f2a1f;
+  --muted: #596353;
+  --line: rgba(31, 42, 31, 0.12);
+  --accent: #0f766e;
+  --accent-strong: #115e59;
+  --error-bg: #fef3f2;
+  --success-bg: #ecfdf3;
+  --warning-bg: #fff7ed;
+  --shadow: 0 24px 64px rgba(28, 37, 31, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Space Grotesk', sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(217, 119, 6, 0.16), transparent 28%),
+    linear-gradient(180deg, #f8f4ea 0%, var(--bg) 100%);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.page {
+  width: min(1100px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 48px 0 64px;
+}
+
+.hero {
+  max-width: 720px;
+  margin-bottom: 28px;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.76rem;
+  color: var(--accent-strong);
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 4.5rem);
+  line-height: 0.96;
+}
+
+.subtitle {
+  max-width: 640px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.panel {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.form,
+.token-panel,
+.feedback {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+  border-radius: 28px;
+}
+
+.form,
+.token-panel {
+  padding: 24px;
+}
+
+.side-column {
+  display: grid;
+  gap: 24px;
+}
+
+.field {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.field span {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  border: 1px solid rgba(31, 42, 31, 0.14);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink);
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 132px;
+}
+
+.field input:focus,
+.field textarea:focus {
+  outline: 2px solid rgba(15, 118, 110, 0.2);
+  border-color: var(--accent);
+}
+
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 999px;
+  padding: 15px 18px;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(135deg, var(--accent) 0%, #155e75 100%);
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 32px rgba(21, 94, 117, 0.2);
+}
+
+button:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.feedback {
+  min-height: 100%;
+  padding: 24px;
+}
+
+.feedback-label {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.feedback h2,
+.token-panel h2 {
+  margin: 0 0 10px;
+  font-size: 1.8rem;
+}
+
+.feedback p,
+.token-copy {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.token-copy {
+  margin-bottom: 16px;
+  color: var(--muted);
+}
+
+.token-panel textarea {
+  min-height: 120px;
+}
+
+.token-note {
+  margin: -4px 0 16px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.feedback-meta {
+  margin: 20px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.feedback-meta div + div {
+  margin-top: 12px;
+}
+
+.feedback-meta dt {
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.feedback-meta dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.feedback-idle {
+  background: var(--panel);
+}
+
+.feedback-loading {
+  background: linear-gradient(180deg, rgba(15, 118, 110, 0.08), rgba(255, 252, 245, 0.95));
+}
+
+.feedback-success {
+  background: var(--success-bg);
+  border-color: rgba(22, 101, 52, 0.18);
+}
+
+.feedback-error {
+  background: var(--error-bg);
+  border-color: rgba(180, 35, 24, 0.18);
+}
+
+.feedback-warning {
+  background: var(--warning-bg);
+  border-color: rgba(180, 83, 9, 0.18);
+}
+
+@media (max-width: 860px) {
+  .panel {
+    grid-template-columns: 1fr;
+  }
+
+  .page {
+    width: min(100% - 24px, 720px);
+    padding-top: 28px;
+  }
+}
