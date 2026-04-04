@@ -28,6 +28,8 @@ function mapErrorResponse(payload) {
       return { type: 'error', title: 'Weak password', result: 'Rejected' };
     case 'STUDENT_NOT_ELIGIBLE':
       return { type: 'error', title: 'Student not eligible', result: 'Rejected' };
+    case 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT':
+      return { type: 'warning', title: 'GitHub already linked', result: 'Already linked' };
     default:
       return { type: 'error', title: 'Validation failed', result: 'Failed' };
   }
@@ -55,18 +57,23 @@ export default function App() {
 
     // The backend already condensed the callback outcome into safe UI params.
     // We render those and then strip them from the visible URL immediately.
+    const usedMockOAuth = params.get('mockOAuth') === '1';
     const nextFeedback = githubLinkStatus === 'success'
       ? {
           type: 'success',
           title: 'GitHub linked successfully',
-          message: `${params.get('githubUsername') || 'your GitHub account'} is now linked to this student account.`,
+          message: usedMockOAuth
+            ? 'GitHub OAuth credentials are not configured in the backend .env file, so this run used the local mock callback flow instead of the real GitHub authorize screen.'
+            : `${params.get('githubUsername') || 'your GitHub account'} is now linked to this student account.`,
           studentId: params.get('studentId') || '',
-          result: 'GitHub linked',
+          result: usedMockOAuth ? 'Mock OAuth flow' : 'GitHub linked',
           userId: '',
         }
       : {
-          type: 'error',
-          title: 'GitHub link failed',
+          type: params.get('code') === 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT' ? 'warning' : 'error',
+          title: params.get('code') === 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT'
+            ? 'GitHub already linked'
+            : 'GitHub link failed',
           message: params.get('message') || 'GitHub OAuth callback failed.',
           studentId: params.get('studentId') || '',
           result: params.get('code') || 'OAuth error',
@@ -80,6 +87,7 @@ export default function App() {
     params.delete('studentId');
     params.delete('code');
     params.delete('message');
+    params.delete('mockOAuth');
     const nextQuery = params.toString();
     const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`;
     window.history.replaceState({}, '', nextUrl);
