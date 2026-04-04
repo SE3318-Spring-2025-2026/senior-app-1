@@ -19,9 +19,12 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: false,
   },
-  password: {
+  studentId: {
     type: DataTypes.STRING,
-    allowNull: true,
+    unique: true,
+    validate: {
+      is: /^[0-9]{11}$/,
+    },
   },
   role: {
     type: DataTypes.ENUM('STUDENT', 'PROFESSOR', 'COORDINATOR', 'ADMIN'),
@@ -31,6 +34,21 @@ const User = sequelize.define('User', {
     type: DataTypes.ENUM('ACTIVE', 'PASSWORD_SETUP_REQUIRED'),
     defaultValue: 'ACTIVE',
   },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  passwordHash: {
+    type: DataTypes.STRING,
+  },
+  githubUsername: {
+    type: DataTypes.STRING,
+  },
+  githubLinked: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  },
   passwordSetupTokenHash: {
     type: DataTypes.STRING,
   },
@@ -38,6 +56,10 @@ const User = sequelize.define('User', {
     type: DataTypes.DATE,
   },
   createdAt: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW,
+  },
+  updatedAt: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW,
   },
