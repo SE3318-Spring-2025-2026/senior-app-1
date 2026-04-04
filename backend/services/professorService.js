@@ -6,6 +6,43 @@ const User = require('../models/User');
 const Professor = require('../models/Professor');
 
 class ProfessorService {
+  async createProfessorRecord(email, fullName, department) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      const existingUser = await User.findOne({
+        where: { email },
+        transaction,
+      });
+
+      if (existingUser) {
+        throw new Error('User with this email already exists');
+      }
+
+      const user = await User.create({
+        email,
+        fullName,
+        role: 'PROFESSOR',
+        status: 'PASSWORD_SETUP_REQUIRED',
+      }, { transaction });
+
+      const professor = await Professor.create({
+        userId: user.id,
+        department,
+      }, { transaction });
+
+      await transaction.commit();
+
+      return {
+        userId: user.id,
+        professorId: professor.id,
+        setupRequired: true,
+      };
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
 
   generateSecureToken() {
     return `pst_${crypto.randomBytes(32).toString('hex')}`;
@@ -28,7 +65,6 @@ class ProfessorService {
 
     return passwordPolicy.test(password);
   }
-
   async registerProfessor(email, fullName, department) {
     const transaction = await sequelize.transaction();
 
