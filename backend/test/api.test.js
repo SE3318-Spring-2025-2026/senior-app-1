@@ -244,7 +244,7 @@ test('github linking flow rejects unauthenticated requests and links account aft
   assert.equal(authenticated.response.status, 200);
   assert.match(authenticated.json.authorizationUrl, /state=/);
 
-  const state = new URL(authenticated.json.authorizationUrl).searchParams.get('state');
+  const state = new URL(authenticated.json.authorizationUrl, baseUrl).searchParams.get('state');
 
   const missingQuery = await request('/api/v1/auth/github/callback');
   assert.equal(missingQuery.response.status, 400);
@@ -263,6 +263,15 @@ test('github linking flow rejects unauthenticated requests and links account aft
 
   const linkedAccount = await LinkedGitHubAccount.findOne({ where: { userId: student.id } });
   assert.equal(linkedAccount.githubUsername, 'student-11070001000');
+
+  const duplicateLinkAttempt = await request(`/api/v1/auth/github/callback?code=test-code-2&state=${new URL((await request('/api/v1/students/me/github/link', {
+    headers: await authHeaderFor(student),
+  })).json.authorizationUrl, baseUrl).searchParams.get('state')}`);
+  assert.equal(duplicateLinkAttempt.response.status, 409);
+  assert.equal(
+    duplicateLinkAttempt.json.code,
+    'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT'
+  );
 
   const reusedState = await request(`/api/v1/auth/github/callback?code=test-code&state=${state}`);
   assert.equal(reusedState.response.status, 400);
@@ -284,7 +293,7 @@ test('github callback redirects browser clients back to frontend with success st
   const authenticated = await request('/api/v1/students/me/github/link', {
     headers: await authHeaderFor(student),
   });
-  const state = new URL(authenticated.json.authorizationUrl).searchParams.get('state');
+  const state = new URL(authenticated.json.authorizationUrl, baseUrl).searchParams.get('state');
 
   const response = await fetch(`${baseUrl}/api/v1/auth/github/callback?code=test-code&state=${state}`, {
     headers: {

@@ -233,6 +233,7 @@ async function handleGitHubCallback(req, res) {
       return redirectToFrontendWithResult(res, 'success', {
         githubUsername: profile.githubUsername,
         studentId: student.studentId,
+        mockOAuth: githubLinkService.hasRealGitHubOAuthConfig() ? '' : '1',
       });
     }
 
@@ -242,7 +243,10 @@ async function handleGitHubCallback(req, res) {
       githubUsername: profile.githubUsername,
     });
   } catch (error) {
-    const status = error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED' ? 409 : 500;
+    const status = (
+      error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED' ||
+      error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT'
+    ) ? 409 : 500;
 
     if (shouldRedirectToFrontend(req)) {
       return redirectToFrontendWithResult(res, 'error', {
@@ -293,6 +297,13 @@ const storeLinkedGitHubAccount = [
       }
 
       if (error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED') {
+        return res.status(409).json({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
+      if (error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT') {
         return res.status(409).json({
           code: error.code,
           message: error.message,
