@@ -1,15 +1,16 @@
 openapi: 3.0.3
 info:
   title: Senior Project Management System - Mentor Matching API
-  description: API specification for Process 3.0 Mentor Matching, based on Level 2 DFD. Enriched with explicit payload contracts, examples, and reusable errors to simplify implementation.
-  version: 1.0.1
+  description: "API specification for Process 3.0 Mentor Matching. Covers advisor requests, advisor decisions, advisor release and transfer flows, notification retrieval, and supporting database-facing endpoints used by the process."
+  version: 1.2.0
+
 servers:
-  - url: https://api.senior-project.edu/v1
+  - url: https://api.senior-project.edu
     description: Production server
 
 tags:
   - name: 3.0 Mentor Matching
-    description: Advanced advisor management, requests, releases, and transfers.
+    description: "Operations for advisor request lifecycle management, release/transfer handling, notifications, and supporting database updates."
 
 components:
   securitySchemes:
@@ -21,143 +22,224 @@ components:
   schemas:
     AdvisorRequest:
       type: object
-      description: Request to pair a group with an advisor, including lifecycle status.
+      description: "Advisor request record created by a team leader and resolved by an advisor."
+      required: [id, groupId, advisorId, teamLeaderId, status]
+      properties:
+        id:
+          type: string
+          description: "Advisor request identifier."
+          example: adr_01HB1AV8Y7BR9H2D5S8G
+        groupId:
+          type: string
+          description: "Group associated with the request."
+          example: grp_123e4567-e89b-12d3-a456-426614174000
+        advisorId:
+          type: string
+          description: "Requested advisor identifier."
+          example: prof_88
+        teamLeaderId:
+          type: string
+          description: "Team leader who initiated the request."
+          example: stu_leader_01
+        status:
+          type: string
+          description: "Lifecycle state of the request."
+          enum: [PENDING, APPROVED, REJECTED, CANCELLED]
+          example: PENDING
+        decisionNote:
+          type: string
+          nullable: true
+          description: "Optional advisor note attached to the final decision."
+          example: I can supervise this team next semester.
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-05T10:15:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-05T13:40:00Z"
+
+    PendingAdvisorRequest:
+      type: object
+      description: "Pending advisor request entry stored in the pending-advisor-requests data store."
       required: [id, groupId, advisorId, status]
       properties:
         id:
           type: string
-          description: Advisor request identifier.
-          example: adr_01HB1AV8Y7BR9H2D5S8G
+          example: padr_01HB1AV8Y7BR9H2D5S8G
         groupId:
           type: string
-          description: Group requesting the advisor.
           example: grp_123e4567-e89b-12d3-a456-426614174000
         advisorId:
           type: string
-          description: Advisor (professor) being requested.
           example: prof_88
         status:
           type: string
-          description: Current state of the request.
-          enum: [PENDING, APPROVED, REJECTED]
+          enum: [PENDING, APPROVED, REJECTED, RESOLVED]
           example: PENDING
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-05T10:15:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-05T13:40:00Z"
+
+    AdvisorAssignment:
+      type: object
+      description: "Advisor assignment state for a group."
+      required: [groupId]
+      properties:
+        groupId:
+          type: string
+          example: grp_123e4567-e89b-12d3-a456-426614174000
+        advisorId:
+          type: string
+          nullable: true
+          description: "Assigned advisor identifier; null when the group is unassigned."
+          example: prof_88
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-05T13:40:00Z"
+
+    Notification:
+      type: object
+      description: "Notification delivered to a user as part of mentor matching."
+      required: [id, type, recipientId, message, createdAt]
+      properties:
+        id:
+          type: string
+          example: notif_01HM6YX23S9T4A1P
+        type:
+          type: string
+          enum:
+            - ADVISOR_DECISION
+            - ADVISOR_RELEASE
+            - ADVISOR_TRANSFER
+            - ADVISEE_REQUEST
+            - GROUP_TRANSFER
+          example: ADVISOR_DECISION
+        recipientId:
+          type: string
+          example: stu_leader_01
+        requestId:
+          type: string
+          nullable: true
+          example: adr_01HB1AV8Y7BR9H2D5S8G
+        groupId:
+          type: string
+          nullable: true
+          example: grp_123e4567-e89b-12d3-a456-426614174000
+        message:
+          type: string
+          example: Your advisor request has been approved.
+        read:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-05T13:41:00Z"
 
     Error:
       type: object
-      description: Standard error envelope for all endpoints.
-      required: [message]
+      description: "Standard error envelope."
+      required: [message, code]
       properties:
         message:
           type: string
-          description: Human-friendly error message.
+          description: "Human-friendly error message."
           example: Advisor request not found
         code:
           type: string
-          description: Machine-friendly error code.
+          description: "Machine-friendly error code."
           example: REQUEST_NOT_FOUND
 
 paths:
-  /groups/{groupId}/advisor-request:
+  /api/v1/advisor-requests:
     post:
       tags: ["3.0 Mentor Matching"]
-      summary: Request an advisor for the group (Process 3.1)
-      description: Leader submits a request for a specific professor to mentor the group.
+      summary: "P31 Submit advisor request"
+      description: |
+        Team Leader creates an advisor request for a specific group and advisor.
+        **Side Effects:** May also create a pending advisor request entry and trigger an advisee request notification for the advisor.
       security: [{ cookieAuth: [] }]
-      parameters:
-        - name: groupId
-          in: path
-          required: true
-          description: Group requesting an advisor.
-          schema: { type: string }
       requestBody:
         required: true
-        description: Target professor identifier.
         content:
           application/json:
             schema:
               type: object
-              required: [professorId]
+              required: [groupId, advisorId]
               properties:
-                professorId:
+                groupId:
                   type: string
-                  description: Professor to be requested.
+                  example: grp_123e4567-e89b-12d3-a456-426614174000
+                advisorId:
+                  type: string
                   example: prof_88
             example:
-              professorId: prof_88
+              groupId: grp_123e4567-e89b-12d3-a456-426614174000
+              advisorId: prof_88
       responses:
-        201:
-          description: Request submitted.
+        "201":
+          description: "Advisor request created successfully."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdvisorRequest'
-        400:
-          description: Invalid request (e.g., duplicate pending request).
+        "400":
+          description: "Invalid request payload or duplicate pending request."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        401:
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        404:
-          description: Group or professor not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Group or advisor not found."
 
-    delete:
+  /api/v1/advisor-requests/{requestId}:
+    get:
       tags: ["3.0 Mentor Matching"]
-      summary: Withdraw advisor request (Process 3.1)
-      description: Leader withdraws a pending advisor request before it is resolved.
-      security: [{ cookieAuth: [] }]
-      parameters:
-        - name: groupId
-          in: path
-          required: true
-          description: Group withdrawing the request.
-          schema: { type: string }
-      responses:
-        204:
-          description: Request withdrawn successfully.
-        400:
-          description: No pending request to withdraw.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        401:
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        404:
-          description: Group not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /advisor/requests/{requestId}/decision:
-    patch:
-      tags: ["3.0 Mentor Matching"]
-      summary: Advisor approves or rejects a request (Process 3.2)
-      description: Advisor resolves an outstanding request for mentorship.
+      summary: "Retrieve advisor request details"
+      description: "Returns the current state and metadata of a single advisor request."
       security: [{ cookieAuth: [] }]
       parameters:
         - name: requestId
           in: path
           required: true
-          description: Advisor request identifier.
+          schema: { type: string }
+      responses:
+        "200":
+          description: "Advisor request found."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvisorRequest'
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Advisor request not found."
+
+  /api/v1/advisor-requests/{requestId}/decision:
+    patch:
+      tags: ["3.0 Mentor Matching"]
+      summary: "P32 Process advisor decision"
+      description: |
+        Advisor approves or rejects a pending advisor request.
+        **Side Effects:** Updates advisor assignment when approved, updates pending request status, and creates a decision notification for the Team Leader.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: requestId
+          in: path
+          required: true
           schema: { type: string }
       requestBody:
         required: true
-        description: Advisor decision.
         content:
           application/json:
             schema:
@@ -166,103 +248,86 @@ paths:
               properties:
                 decision:
                   type: string
-                  description: Advisor action for the request.
                   enum: [APPROVE, REJECT]
                   example: APPROVE
-            example:
-              decision: APPROVE
+                note:
+                  type: string
+                  description: "Optional advisor explanation."
+                  example: I am available to supervise this group.
       responses:
-        200:
-          description: Request resolved.
+        "200":
+          description: "Advisor request decision applied."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdvisorRequest'
-        400:
-          description: Invalid state transition (e.g., already resolved).
+        "400":
+          description: "Invalid decision or request already resolved."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        401:
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        404:
-          description: Advisor request not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Advisor request not found."
 
-  /advisor/release:
-    post:
-      tags: ["3.0 Mentor Matching"]
-      summary: Advisor releases a group (Process 3.3)
-      description: Advisor initiates a release of a currently assigned group.
-      security: [{ cookieAuth: [] }]
-      requestBody:
-        required: true
-        description: Group to release.
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [groupId]
-              properties:
-                groupId:
-                  type: string
-                  description: Group being released.
-                  example: grp_123e4567-e89b-12d3-a456-426614174000
-            example:
-              groupId: grp_123e4567-e89b-12d3-a456-426614174000
-      responses:
-        200:
-          description: Advisor freed.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  released:
-                    type: boolean
-                    example: true
-        400:
-          description: Release not allowed (e.g., group not assigned to advisor).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        401:
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        404:
-          description: Group not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /coordinator/groups/{groupId}/transfer:
+  /api/v1/groups/{groupId}/advisor-release:
     patch:
       tags: ["3.0 Mentor Matching"]
-      summary: Coordinator transfers group to a new advisor (Process 3.4)
-      description: Coordinator reassigns a group to another advisor and updates the roster.
+      summary: "P33 Release advisor assignment"
+      description: |
+        Advisor releases the current group assignment.
+        **Side Effects:** Clears the group's advisor assignment and creates an advisor release notification for the Team Leader.
       security: [{ cookieAuth: [] }]
       parameters:
         - name: groupId
           in: path
           required: true
-          description: Group to be transferred.
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  example: Advisor is no longer available this term.
+      responses:
+        "200":
+          description: "Advisor released from the group."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvisorAssignment'
+        "400":
+          description: "Release cannot be performed."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Group not found."
+
+  /api/v1/coordinator/groups/{groupId}/advisor-transfer:
+    patch:
+      tags: ["3.0 Mentor Matching"]
+      summary: "P34 Transfer group to another advisor"
+      description: |
+        Coordinator transfers a group from its current advisor to another advisor.
+        **Side Effects:** Updates group assignment and produces transfer notifications for the affected advisor and Team Leader.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
           schema: { type: string }
       requestBody:
         required: true
-        description: Target advisor for reassignment.
         content:
           application/json:
             schema:
@@ -271,58 +336,381 @@ paths:
               properties:
                 newAdvisorId:
                   type: string
-                  description: Advisor to transfer the group to.
                   example: prof_99
-            example:
-              newAdvisorId: prof_99
+                reason:
+                  type: string
+                  example: Load balancing between advisors.
       responses:
-        200:
-          description: Advisor updated.
+        "200":
+          description: "Advisor transfer completed."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvisorAssignment'
+        "400":
+          description: "Transfer cannot be applied."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: "Authentication required."
+        "403":
+          description: "Coordinator role required."
+        "404":
+          description: "Group or advisor not found."
+
+  /api/v1/team-leader/notifications/advisor-decisions:
+    get:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Get advisor decision notifications for Team Leader"
+      description: "Returns notifications generated when an advisor approves or rejects a request."
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: "Decision notifications returned."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+        "401":
+          description: "Authentication required."
+
+  /api/v1/team-leader/notifications/advisor-releases:
+    get:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Get advisor release notifications for Team Leader"
+      description: "Returns notifications sent when an advisor releases a group."
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: "Release notifications returned."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+        "401":
+          description: "Authentication required."
+
+  /api/v1/team-leader/notifications/advisor-transfers:
+    get:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Get advisor transfer notifications for Team Leader"
+      description: "Returns notifications sent when a coordinator transfers the group to another advisor."
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: "Transfer notifications returned."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+        "401":
+          description: "Authentication required."
+
+  /api/v1/advisors/notifications/advisee-requests:
+    get:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Get advisee request notifications for advisors"
+      description: "Returns incoming advisor request notifications addressed to the currently authenticated advisor."
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: "Advisee request notifications returned."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+        "401":
+          description: "Authentication required."
+
+  /api/v1/advisors/notifications/group-transfers:
+    get:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Get group transfer notifications for advisors"
+      description: "Returns notifications sent to advisors when a group is transferred to them."
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: "Group transfer notifications returned."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+        "401":
+          description: "Authentication required."
+
+  /api/v1/user-database/advisor-requests:
+    post:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Persist advisor request in User DB"
+      description: "Internal or service-facing endpoint that writes advisor request metadata into the user database layer."
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvisorRequest'
+      responses:
+        "201":
+          description: "Advisor request stored in User DB."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdvisorRequest'
-        400:
-          description: Transfer not allowed (e.g., advisor unavailable).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        401:
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        404:
-          description: Group or advisor not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+        "400":
+          description: "Invalid payload."
+        "401":
+          description: "Authentication required."
 
-  /coordinator/sanitize-groups:
+  /api/v1/user-database/groups/{groupId}/advisor-assignment:
+    patch:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Update advisor assignment in User DB"
+      description: "Internal or service-facing endpoint that mirrors advisor assignment updates into the user database layer."
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [advisorId]
+              properties:
+                advisorId:
+                  type: string
+                  nullable: true
+                  example: prof_88
+      responses:
+        "200":
+          description: "User DB assignment updated."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvisorAssignment'
+        "400":
+          description: "Invalid payload."
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Group not found."
+
+  /api/v1/group-database/groups/{groupId}/advisor-assignment:
+    patch:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Create or update advisor assignment in Group DB"
+      description: "Writes the current advisor assignment into the group database for the given group."
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [advisorId]
+              properties:
+                advisorId:
+                  type: string
+                  example: prof_88
+      responses:
+        "200":
+          description: "Group DB assignment updated."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvisorAssignment'
+        "400":
+          description: "Invalid payload."
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Group not found."
+
+    delete:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Delete advisor assignment from Group DB"
+      description: "Clears the advisor assignment for the given group in the group database."
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: "Advisor assignment deleted."
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Group not found."
+
+  /api/v1/group-database/groups/{groupId}/advisor-transfer:
+    patch:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Apply advisor transfer in Group DB"
+      description: "Internal or service-facing endpoint that persists a coordinator-driven advisor transfer in the group database."
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newAdvisorId]
+              properties:
+                newAdvisorId:
+                  type: string
+                  example: prof_99
+      responses:
+        "200":
+          description: "Advisor transfer persisted in Group DB."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvisorAssignment'
+        "400":
+          description: "Invalid payload."
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Group not found."
+
+  /api/v1/group-database/groups/{groupId}:
+    delete:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Delete orphaned group from Group DB"
+      description: "Deletes a group record from the group database, typically used by the sanitization/orphan cleanup branch of mentor matching."
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: "Group deleted."
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Group not found."
+
+  /api/v1/pending-advisor-requests:
     post:
       tags: ["3.0 Mentor Matching"]
-      summary: Disband orphaned groups without advisors (Process 3.5)
-      description: Coordinator removes groups that no longer have an advisor and notifies affected students.
+      summary: "Create pending advisor request entry"
+      description: "Creates a pending advisor request record in the pending-advisor-requests data store."
       security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, groupId, advisorId]
+              properties:
+                id:
+                  type: string
+                  example: padr_01HB1AV8Y7BR9H2D5S8G
+                groupId:
+                  type: string
+                  example: grp_123e4567-e89b-12d3-a456-426614174000
+                advisorId:
+                  type: string
+                  example: prof_88
       responses:
-        200:
-          description: Sanitization complete.
+        "201":
+          description: "Pending advisor request created."
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  disbandedGroupIds:
-                    type: array
-                    description: Groups that were disbanded.
-                    items: { type: string, example: grp_123e4567-e89b-12d3-a456-426614174000 }
-                    example: [grp_123e4567-e89b-12d3-a456-426614174000]
-        401:
-          description: Authentication required.
+                $ref: '#/components/schemas/PendingAdvisorRequest'
+        "400":
+          description: "Invalid payload."
+        "401":
+          description: "Authentication required."
+
+  /api/v1/pending-advisor-requests/{requestId}:
+    get:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Get pending advisor request"
+      description: "Returns a pending advisor request record by identifier."
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: "Pending advisor request returned."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/PendingAdvisorRequest'
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Pending advisor request not found."
+
+  /api/v1/pending-advisor-requests/{requestId}/status:
+    patch:
+      tags: ["3.0 Mentor Matching"]
+      summary: "Update pending advisor request status"
+      description: "Updates the lifecycle status of a pending advisor request after a decision or cleanup step."
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [PENDING, APPROVED, REJECTED, RESOLVED]
+                  example: APPROVED
+      responses:
+        "200":
+          description: "Pending advisor request status updated."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingAdvisorRequest'
+        "400":
+          description: "Invalid status transition."
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Pending advisor request not found."
