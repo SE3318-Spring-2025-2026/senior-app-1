@@ -13,7 +13,9 @@ const sequelize = require('../db');
 const app = require('../app');
 require('../models');
 const { User, Professor, LinkedGitHubAccount, OAuthState } = require('../models');
-const { ensureValidStudentRegistry } = require('../services/studentService');
+const StudentRegistrationError = require('../errors/studentRegistrationError');
+const studentRegistrationService = require('../services/studentRegistrationService');
+const { createStudent, ensureValidStudentRegistry } = require('../services/studentService');
 const professorService = require('../services/professorService');
 
 let server;
@@ -52,6 +54,43 @@ test.beforeEach(async () => {
   await LinkedGitHubAccount.destroy({ where: {} });
   await OAuthState.destroy({ where: {} });
   await User.destroy({ where: {} });
+});
+
+test('admin can log in with email and password', async () => {
+  const password = 'AdminPass1!';
+
+  await User.create({
+    email: 'admin@example.com',
+    fullName: 'Admin User',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+    password: await bcrypt.hash(password, 10),
+  });
+
+  const successResult = await request('/api/v1/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@example.com',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'ADMIN');
+
+  const invalidResult = await request('/api/v1/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@example.com',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidResult.response.status, 401);
+  assert.equal(invalidResult.json.code, 'INVALID_CREDENTIALS');
 });
 
 test('admin can register professor and duplicate email returns 409', async () => {
@@ -498,8 +537,19 @@ test('student registration validates eligibility, password strength, duplication
     }),
   });
 
-  assert.equal(created.response.status, 201);
-  assert.equal(created.json.valid, true);
+  assert.equal(created.response.status, 200);
+  assert.deepEqual(created.json, {
+    valid: true,
+    studentId: '11070001000',
+    message: 'Validation passed',
+  });
+
+  await createStudent({
+    studentId: '11070001000',
+    email: 'student3@example.edu',
+    fullName: 'Mehmet Veli',
+    password: 'StrongPass1!',
+  });
 
   const alreadyRegistered = await request('/api/v1/students/registration-validation', {
     method: 'POST',
@@ -535,10 +585,211 @@ test('student registration validates eligibility, password strength, duplication
     studentId: '11070001000',
     alreadyRegistered: true,
   });
+
+  const createdStudent = await User.findOne({
+    where: { studentId: '11070001000' },
+  });
+
+  assert.ok(createdStudent.passwordHash);
+  assert.notEqual(createdStudent.passwordHash, 'StrongPass1!');
+  assert.equal(await bcrypt.compare('StrongPass1!', createdStudent.passwordHash), true);
+});
+
+test('direct student account creation endpoint requires admin auth and persists provided password hashes securely', async () => {
+  const admin = await User.create({
+    email: 'student-admin@example.com',
+    fullName: 'Student Admin',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(await authHeaderFor(admin)),
+  };
+
+  const unauthenticated = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001001',
+      email: 'dbcreate@example.edu',
+      fullName: 'Database Student',
+      passwordHash: '$2a$10$examplehashedpasswordvalue',
+    }),
+  });
+
+  assert.equal(unauthenticated.response.status, 401);
+
+  const passwordHash = await bcrypt.hash('StrongPass1!', 10);
+
+  const created = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      studentId: '11070001001',
+      email: 'dbcreate@example.edu',
+      fullName: 'Database Student',
+      passwordHash,
+    }),
+  });
+
+  assert.equal(created.response.status, 201);
+  assert.deepEqual(created.json, {
+    userId: created.json.userId,
+    studentId: '11070001001',
+    message: 'Student account created successfully',
+  });
+
+  const storedStudent = await User.findByPk(created.json.userId);
+  assert.equal(storedStudent.studentId, '11070001001');
+  assert.equal(storedStudent.email, 'dbcreate@example.edu');
+  assert.equal(storedStudent.passwordHash, passwordHash);
+  assert.equal(storedStudent.password, null);
+
+  const duplicateStudentId = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      studentId: '11070001001',
+      email: 'other@example.edu',
+      fullName: 'Other Student',
+      passwordHash,
+    }),
+  });
+
+  assert.equal(duplicateStudentId.response.status, 409);
+  assert.equal(duplicateStudentId.json.code, 'ALREADY_REGISTERED');
+
+  const duplicateEmail = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      studentId: '11070001002',
+      email: 'dbcreate@example.edu',
+      fullName: 'Other Student',
+      passwordHash,
+    }),
+  });
+
+  assert.equal(duplicateEmail.response.status, 409);
+  assert.equal(duplicateEmail.json.code, 'DUPLICATE_EMAIL');
+
+  const studentUser = await createStudent({
+    studentId: '11070001000',
+    email: 'regular-student@example.edu',
+    fullName: 'Regular Student',
+    password: 'StrongPass1!',
+  });
+
+  const forbidden = await request('/api/v1/user-database/students', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(studentUser)),
+    },
+    body: JSON.stringify({
+      studentId: '11070001001',
+      email: 'forbidden@example.edu',
+      fullName: 'Forbidden Student',
+      passwordHash,
+    }),
+  });
+
+  assert.equal(forbidden.response.status, 403);
+});
+
+test('student register creates account after validation passes', async () => {
+  const created = await request('/api/v1/students/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001002',
+      email: 'student-register@example.edu',
+      fullName: 'Register Student',
+      password: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(created.response.status, 201);
+  assert.equal(created.json.valid, true);
+  assert.equal(created.json.studentId, '11070001002');
+  assert.equal(created.json.message, 'Student account created successfully');
+  assert.equal(typeof created.json.userId, 'number');
+
+  const duplicate = await request('/api/v1/students/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001002',
+      email: 'student-register-2@example.edu',
+      fullName: 'Register Student Again',
+      password: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(duplicate.response.status, 409);
+  assert.equal(duplicate.json.code, 'ALREADY_REGISTERED');
+});
+
+test('student registration service validates data before creating the account', async () => {
+  await assert.rejects(
+    studentRegistrationService.validateRegistrationDetails({
+      studentId: '11070001999',
+      email: 'student5@example.edu',
+      fullName: 'Invalid Registry',
+      password: 'StrongPass1!',
+    }),
+    (error) => {
+      assert.ok(error instanceof StudentRegistrationError);
+      assert.equal(error.status, 403);
+      assert.equal(error.code, 'STUDENT_NOT_ELIGIBLE');
+      return true;
+    },
+  );
+
+  const validated = await studentRegistrationService.validateRegistrationDetails({
+    studentId: '11070001002',
+    email: 'CaseSensitive@Example.edu',
+    fullName: '  Valid Student  ',
+    password: 'StrongPass1!',
+  });
+
+  assert.deepEqual(validated, {
+    studentId: '11070001002',
+    email: 'casesensitive@example.edu',
+    fullName: 'Valid Student',
+    password: 'StrongPass1!',
+  });
+
+  const createdStudent = await studentRegistrationService.validateAndCreateStudent({
+    studentId: '11070001002',
+    email: 'CaseSensitive@Example.edu',
+    fullName: '  Valid Student  ',
+    password: 'StrongPass1!',
+  });
+
+  assert.equal(createdStudent.studentId, '11070001002');
+  assert.equal(createdStudent.email, 'casesensitive@example.edu');
+
+  await assert.rejects(
+    studentRegistrationService.validateRegistrationDetails({
+      studentId: '11070001001',
+      email: 'CASESENSITIVE@example.edu',
+      fullName: 'Duplicate Email',
+      password: 'StrongPass1!',
+    }),
+    (error) => {
+      assert.ok(error instanceof StudentRegistrationError);
+      assert.equal(error.status, 409);
+      assert.equal(error.code, 'DUPLICATE_EMAIL');
+      return true;
+    },
+  );
 });
 
 test('github linking flow rejects unauthenticated requests and links account after callback', async () => {
-  const registration = await request('/api/v1/students/registration-validation', {
+  const registration = await request('/api/v1/students/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -548,11 +799,10 @@ test('github linking flow rejects unauthenticated requests and links account aft
       password: 'StrongPass1!',
     }),
   });
+  const student = await User.findByPk(registration.json.userId);
 
   const unauthenticated = await request('/api/v1/students/me/github/link');
   assert.equal(unauthenticated.response.status, 401);
-
-  const student = await User.findByPk(registration.json.userId);
   const authenticated = await request('/api/v1/students/me/github/link', {
     headers: await authHeaderFor(student),
   });
@@ -560,7 +810,7 @@ test('github linking flow rejects unauthenticated requests and links account aft
   assert.equal(authenticated.response.status, 200);
   assert.match(authenticated.json.authorizationUrl, /state=/);
 
-  const state = new URL(authenticated.json.authorizationUrl).searchParams.get('state');
+  const state = new URL(authenticated.json.authorizationUrl, baseUrl).searchParams.get('state');
 
   const missingQuery = await request('/api/v1/auth/github/callback');
   assert.equal(missingQuery.response.status, 400);
@@ -580,12 +830,21 @@ test('github linking flow rejects unauthenticated requests and links account aft
   const linkedAccount = await LinkedGitHubAccount.findOne({ where: { userId: student.id } });
   assert.equal(linkedAccount.githubUsername, 'student-11070001000');
 
+  const duplicateLinkAttempt = await request(`/api/v1/auth/github/callback?code=test-code-2&state=${new URL((await request('/api/v1/students/me/github/link', {
+    headers: await authHeaderFor(student),
+  })).json.authorizationUrl, baseUrl).searchParams.get('state')}`);
+  assert.equal(duplicateLinkAttempt.response.status, 409);
+  assert.equal(
+    duplicateLinkAttempt.json.code,
+    'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT'
+  );
+
   const reusedState = await request(`/api/v1/auth/github/callback?code=test-code&state=${state}`);
   assert.equal(reusedState.response.status, 400);
 });
 
 test('github callback redirects browser clients back to frontend with success state', async () => {
-  const registration = await request('/api/v1/students/registration-validation', {
+  const registration = await request('/api/v1/students/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -595,12 +854,11 @@ test('github callback redirects browser clients back to frontend with success st
       password: 'StrongPass1!',
     }),
   });
-
   const student = await User.findByPk(registration.json.userId);
   const authenticated = await request('/api/v1/students/me/github/link', {
     headers: await authHeaderFor(student),
   });
-  const state = new URL(authenticated.json.authorizationUrl).searchParams.get('state');
+  const state = new URL(authenticated.json.authorizationUrl, baseUrl).searchParams.get('state');
 
   const response = await fetch(`${baseUrl}/api/v1/auth/github/callback?code=test-code&state=${state}`, {
     headers: {
@@ -615,7 +873,7 @@ test('github callback redirects browser clients back to frontend with success st
 });
 
 test('manual linked account store and github patch endpoint update student status', async () => {
-  await request('/api/v1/students/registration-validation', {
+  await request('/api/v1/students/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

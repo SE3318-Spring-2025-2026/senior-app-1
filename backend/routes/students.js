@@ -3,6 +3,7 @@ const { authenticate } = require('../middleware/auth');
 const {
   getStudentValidation,
   handleGitHubCallback,
+  registerStudent,
   registerStudentValidation,
   startGitHubLink,
   storeLinkedGitHubAccount,
@@ -12,6 +13,7 @@ const {
 const router = express.Router();
 
 router.post('/students/registration-validation', registerStudentValidation);
+router.post('/students/register', registerStudent);
 router.get('/user-database/students/:studentId/validation', getStudentValidation);
 router.patch('/user-database/students/:studentId/github-link', updateStudentGitHubLink);
 router.get('/students/me/github/link', authenticate, startGitHubLink);

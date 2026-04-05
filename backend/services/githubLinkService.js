@@ -7,11 +7,27 @@ const User = require('../models/User');
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
+function hasRealGitHubOAuthConfig() {
+  return Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
+}
+
 function buildAuthorizationUrl(state) {
   // GitHub expects the generated state to round-trip through the authorize screen
   // so we can validate that the callback belongs to the original student session.
+  if (!hasRealGitHubOAuthConfig()) {
+    // In local dev without GitHub OAuth credentials, we short-circuit to the
+    // backend callback so the rest of the linking pipeline can still be tested
+    // without sending the browser to a broken GitHub authorize URL.
+    const params = new URLSearchParams({
+      code: `mock-code-${state}`,
+      state,
+    });
+
+    return `/api/v1/auth/github/callback?${params.toString()}`;
+  }
+
   const params = new URLSearchParams({
-    client_id: process.env.GITHUB_CLIENT_ID || 'github_client_id_placeholder',
+    client_id: process.env.GITHUB_CLIENT_ID,
     scope: 'read:user',
     state,
   });
@@ -59,10 +75,7 @@ async function consumeOAuthState(state) {
 }
 
 async function exchangeCodeForToken(code) {
-  const clientId = process.env.GITHUB_CLIENT_ID;
-  const clientSecret = process.env.GITHUB_CLIENT_SECRET;
-
-  if (!clientId || !clientSecret) {
+  if (!hasRealGitHubOAuthConfig()) {
     // The mock path keeps local development and tests usable when real GitHub
     // OAuth credentials are intentionally absent.
     return `mock-token-${code}`;
@@ -75,8 +88,8 @@ async function exchangeCodeForToken(code) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
+      client_id: process.env.GITHUB_CLIENT_ID,
+      client_secret: process.env.GITHUB_CLIENT_SECRET,
       code,
     }),
   });
@@ -90,7 +103,7 @@ async function exchangeCodeForToken(code) {
 }
 
 async function fetchGitHubProfile(accessToken, user) {
-  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+  if (!hasRealGitHubOAuthConfig()) {
     // Tests and local dry-runs use deterministic mock identities so the rest of
     // the linking pipeline can still be exercised without external API calls.
     return {
@@ -151,6 +164,17 @@ async function storeLinkedGitHubAccount({ studentId, githubId, githubUsername })
       transaction,
     });
 
+    if (
+      existingLinkedAccount &&
+      existingLinkedAccount.githubId === githubId &&
+      existingLinkedAccount.githubUsername === githubUsername &&
+      student.githubLinked
+    ) {
+      const error = new Error('GitHub account is already linked for this student.');
+      error.code = 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT';
+      throw error;
+    }
+
     let linkedAccount;
     if (existingLinkedAccount) {
       // Re-linking the same student updates the stored GitHub identity instead of
@@ -181,5 +205,6 @@ module.exports = {
   exchangeCodeForToken,
   fetchGitHubProfile,
   getFrontendUrl,
+  hasRealGitHubOAuthConfig,
   storeLinkedGitHubAccount,
 };

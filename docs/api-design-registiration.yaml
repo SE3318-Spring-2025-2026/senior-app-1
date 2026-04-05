@@ -51,6 +51,13 @@ components:
           description: Machine-readable error code.
           example: VALIDATION_FAILED
 
+    GitHubLinkErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+      example:
+        message: GitHub account is already linked for this student.
+        errorCode: GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT
+
     StudentIdListRequest:
       type: object
       description: List of student IDs to import into the registry.
@@ -130,7 +137,26 @@ components:
 
     ValidationPassedResponse:
       type: object
-      description: Success response returned when validation passes and the student account is created.
+      description: Success response returned when registration validation passes.
+      required: [valid, studentId, message]
+      properties:
+        valid:
+          type: boolean
+          example: true
+        studentId:
+          type: string
+          example: "11070001000"
+        message:
+          type: string
+          example: Validation passed
+      example:
+        valid: true
+        studentId: "11070001000"
+        message: Validation passed
+
+    CreateStudentAccountResponse:
+      type: object
+      description: Response returned when a student account is created successfully.
       required: [valid, userId, studentId, message]
       properties:
         valid:
@@ -151,9 +177,28 @@ components:
         studentId: "11070001000"
         message: Student account created successfully
 
-    CreateStudentAccountRequest:
+    CreateStudentAccountInUserDatabaseResponse:
       type: object
-      description: Internal persistence request to create a student account record.
+      description: Internal response returned when a student account record is persisted successfully.
+      required: [userId, studentId, message]
+      properties:
+        userId:
+          type: integer
+          example: 501
+        studentId:
+          type: string
+          example: "11070001000"
+        message:
+          type: string
+          example: Student account created successfully
+      example:
+        userId: 501
+        studentId: "11070001000"
+        message: Student account created successfully
+
+    CreateStudentAccountInUserDatabaseRequest:
+      type: object
+      description: Internal request that receives validated student registration data with a hashed password and persists the new account.
       required: [studentId, email, fullName, passwordHash]
       properties:
         studentId:
@@ -174,25 +219,6 @@ components:
         email: student@university.edu
         fullName: Ali Veli
         passwordHash: hashed_password_value
-
-    CreateStudentAccountResponse:
-      type: object
-      description: Internal persistence response for student account creation.
-      required: [userId, studentId, message]
-      properties:
-        userId:
-          type: integer
-          example: 501
-        studentId:
-          type: string
-          example: "11070001000"
-        message:
-          type: string
-          example: Student account created successfully
-      example:
-        userId: 501
-        studentId: "11070001000"
-        message: Student account created successfully
 
     RegisterProfessorRequest:
       type: object
@@ -293,7 +319,7 @@ components:
     VerifySetupTokenResponse:
       type: object
       description: Internal response showing whether a setup token is valid.
-      required: [valid, professorId, message]
+      required: [valid, message]
       properties:
         valid:
           type: boolean
@@ -483,6 +509,56 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/user-database/students:
+    post:
+      tags: ["User Database", "Internal"]
+      summary: Internal - Create student account in user database
+      description: Receives validated student registration data with a hashed password and saves the new student account.
+      operationId: createStudentAccountInUserDatabase
+      requestBody:
+        required: true
+        description: Validated student registration data to persist in the user database.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStudentAccountInUserDatabaseRequest'
+            example:
+              studentId: "11070001000"
+              email: student@university.edu
+              fullName: Ali Veli
+              passwordHash: hashed_password_value
+      responses:
+        201:
+          description: Student account created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateStudentAccountInUserDatabaseResponse'
+        400:
+          description: Missing or malformed student account fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Internal authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Caller is not allowed to access this internal endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        409:
+          description: Student is already registered or email is already in use.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/user-database/students/{studentId}/validation:
     get:
       tags: ["User Database", "Internal"]
@@ -578,8 +654,8 @@ paths:
   /api/v1/students/registration-validation:
     post:
       tags: ["Student"]
-      summary: Validate student registration details and create the student account
-      description: Validates student ID eligibility, alreadyRegistered state, email uniqueness, and password policy. If validation succeeds, the student account is created in the same endpoint.
+      summary: Validate student registration details
+      description: Validates student ID eligibility, alreadyRegistered state, email uniqueness, and password policy. If validation succeeds, the API returns a validation success response without creating the account.
       operationId: validateStudentRegistration
       requestBody:
         required: true
@@ -594,8 +670,8 @@ paths:
               fullName: Ali Veli
               password: StrongPassword123!
       responses:
-        201:
-          description: Validation passed and student account created successfully.
+        200:
+          description: Validation passed.
           content:
             application/json:
               schema:
@@ -619,25 +695,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/user-database/students:
+  /api/v1/students/register:
     post:
-      tags: ["User Database", "Internal"]
-      summary: Internal - Create student account record
-      description: Internal persistence endpoint used after registration validation succeeds. Accepts a password hash, not a raw password.
-      operationId: createStudentAccountRecord
-      security: [{ internalBearerAuth: [] }]
+      tags: ["Student"]
+      summary: Create student account
+      description: Creates the student account after applying the same business validation rules used by the registration validation endpoint.
+      operationId: registerStudentAccount
       requestBody:
         required: true
-        description: Student account data ready for persistence.
+        description: Student registration details to create the account.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateStudentAccountRequest'
+              $ref: '#/components/schemas/StudentRegistrationValidationRequest'
             example:
               studentId: "11070001000"
               email: student@university.edu
               fullName: Ali Veli
-              passwordHash: hashed_password_value
+              password: StrongPassword123!
       responses:
         201:
           description: Student account created successfully.
@@ -646,31 +721,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateStudentAccountResponse'
         400:
-          description: Invalid request body.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        401:
-          description: Internal authentication required.
+          description: Missing or malformed registration fields, or weak password.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         403:
-          description: Caller is not allowed to access this internal endpoint.
+          description: Student ID is not eligible for registration.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         409:
-          description: Student account already exists.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        422:
-          description: Student account cannot be created from supplied data.
+          description: Student is already registered or email is already in use.
           content:
             application/json:
               schema:
@@ -848,7 +911,7 @@ paths:
               setupToken: pst_xxx
       responses:
         200:
-          description: Setup token verified successfully.
+          description: Setup token verification result returned successfully.
           content:
             application/json:
               schema:
@@ -867,18 +930,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         403:
           description: Caller is not allowed to access this internal endpoint.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        404:
-          description: Setup token not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        422:
-          description: Setup token is invalid, expired, or already used.
           content:
             application/json:
               schema:
@@ -948,7 +999,7 @@ paths:
     get:
       tags: ["Student"]
       summary: Start GitHub account linking flow for authenticated active student
-      description: Authenticated active student endpoint that generates the GitHub authorization URL. Fetching GitHub profile data and completing account link persistence continue internally after callback verification.
+      description: Authenticated active student endpoint that generates the GitHub authorization URL. Fetching GitHub profile data and completing account link persistence continue internally after callback verification. In development mode, when GitHub OAuth credentials are not configured in the backend environment, the implementation may return a local mock callback URL so the rest of the linking flow can still be exercised without the real GitHub authorize screen.
       operationId: startGitHubLinking
       security: [{ bearerAuth: [] }]
       responses:
@@ -975,7 +1026,7 @@ paths:
     get:
       tags: ["Student"]
       summary: Handle GitHub OAuth callback verification
-      description: Validates the callback state and exchanges the authorization code for an access token internally. GitHub access tokens and client secrets are never returned in the success response.
+      description: Validates the callback state and exchanges the authorization code for an access token internally. GitHub access tokens and client secrets are never returned in the success response. In development mode without GitHub OAuth credentials, the flow may complete through a local mock callback path.
       operationId: handleGitHubCallback
       parameters:
         - name: code
@@ -1001,14 +1052,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        401:
-          description: Callback verification failed.
+        404:
+          description: Student record not found.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        409:
+          description: GitHub account is already linked, including duplicate relink attempts for the same student.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitHubLinkErrorResponse'
         422:
           description: Callback cannot be processed because of OAuth validation failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        500:
+          description: Callback processing failed because of an unexpected backend error.
           content:
             application/json:
               schema:
@@ -1057,11 +1120,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         409:
-          description: GitHub account link already exists.
+          description: GitHub account link already exists, including duplicate relink attempts for the same student.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/GitHubLinkErrorResponse'
         422:
           description: GitHub link cannot be stored from supplied data.
           content:
