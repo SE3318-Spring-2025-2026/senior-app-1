@@ -10,9 +10,9 @@ const initialForm = {
 const initialFeedback = {
   type: 'idle',
   title: 'Waiting for input',
-  message: 'Submit the registration form or start GitHub linking with an authenticated student token.',
+  message: 'Fill in the student registration form and submit it to create the account.',
   studentId: '',
-  result: '',
+  valid: '',
   userId: '',
 };
 
@@ -66,7 +66,7 @@ export default function App() {
             ? 'GitHub OAuth credentials are not configured in the backend .env file, so this run used the local mock callback flow instead of the real GitHub authorize screen.'
             : `${params.get('githubUsername') || 'your GitHub account'} is now linked to this student account.`,
           studentId: params.get('studentId') || '',
-          result: usedMockOAuth ? 'Mock OAuth flow' : 'GitHub linked',
+          valid: usedMockOAuth ? 'Mock OAuth flow' : 'GitHub linked',
           userId: '',
         }
       : {
@@ -76,7 +76,7 @@ export default function App() {
             : 'GitHub link failed',
           message: params.get('message') || 'GitHub OAuth callback failed.',
           studentId: params.get('studentId') || '',
-          result: params.get('code') || 'OAuth error',
+          valid: params.get('code') || 'OAuth error',
           userId: '',
         };
 
@@ -98,10 +98,10 @@ export default function App() {
     setSubmitting(true);
     setFeedback({
       type: 'loading',
-      title: 'Checking registration data',
-      message: 'The form is being validated against the backend rules.',
+      title: 'Creating student account',
+      message: 'Submitting the registration form to the backend.',
       studentId: '',
-      result: '',
+      valid: '',
       userId: '',
     });
 
@@ -119,10 +119,10 @@ export default function App() {
       if (response.ok) {
         setFeedback({
           type: 'success',
-          title: 'Registration validated',
+          title: 'Student account created',
           message: result.message || 'Student account created successfully',
           studentId: result.studentId || form.studentId,
-          result: result.valid ? 'Valid' : 'Unknown',
+          valid: typeof result.valid === 'boolean' ? String(result.valid) : '',
           userId: result.userId || '',
         });
         setForm(initialForm);
@@ -135,7 +135,7 @@ export default function App() {
         title: mapped.title,
         message: result.message || 'Validation failed',
         studentId: form.studentId,
-        result: mapped.result,
+        valid: mapped.result,
         userId: '',
       });
     } catch (error) {
@@ -144,7 +144,7 @@ export default function App() {
         title: 'Request failed',
         message: 'The registration request could not reach the backend. Check whether the backend server is running.',
         studentId: form.studentId,
-        result: 'Network error',
+        valid: 'Network error',
         userId: '',
       });
     } finally {
@@ -159,7 +159,7 @@ export default function App() {
         title: 'Student token required',
         message: 'Provide an authenticated student token before starting GitHub linking.',
         studentId: feedback.studentId,
-        result: 'Missing token',
+        valid: 'Missing token',
         userId: feedback.userId,
       });
       return;
@@ -173,7 +173,7 @@ export default function App() {
       title: 'Starting GitHub linking',
       message: 'Requesting the authorization URL from the backend.',
       studentId: feedback.studentId,
-      result: '',
+      valid: '',
       userId: feedback.userId,
     });
 
@@ -191,7 +191,7 @@ export default function App() {
           title: 'GitHub link could not start',
           message: result.message || 'Failed to create the GitHub authorization URL.',
           studentId: feedback.studentId,
-          result: result.code || 'OAuth start failed',
+          valid: result.code || 'OAuth start failed',
           userId: feedback.userId,
         });
         setLinking(false);
@@ -205,7 +205,7 @@ export default function App() {
         title: 'GitHub link could not start',
         message: 'The backend could not be reached while starting GitHub OAuth.',
         studentId: feedback.studentId,
-        result: 'Network error',
+        valid: 'Network error',
         userId: feedback.userId,
       });
       setLinking(false);
@@ -224,9 +224,9 @@ export default function App() {
     <main className="page">
       <section className="hero">
         <p className="eyebrow">Senior App</p>
-        <h1>Student Registration Validation</h1>
+        <h1>Student Registration</h1>
         <p className="subtitle">
-          Validate student registration details, then use the GitHub linking action with an authenticated student token for the OAuth start flow.
+          Create a student account by submitting student ID, email, full name, and password to the registration endpoint.
         </p>
       </section>
 
@@ -291,7 +291,7 @@ export default function App() {
           </label>
 
           <button id="submit-button" type="submit" disabled={submitting}>
-            {submitting ? 'Validating...' : 'Validate Registration'}
+            {submitting ? 'Submitting...' : 'Register'}
           </button>
         </form>
 
@@ -330,7 +330,7 @@ export default function App() {
             <p className="feedback-label">Current Status</p>
             <h2>{feedback.title}</h2>
             <p>{feedback.message}</p>
-            {(feedback.studentId || feedback.result || feedback.userId) && (
+            {(feedback.studentId || feedback.valid || feedback.userId) && (
               <dl className="feedback-meta">
                 <div>
                   <dt>Student ID</dt>
@@ -341,8 +341,8 @@ export default function App() {
                   <dd>{feedback.userId || '-'}</dd>
                 </div>
                 <div>
-                  <dt>Result</dt>
-                  <dd>{feedback.result || '-'}</dd>
+                  <dt>Valid</dt>
+                  <dd>{feedback.valid || '-'}</dd>
                 </div>
               </dl>
             )}
