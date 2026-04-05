@@ -19,8 +19,8 @@ function validatePasswordStrength(password) {
 }
 
 async function ensureValidStudentRegistry() {
-  // Until a separate coordinator/import flow exists, the valid student registry
-  // is seeded from env or fallback IDs so registration business rules can run.
+  // Seed a baseline registry so registration business rules work even before
+  // coordinators upload a larger batch of valid IDs.
   const configuredIds = process.env.VALID_STUDENT_IDS
     ? process.env.VALID_STUDENT_IDS.split(',').map((item) => item.trim()).filter(Boolean)
     : DEFAULT_VALID_STUDENT_IDS;
@@ -34,6 +34,41 @@ async function ensureValidStudentRegistry() {
 async function isStudentIdEligible(studentId) {
   const validStudentId = await ValidStudentId.findByPk(studentId);
   return Boolean(validStudentId);
+}
+
+async function bulkStoreValidStudentIds(studentIds) {
+  const normalizedIds = Array.isArray(studentIds) ? studentIds.map((studentId) => String(studentId).trim()) : [];
+  const validIds = [];
+  let invalidFormatCount = 0;
+
+  for (const studentId of normalizedIds) {
+    if (!validateStudentIdFormat(studentId)) {
+      invalidFormatCount += 1;
+      continue;
+    }
+
+    validIds.push(studentId);
+  }
+
+  const uniqueValidIds = [...new Set(validIds)];
+  const existingRecords = uniqueValidIds.length > 0
+    ? await ValidStudentId.findAll({ where: { studentId: uniqueValidIds } })
+    : [];
+  const existingIds = new Set(existingRecords.map((record) => record.studentId));
+  const idsToInsert = uniqueValidIds.filter((studentId) => !existingIds.has(studentId));
+
+  if (idsToInsert.length > 0) {
+    await ValidStudentId.bulkCreate(
+      idsToInsert.map((studentId) => ({ studentId })),
+      { ignoreDuplicates: true },
+    );
+  }
+
+  return {
+    insertedCount: idsToInsert.length,
+    duplicateCount: validIds.length - idsToInsert.length,
+    invalidFormatCount,
+  };
 }
 
 async function isStudentRegistered(studentId) {
@@ -87,6 +122,7 @@ async function updateStudentGitHubLink(studentId, githubUsername, githubLinked) 
 }
 
 module.exports = {
+  bulkStoreValidStudentIds,
   createStudent,
   ensureValidStudentRegistry,
   findStudentByEmail,

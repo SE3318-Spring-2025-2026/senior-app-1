@@ -21,6 +21,10 @@ const Professor = sequelize.define('Professor', {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  fullName: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
 });
 
 // Define associations

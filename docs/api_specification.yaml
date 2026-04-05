@@ -211,6 +211,7 @@ paths:
     get:
       tags: ["1.0 User Registration"]
       summary: Handle GitHub OAuth callback (Process 1.2)
+      description: Handles the GitHub OAuth callback and completes account linking. In development mode, when GitHub OAuth credentials are not configured, the implementation may fall back to a local mock callback flow instead of the real GitHub authorize screen.
       parameters:
         - name: code
           in: query
@@ -223,7 +224,7 @@ paths:
       responses:
         200: { description: GitHub linked successfully }
         400: { description: Missing or invalid callback parameters }
-        409: { description: GitHub account is already linked }
+        409: { description: GitHub account is already linked, including duplicate relink attempts for the same student }
         500: { description: Callback processing failed }
 
   /api/v1/admin/professors:
@@ -286,6 +287,7 @@ paths:
       tags: ["1.0 User Registration"]
       summary: Initiate GitHub account linking
       security: [{ cookieAuth: [] }]
+      description: Starts the GitHub linking flow for the current authenticated student. In development mode, when GitHub OAuth credentials are not configured, the implementation may return a local mock callback URL instead of a real GitHub authorize URL.
       responses:
         200: { description: Authorization URL returned }
         401: { description: Authentication required }

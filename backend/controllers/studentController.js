@@ -40,15 +40,27 @@ function buildRegistrationValidationError(field) {
   }
 }
 
-const registerStudentValidation = [
+const registrationRules = [
   body('studentId').isString().trim().matches(/^[0-9]{11}$/),
   body('email').isEmail().normalizeEmail(),
   body('fullName').isString().trim().isLength({ min: 3 }),
   body('password').isString().isLength({ min: 8 }),
+];
+
+function getRegistrationValidationError(req) {
+  const errors = validationResult(req);
+  if (errors.isEmpty()) {
+    return null;
+  }
+
+  return buildRegistrationValidationError(errors.array()[0].path);
+}
+
+const registerStudentValidation = [
+  ...registrationRules,
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      const validationError = buildRegistrationValidationError(errors.array()[0].path);
+    const validationError = getRegistrationValidationError(req);
+    if (validationError) {
       return res.status(400).json(validationError);
     }
 
@@ -66,6 +78,43 @@ const registerStudentValidation = [
         valid: true,
         studentId,
         message: 'Validation passed',
+      });
+    } catch (error) {
+      if (error instanceof StudentRegistrationError) {
+        return res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
+      throw error;
+    }
+  },
+];
+
+const registerStudent = [
+  ...registrationRules,
+  async (req, res) => {
+    const validationError = getRegistrationValidationError(req);
+    if (validationError) {
+      return res.status(400).json(validationError);
+    }
+
+    const { studentId, email, fullName, password } = req.body;
+
+    try {
+      const student = await studentRegistrationService.validateAndCreateStudent({
+        studentId,
+        email,
+        fullName,
+        password,
+      });
+
+      return res.status(201).json({
+        valid: true,
+        userId: student.id,
+        studentId: student.studentId,
+        message: 'Student account created successfully',
       });
     } catch (error) {
       if (error instanceof StudentRegistrationError) {
@@ -303,6 +352,7 @@ const storeLinkedGitHubAccount = [
 module.exports = {
   getStudentValidation,
   handleGitHubCallback,
+  registerStudent,
   registerStudentValidation,
   startGitHubLink,
   storeLinkedGitHubAccount,
