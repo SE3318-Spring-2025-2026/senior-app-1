@@ -146,7 +146,7 @@ const storeValidStudentIds = async (req, res) => {
   let duplicates = 0;
   let invalidFormat = 0;
 
-  // Validate and deduplicate input
+  // Validate and deduplicate inputs
   const seen = new Set();
   const validFormatIds = [];
   for (const id of studentIds) {
@@ -154,7 +154,7 @@ const storeValidStudentIds = async (req, res) => {
       invalidFormat++;
       continue;
     }
-    if (seen.has(id)) continue; // skip duplicates in input
+    if (seen.has(id)) continue; // skip duplicates in inputs
     seen.add(id);
     validFormatIds.push(id);
   }
