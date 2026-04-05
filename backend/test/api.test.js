@@ -219,6 +219,18 @@ test('professor can set an initial password with email while setup is pending', 
 
   assert.equal(updatedProfessorUser.status, 'ACTIVE');
   assert.equal(typeof updatedProfessorUser.password, 'string');
+
+  const repeatedAttempt = await request('/api/v1/professors/password-setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'emailsetup@example.edu',
+      newPassword: 'AnotherStrong1!',
+    }),
+  });
+
+  assert.equal(repeatedAttempt.response.status, 409);
+  assert.equal(repeatedAttempt.json.errorCode, 'PROFESSOR_SETUP_ALREADY_COMPLETED');
 });
 
 test('password setup token verification enforces admin auth and returns valid true or false correctly', async () => {

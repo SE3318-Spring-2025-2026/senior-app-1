@@ -55,6 +55,15 @@ const setupProfessorPassword = [
         );
       }
 
+      if (error.message === 'PROFESSOR_SETUP_ALREADY_COMPLETED') {
+        return res.status(409).json(
+          buildErrorResponse(
+            'Professor initial password setup has already been completed',
+            'PROFESSOR_SETUP_ALREADY_COMPLETED'
+          )
+        );
+      }
+
       if (error.message === 'INVALID_PASSWORD_POLICY') {
         return res.status(422).json(
           buildErrorResponse(

@@ -22,6 +22,15 @@ function mapSetupError(payload, status) {
     };
   }
 
+  if (status === 409) {
+    return {
+      type: 'warning',
+      title: 'Setup already completed',
+      message: payload.message || 'This professor account has already completed its one-time password setup.',
+      result: 'Already completed',
+    };
+  }
+
   if (status === 422) {
     return {
       type: 'warning',

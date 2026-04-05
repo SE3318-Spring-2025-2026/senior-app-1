@@ -29,7 +29,7 @@ const entryPoints = [
     description: 'A newly created professor account completes its first-time password setup with the one-time token flow.',
     href: '/professors/password-setup',
     cta: 'Open Password Setup',
-    status: 'Planned',
+    status: 'Ready',
   },
   {
     eyebrow: 'Admin',

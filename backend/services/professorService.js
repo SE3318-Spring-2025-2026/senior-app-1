@@ -255,6 +255,21 @@ class ProfessorService {
     }
 
     const normalizedEmail = this.normalizeEmail(email);
+    const existingProfessorUser = await User.findOne({
+      where: {
+        email: normalizedEmail,
+        role: 'PROFESSOR',
+      },
+    });
+
+    if (!existingProfessorUser) {
+      throw new Error('PROFESSOR_SETUP_NOT_FOUND');
+    }
+
+    if (existingProfessorUser.status !== 'PASSWORD_SETUP_REQUIRED') {
+      throw new Error('PROFESSOR_SETUP_ALREADY_COMPLETED');
+    }
+
     const user = await User.findOne({
       where: {
         email: normalizedEmail,
