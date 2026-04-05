@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useAuth } from './contexts/AuthContext';
+import apiClient from './services/apiClient';
 
 const initialForm = {
   email: 'admin@example.com',
@@ -36,9 +38,20 @@ function mapLoginError(payload, status) {
 }
 
 export default function AdminLoginPage() {
+  const { isAuthenticated, login, user } = useAuth();
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated && user?.role === 'admin') {
+      window.location.replace('/admin');
+    }
+  }, [isAuthenticated, user]);
+
+  if (isAuthenticated && user?.role === 'admin') {
+    return null;
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -50,23 +63,9 @@ export default function AdminLoginPage() {
     });
 
     try {
-      const response = await fetch('/api/v1/admin/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(form),
-      });
-      const result = await response.json();
-
-      if (!response.ok) {
-        setFeedback(mapLoginError(result, response.status));
-        return;
-      }
-
-      window.localStorage.setItem('adminToken', result.token);
-      window.localStorage.setItem('authToken', result.token);
-      window.localStorage.setItem('adminUser', JSON.stringify(result.user || {}));
+      const response = await apiClient.post('/v1/admin/login', form, { auth: false });
+      const result = response.data;
+      login(result.token, { ...(result.user || {}), role: 'admin' });
 
       setFeedback({
         type: 'success',
@@ -78,6 +77,11 @@ export default function AdminLoginPage() {
         window.location.assign('/admin');
       }, 500);
     } catch (error) {
+      if (error.status) {
+        setFeedback(mapLoginError(error.data || {}, error.status));
+        return;
+      }
+
       setFeedback({
         type: 'error',
         title: 'Request failed',

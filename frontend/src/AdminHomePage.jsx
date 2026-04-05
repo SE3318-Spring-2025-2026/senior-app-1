@@ -1,16 +1,4 @@
-function getAdminName() {
-  try {
-    const storedUser = window.localStorage.getItem('adminUser');
-    if (!storedUser) {
-      return 'Admin';
-    }
-
-    const parsed = JSON.parse(storedUser);
-    return parsed.fullName || parsed.email || 'Admin';
-  } catch {
-    return 'Admin';
-  }
-}
+import { useAuth } from './contexts/AuthContext';
 
 const adminActions = [
   {
@@ -22,7 +10,8 @@ const adminActions = [
 ];
 
 export default function AdminHomePage() {
-  const adminName = getAdminName();
+  const { logout, user } = useAuth();
+  const adminName = user?.fullName || user?.email || 'Admin';
 
   return (
     <main className="page">
@@ -49,6 +38,24 @@ export default function AdminHomePage() {
             </a>
           </article>
         ))}
+        <article className="gateway-card">
+          <p className="gateway-eyebrow">Session</p>
+          <div className="gateway-header">
+            <h2>Sign Out</h2>
+            <span className="gateway-status gateway-status-ready">Ready</span>
+          </div>
+          <p className="gateway-copy">Clear the current admin session before switching accounts.</p>
+          <button
+            className="gateway-link"
+            type="button"
+            onClick={() => {
+              logout();
+              window.location.assign('/admin/login');
+            }}
+          >
+            Sign Out
+          </button>
+        </article>
       </section>
     </main>
   );

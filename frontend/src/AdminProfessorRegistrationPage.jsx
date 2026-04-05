@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import apiClient from './services/apiClient';
 
 const initialForm = {
   email: '',
@@ -51,22 +52,6 @@ function mapProfessorError(payload, status) {
   };
 }
 
-function getStoredAdminToken() {
-  const tokenKeys = ['adminToken', 'authToken', 'token', 'jwt', 'accessToken'];
-  const storageList = [window.localStorage, window.sessionStorage];
-
-  for (const storage of storageList) {
-    for (const key of tokenKeys) {
-      const value = storage.getItem(key);
-      if (value?.trim()) {
-        return value.trim();
-      }
-    }
-  }
-
-  return '';
-}
-
 export default function AdminProfessorRegistrationPage() {
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
@@ -74,20 +59,6 @@ export default function AdminProfessorRegistrationPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-
-    const adminToken = getStoredAdminToken();
-
-    if (!adminToken.trim()) {
-      setFeedback({
-        type: 'error',
-        title: 'Admin session required',
-        message: 'No stored admin session was found. Sign in as an admin first so the token can be sent automatically.',
-        userId: '',
-        professorId: '',
-        result: 'Unauthorized',
-      });
-      return;
-    }
 
     setSubmitting(true);
     setFeedback({
@@ -100,36 +71,30 @@ export default function AdminProfessorRegistrationPage() {
     });
 
     try {
-      const response = await fetch('/api/v1/admin/professors', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminToken.trim()}`,
-        },
-        body: JSON.stringify(form),
+      const response = await apiClient.post('/v1/admin/professors', form, {
+        onUnauthorized: 'clear-session',
       });
-      const result = await response.json();
-
-      if (response.ok) {
+      const result = response.data;
+      setFeedback({
+        type: 'success',
+        title: 'Professor account created',
+        message: result.message || 'Professor account created. Password setup link generated.',
+        userId: result.userId || '',
+        professorId: result.professorId || '',
+        result: 'Created',
+      });
+      setForm(initialForm);
+    } catch (error) {
+      if (error.status) {
+        const mappedError = mapProfessorError(error.data || {}, error.status);
         setFeedback({
-          type: 'success',
-          title: 'Professor account created',
-          message: result.message || 'Professor account created. Password setup link generated.',
-          userId: result.userId || '',
-          professorId: result.professorId || '',
-          result: 'Created',
+          ...mappedError,
+          userId: '',
+          professorId: '',
         });
-        setForm(initialForm);
         return;
       }
 
-      const mappedError = mapProfessorError(result, response.status);
-      setFeedback({
-        ...mappedError,
-        userId: '',
-        professorId: '',
-      });
-    } catch (error) {
       setFeedback({
         type: 'error',
         title: 'Request failed',

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import apiClient from './services/apiClient';
+import { mapValidationError } from './services/apiErrors';
 
 const initialForm = {
   studentId: '',
@@ -15,25 +17,6 @@ const initialFeedback = {
   result: '',
   userId: '',
 };
-
-function mapErrorResponse(payload) {
-  switch (payload.code) {
-    case 'INVALID_STUDENT_ID':
-      return { type: 'error', title: 'Invalid student ID', result: 'Rejected' };
-    case 'ALREADY_REGISTERED':
-      return { type: 'warning', title: 'Student already registered', result: 'Already exists' };
-    case 'DUPLICATE_EMAIL':
-      return { type: 'warning', title: 'Email already in use', result: 'Duplicate email' };
-    case 'WEAK_PASSWORD':
-      return { type: 'error', title: 'Weak password', result: 'Rejected' };
-    case 'STUDENT_NOT_ELIGIBLE':
-      return { type: 'error', title: 'Student not eligible', result: 'Rejected' };
-    case 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT':
-      return { type: 'warning', title: 'GitHub already linked', result: 'Already linked' };
-    default:
-      return { type: 'error', title: 'Validation failed', result: 'Failed' };
-  }
-}
 
 export default function App() {
   const [form, setForm] = useState(initialForm);
@@ -106,39 +89,31 @@ export default function App() {
     });
 
     try {
-      // Registration UI is intentionally a thin client over the backend business rules.
-      const response = await fetch('/api/v1/students/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(form),
+      const response = await apiClient.post('/v1/students/register', form, { auth: false });
+      const result = response.data;
+      setFeedback({
+        type: 'success',
+        title: 'Student registered',
+        message: result.message || 'Student account created successfully',
+        studentId: result.studentId || form.studentId,
+        result: result.valid ? 'Created' : 'Unknown',
+        userId: result.userId || '',
       });
-      const result = await response.json();
-
-      if (response.ok) {
+      setForm(initialForm);
+    } catch (error) {
+      if (error.status) {
+        const mapped = mapValidationError(error.data || {});
         setFeedback({
-          type: 'success',
-          title: 'Student registered',
-          message: result.message || 'Student account created successfully',
-          studentId: result.studentId || form.studentId,
-          result: result.valid ? 'Created' : 'Unknown',
-          userId: result.userId || '',
+          type: mapped.type,
+          title: mapped.title,
+          message: error.data?.message || 'Validation failed',
+          studentId: form.studentId,
+          result: mapped.result,
+          userId: '',
         });
-        setForm(initialForm);
         return;
       }
 
-      const mapped = mapErrorResponse(result);
-      setFeedback({
-        type: mapped.type,
-        title: mapped.title,
-        message: result.message || 'Validation failed',
-        studentId: form.studentId,
-        result: mapped.result,
-        userId: '',
-      });
-    } catch (error) {
       setFeedback({
         type: 'error',
         title: 'Request failed',
@@ -178,28 +153,27 @@ export default function App() {
     });
 
     try {
-      const response = await fetch('/api/v1/students/me/github/link', {
-        headers: {
-          Authorization: `Bearer ${studentToken.trim()}`,
-        },
+      const response = await apiClient.get('/v1/students/me/github/link', {
+        auth: true,
+        token: studentToken.trim(),
       });
-      const result = await response.json();
-
-      if (!response.ok) {
+      const result = response.data;
+      window.location.assign(result.authorizationUrl);
+    } catch (error) {
+      if (error.status) {
+        const mapped = mapValidationError(error.data || {});
         setFeedback({
-          type: 'error',
-          title: 'GitHub link could not start',
-          message: result.message || 'Failed to create the GitHub authorization URL.',
+          type: mapped.type,
+          title: error.status === 401 || error.status === 403 ? 'Student token required' : mapped.title,
+          message: error.data?.message || 'Failed to create the GitHub authorization URL.',
           studentId: feedback.studentId,
-          result: result.code || 'OAuth start failed',
+          result: error.data?.code || mapped.result,
           userId: feedback.userId,
         });
         setLinking(false);
         return;
       }
 
-      window.location.assign(result.authorizationUrl);
-    } catch (error) {
       setFeedback({
         type: 'error',
         title: 'GitHub link could not start',

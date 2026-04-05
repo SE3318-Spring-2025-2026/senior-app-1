@@ -6,6 +6,9 @@ import AdminLoginPage from './AdminLoginPage';
 import AdminProfessorRegistrationPage from './AdminProfessorRegistrationPage';
 import AuthGatewayPage from './AuthGatewayPage';
 import AuthPlaceholderPage from './AuthPlaceholderPage';
+import AuthGuard from './components/AuthGuard';
+import { AuthProvider } from './contexts/AuthContext';
+import UnauthorizedPage from './UnauthorizedPage';
 import './styles.css';
 
 const path = window.location.pathname.replace(/\/+$/, '') || '/';
@@ -33,9 +36,15 @@ function resolvePage(currentPath) {
         />
       );
     case '/admin':
-      return <AdminHomePage />;
+      return (
+        <AuthGuard allowedRoles={['admin']}>
+          <AdminHomePage />
+        </AuthGuard>
+      );
     case '/admin/login':
       return <AdminLoginPage />;
+    case '/unauthorized':
+      return <UnauthorizedPage />;
     case '/professors/password-setup':
       return (
         <AuthPlaceholderPage
@@ -45,7 +54,11 @@ function resolvePage(currentPath) {
         />
       );
     case '/admin/professors/register':
-      return <AdminProfessorRegistrationPage />;
+      return (
+        <AuthGuard allowedRoles={['admin']}>
+          <AdminProfessorRegistrationPage />
+        </AuthGuard>
+      );
     default:
       return <AuthGatewayPage />;
   }
@@ -53,6 +66,8 @@ function resolvePage(currentPath) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    {resolvePage(path)}
+    <AuthProvider>
+      {resolvePage(path)}
+    </AuthProvider>
   </React.StrictMode>,
 );
