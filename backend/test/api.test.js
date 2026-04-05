@@ -549,6 +549,20 @@ test('internal professor password update requires admin auth and activates the p
   });
 });
 test('student registration validates eligibility, password strength, duplication, and success', async () => {
+  const invalidStudentId = await request('/api/v1/students/registration-validation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001',
+      email: 'invalid-id@example.edu',
+      fullName: 'Invalid Id',
+      password: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidStudentId.response.status, 400);
+  assert.equal(invalidStudentId.json.code, 'INVALID_STUDENT_ID');
+
   const weakPassword = await request('/api/v1/students/registration-validation', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -784,6 +798,21 @@ test('student register creates account after validation passes', async () => {
 });
 
 test('student registration service validates data before creating the account', async () => {
+  await assert.rejects(
+    studentRegistrationService.validateRegistrationDetails({
+      studentId: '11070001',
+      email: 'student6@example.edu',
+      fullName: 'Invalid Format',
+      password: 'StrongPass1!',
+    }),
+    (error) => {
+      assert.ok(error instanceof StudentRegistrationError);
+      assert.equal(error.status, 400);
+      assert.equal(error.code, 'INVALID_STUDENT_ID');
+      return true;
+    },
+  );
+
   await assert.rejects(
     studentRegistrationService.validateRegistrationDetails({
       studentId: '11070001999',

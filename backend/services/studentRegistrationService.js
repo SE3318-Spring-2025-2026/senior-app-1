@@ -2,6 +2,14 @@ const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentService = require('./studentService');
 
 async function validateRegistrationDetails({ studentId, email, fullName, password }) {
+  if (!studentService.validateStudentIdFormat(studentId)) {
+    throw new StudentRegistrationError(
+      400,
+      'INVALID_STUDENT_ID',
+      'Student ID must be an 11-digit number.',
+    );
+  }
+
   if (!(await studentService.isStudentIdEligible(studentId))) {
     throw new StudentRegistrationError(
       403,
