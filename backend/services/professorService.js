@@ -199,7 +199,9 @@ class ProfessorService {
       professorId: professor.id,
       setupRequired: true,
       setupTokenGenerated: true,
-      message: 'Password setup link has been generated'
+      setupToken: rawSetupToken,
+      passwordSetupTokenExpiresAt,
+      message: 'Password setup link has been generated',
     };
   }
 
@@ -233,6 +235,43 @@ class ProfessorService {
 
     await user.update({
       password: hashedPassword,
+      status: 'ACTIVE',
+      passwordSetupTokenHash: null,
+      passwordSetupTokenExpiresAt: null,
+    });
+
+    return {
+      message: 'Password set successfully',
+    };
+  }
+
+  async setInitialPasswordByEmail(email, newPassword) {
+    if (!email || typeof email !== 'string') {
+      throw new Error('INVALID_PROFESSOR_EMAIL');
+    }
+
+    if (!this.isValidPassword(newPassword)) {
+      throw new Error('INVALID_PASSWORD_POLICY');
+    }
+
+    const normalizedEmail = this.normalizeEmail(email);
+    const user = await User.findOne({
+      where: {
+        email: normalizedEmail,
+        role: 'PROFESSOR',
+        status: 'PASSWORD_SETUP_REQUIRED',
+      },
+    });
+
+    if (!user) {
+      throw new Error('PROFESSOR_SETUP_NOT_FOUND');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await user.update({
+      password: hashedPassword,
+      passwordHash: hashedPassword,
       status: 'ACTIVE',
       passwordSetupTokenHash: null,
       passwordSetupTokenExpiresAt: null,

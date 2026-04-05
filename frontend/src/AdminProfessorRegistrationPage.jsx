@@ -12,8 +12,27 @@ const initialFeedback = {
   message: 'Enter the professor information and submit it to the admin registration endpoint.',
   userId: '',
   professorId: '',
+  setupLink: '',
   result: '',
 };
+
+function buildProfessorSetupLink(setupToken) {
+  if (!setupToken) {
+    return '';
+  }
+
+  const url = new URL('/professors/password-setup', window.location.origin);
+  url.searchParams.set('setupToken', setupToken);
+  return url.toString();
+}
+
+function storeLatestProfessorSetupToken(setupToken) {
+  if (!setupToken) {
+    return;
+  }
+
+  window.localStorage.setItem('latestProfessorSetupToken', setupToken);
+}
 
 function mapProfessorError(payload, status) {
   if (status === 401 || status === 403) {
@@ -84,6 +103,7 @@ export default function AdminProfessorRegistrationPage() {
         message: 'No stored admin session was found. Sign in as an admin first so the token can be sent automatically.',
         userId: '',
         professorId: '',
+        setupLink: '',
         result: 'Unauthorized',
       });
       return;
@@ -96,6 +116,7 @@ export default function AdminProfessorRegistrationPage() {
       message: 'Submitting the professor base account information to the backend.',
       userId: '',
       professorId: '',
+      setupLink: '',
       result: '',
     });
 
@@ -111,12 +132,14 @@ export default function AdminProfessorRegistrationPage() {
       const result = await response.json();
 
       if (response.ok) {
+        storeLatestProfessorSetupToken(result.setupToken);
         setFeedback({
           type: 'success',
           title: 'Professor account created',
           message: result.message || 'Professor account created. Password setup link generated.',
           userId: result.userId || '',
           professorId: result.professorId || '',
+          setupLink: buildProfessorSetupLink(result.setupToken),
           result: 'Created',
         });
         setForm(initialForm);
@@ -128,6 +151,7 @@ export default function AdminProfessorRegistrationPage() {
         ...mappedError,
         userId: '',
         professorId: '',
+        setupLink: '',
       });
     } catch (error) {
       setFeedback({
@@ -136,6 +160,7 @@ export default function AdminProfessorRegistrationPage() {
         message: 'The admin registration request could not reach the backend. Check whether the backend server is running.',
         userId: '',
         professorId: '',
+        setupLink: '',
         result: 'Network error',
       });
     } finally {
@@ -218,12 +243,27 @@ export default function AdminProfessorRegistrationPage() {
               This page sends the admin bearer token automatically from browser storage. If no active admin session exists,
               the request is blocked and the status card explains that sign-in is required.
             </p>
+            {feedback.setupLink && (
+              <>
+                <p className="token-note">
+                  Share this one-time password setup link with the new professor so they can open their initial password page.
+                </p>
+                <a className="gateway-link" href={feedback.setupLink}>
+                  Open Setup Link
+                </a>
+              </>
+            )}
           </section>
 
           <section className={`feedback feedback-${feedback.type}`} aria-live="polite">
             <p className="feedback-label">Registration Status</p>
             <h2>{feedback.title}</h2>
             <p>{feedback.message}</p>
+            {feedback.setupLink && (
+              <p className="gateway-copy">
+                Setup link: <a href={feedback.setupLink}>{feedback.setupLink}</a>
+              </p>
+            )}
             {(feedback.userId || feedback.professorId || feedback.result) && (
               <dl className="feedback-meta">
                 <div>

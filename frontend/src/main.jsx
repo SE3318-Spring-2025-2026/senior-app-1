@@ -6,6 +6,7 @@ import AdminLoginPage from './AdminLoginPage';
 import AdminProfessorRegistrationPage from './AdminProfessorRegistrationPage';
 import AuthGatewayPage from './AuthGatewayPage';
 import AuthPlaceholderPage from './AuthPlaceholderPage';
+import ProfessorPasswordSetupPage from './ProfessorPasswordSetupPage';
 import './styles.css';
 
 const path = window.location.pathname.replace(/\/+$/, '') || '/';
@@ -37,13 +38,7 @@ function resolvePage(currentPath) {
     case '/admin/login':
       return <AdminLoginPage />;
     case '/professors/password-setup':
-      return (
-        <AuthPlaceholderPage
-          eyebrow="Professor Access"
-          title="Professor Initial Password Setup"
-          description="Newly registered professors will use their one-time setup token here to create their first password."
-        />
-      );
+      return <ProfessorPasswordSetupPage />;
     case '/admin/professors/register':
       return <AdminProfessorRegistrationPage />;
     default:

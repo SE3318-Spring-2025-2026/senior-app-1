@@ -7,11 +7,26 @@ const { ensureValidStudentRegistry } = require('./services/studentService');
 const ensureSqliteColumns = async () => {
   const queryInterface = sequelize.getQueryInterface();
   const userTable = await queryInterface.describeTable('Users');
+  const userAttributes = User.getAttributes();
+  const columnsToEnsure = [
+    'studentId',
+    'password',
+    'passwordHash',
+    'githubUsername',
+    'githubLinked',
+  ];
 
-  if (!userTable.password) {
-    await queryInterface.addColumn('Users', 'password', {
-      type: User.getAttributes().password.type,
-      allowNull: true,
+  for (const columnName of columnsToEnsure) {
+    if (userTable[columnName]) {
+      continue;
+    }
+
+    const attribute = userAttributes[columnName];
+    await queryInterface.addColumn('Users', columnName, {
+      type: attribute.type,
+      allowNull: attribute.allowNull,
+      defaultValue: attribute.defaultValue,
+      unique: Boolean(attribute.unique),
     });
   }
 };
