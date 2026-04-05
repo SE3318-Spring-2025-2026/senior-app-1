@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNotification } from './contexts/NotificationContext';
 
 const initialForm = {
   email: '',
@@ -63,6 +64,7 @@ export default function ProfessorPasswordSetupPage() {
   }));
   const [feedback, setFeedback] = useState(initialFeedback);
   const [submitting, setSubmitting] = useState(false);
+  const { notify } = useNotification();
 
   const passwordHint = useMemo(
     () => 'Use at least 8 characters with uppercase, lowercase, a number, and a special character.',
@@ -104,6 +106,11 @@ export default function ProfessorPasswordSetupPage() {
         message: result.message || 'Your professor account is now active and ready for login.',
         result: 'Account activated',
       });
+      notify({
+        type: 'success',
+        title: 'Professor password saved',
+        message: result.message || 'Your professor account is now active.',
+      });
       setForm((current) => ({
         ...current,
         email: '',
@@ -115,6 +122,11 @@ export default function ProfessorPasswordSetupPage() {
         title: 'Request failed',
         message: 'The password setup request could not reach the backend. Check whether the backend server is running.',
         result: 'Network error',
+      });
+      notify({
+        type: 'error',
+        title: 'Password setup failed',
+        message: 'The password setup request could not reach the backend.',
       });
     } finally {
       setSubmitting(false);

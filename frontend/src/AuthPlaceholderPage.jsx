@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 export default function AuthPlaceholderPage({ eyebrow, title, description }) {
   return (
     <main className="page">
@@ -14,9 +16,9 @@ export default function AuthPlaceholderPage({ eyebrow, title, description }) {
           This route is now part of the auth flow and can be opened from the main entry page. The actual form and
           backend integration can be plugged in here when its issue is implemented.
         </p>
-        <a className="gateway-link" href="/">
+        <Link className="gateway-link" to="/">
           Back to Entry Page
-        </a>
+        </Link>
       </section>
     </main>
   );

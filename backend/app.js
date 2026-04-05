@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { User } = require('./models');
 const adminRoutes = require('./routes/admin');
+const coordinatorRoutes = require('./routes/coordinator');
 const professorRoutes = require('./routes/professors');
 const studentRoutes = require('./routes/students');
 const passwordSetupTokenStoreRoutes = require('./routes/passwordSetupTokenStore');
@@ -18,6 +19,7 @@ if (fs.existsSync(frontendDistPath)) {
 }
 app.locals.models = { User };
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/coordinator', coordinatorRoutes);
 app.use('/api/v1/professors', professorRoutes);
 app.use('/api/v1', studentRoutes);
 app.use('/api/v1/password-setup-token-store', passwordSetupTokenStoreRoutes);

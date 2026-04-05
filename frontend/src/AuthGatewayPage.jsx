@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 const entryPoints = [
   {
     eyebrow: 'Student',
@@ -32,6 +34,14 @@ const entryPoints = [
     status: 'Ready',
   },
   {
+    eyebrow: 'Coordinator',
+    title: 'Coordinator Upload',
+    description: 'Coordinators upload valid student IDs in bulk and review inserted, duplicate, and invalid totals.',
+    href: '/coordinator/student-id-registry/import',
+    cta: 'Open Coordinator Upload',
+    status: 'Ready',
+  },
+  {
     eyebrow: 'Admin',
     title: 'Admin Login',
     description: 'Admins sign in here before accessing admin-only tools such as professor account registration.',
@@ -62,9 +72,9 @@ export default function AuthGatewayPage() {
               <span className={`gateway-status gateway-status-${item.status.toLowerCase()}`}>{item.status}</span>
             </div>
             <p className="gateway-copy">{item.description}</p>
-            <a className="gateway-link" href={item.href}>
+            <Link className="gateway-link" to={item.href}>
               {item.cta}
-            </a>
+            </Link>
           </article>
         ))}
       </section>

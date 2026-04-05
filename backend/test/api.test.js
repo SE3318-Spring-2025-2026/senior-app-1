@@ -12,7 +12,7 @@ process.env.GITHUB_CLIENT_SECRET = '';
 const sequelize = require('../db');
 const app = require('../app');
 require('../models');
-const { User, Professor, LinkedGitHubAccount, OAuthState } = require('../models');
+const { User, Professor, ValidStudentId, LinkedGitHubAccount, OAuthState } = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
 const { createStudent, ensureValidStudentRegistry } = require('../services/studentService');
@@ -548,6 +548,101 @@ test('internal professor password update requires admin auth and activates the p
     message: 'Professor not found.',
   });
 });
+
+test('admin can bulk store valid student IDs and receives inserted, duplicate, and invalid counts', async () => {
+  const admin = await User.create({
+    email: 'valid-id-admin@example.edu',
+    fullName: 'Valid ID Admin',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+
+  const response = await request('/api/v1/user-database/valid-student-ids', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(admin)),
+    },
+    body: JSON.stringify({
+      studentIds: [
+        '22070001000',
+        '22070001000',
+        '22070001001',
+        '11070001000',
+        'invalid-id',
+        '2207',
+      ],
+    }),
+  });
+
+  assert.equal(response.response.status, 201);
+  assert.deepEqual(response.json, {
+    insertedCount: 2,
+    duplicateCount: 2,
+    invalidFormatCount: 2,
+    message: 'Valid student IDs processed successfully.',
+  });
+
+  const storedIds = await ValidStudentId.findAll({
+    where: {
+      studentId: ['22070001000', '22070001001'],
+    },
+  });
+
+  assert.equal(storedIds.length, 2);
+});
+
+test('coordinator import endpoint requires coordinator role and stores valid student IDs', async () => {
+  const coordinator = await User.create({
+    email: 'coordinator@example.edu',
+    fullName: 'Coordinator User',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+  });
+
+  const coordinatorResponse = await request('/api/v1/coordinator/student-id-registry/import', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({
+      studentIds: ['33070001000', 'bad-value'],
+    }),
+  });
+
+  assert.equal(coordinatorResponse.response.status, 201);
+  assert.deepEqual(coordinatorResponse.json, {
+    insertedCount: 1,
+    duplicateCount: 0,
+    invalidFormatCount: 1,
+    message: 'Valid student IDs processed successfully.',
+  });
+
+  const storedId = await ValidStudentId.findByPk('33070001000');
+  assert.equal(storedId.studentId, '33070001000');
+
+  const admin = await User.create({
+    email: 'not-coordinator@example.edu',
+    fullName: 'Not Coordinator',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+
+  const forbidden = await request('/api/v1/coordinator/student-id-registry/import', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(admin)),
+    },
+    body: JSON.stringify({
+      studentIds: ['33070001001'],
+    }),
+  });
+
+  assert.equal(forbidden.response.status, 403);
+});
+
 test('student registration validates eligibility, password strength, duplication, and success', async () => {
   const invalidStudentId = await request('/api/v1/students/registration-validation', {
     method: 'POST',

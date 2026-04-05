@@ -3,12 +3,14 @@ const { authenticate, authorize } = require('../middleware/auth');
 const {
   createProfessorRecord,
   createStudentRecord,
+  importValidStudentIds,
   updateProfessorPassword,
 } = require('../controllers/userDatabaseController');
 
 const router = express.Router();
 
 router.post('/students', authenticate, authorize(['ADMIN']), createStudentRecord);
+router.post('/valid-student-ids', authenticate, authorize(['ADMIN']), importValidStudentIds);
 router.post('/professors', authenticate, authorize(['ADMIN']), createProfessorRecord);
 router.patch(
   '/professors/:professorId/password',

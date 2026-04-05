@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import apiClient from './services/apiClient';
+import { useNotification } from './contexts/NotificationContext';
 
 const initialForm = {
   studentId: '',
@@ -44,6 +45,7 @@ export default function Register() {
   const [studentToken, setStudentToken] = useState('');
   const [linking, setLinking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const { notify } = useNotification();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -82,6 +84,11 @@ export default function Register() {
         };
 
     setFeedback(nextFeedback);
+    notify({
+      type: nextFeedback.type === 'warning' ? 'warning' : nextFeedback.type === 'success' ? 'success' : 'error',
+      title: nextFeedback.title,
+      message: nextFeedback.message,
+    });
 
     params.delete('githubLink');
     params.delete('githubUsername');
@@ -120,6 +127,11 @@ export default function Register() {
           result: result.valid ? 'Created' : 'Unknown',
           userId: result.userId || '',
         });
+        notify({
+          type: 'success',
+          title: 'Student registered',
+          message: result.message || 'Student account created successfully.',
+        });
         setForm(initialForm);
         return;
       }
@@ -143,6 +155,11 @@ export default function Register() {
           result: error.mappedError.result,
           userId: '',
         });
+        notify({
+          type: error.mappedError.type === 'warning' ? 'warning' : 'error',
+          title: error.mappedError.title,
+          message: error.response?.data?.message || 'Validation failed',
+        });
       } else {
         setFeedback({
           type: 'error',
@@ -151,6 +168,11 @@ export default function Register() {
           studentId: form.studentId,
           result: 'Network error',
           userId: '',
+        });
+        notify({
+          type: 'error',
+          title: 'Registration request failed',
+          message: 'The registration request could not reach the backend.',
         });
       }
     } finally {
@@ -167,6 +189,11 @@ export default function Register() {
         studentId: feedback.studentId,
         result: 'Missing token',
         userId: feedback.userId,
+      });
+      notify({
+        type: 'warning',
+        title: 'Student token required',
+        message: 'Provide an authenticated student token before starting GitHub linking.',
       });
       return;
     }
@@ -196,6 +223,11 @@ export default function Register() {
           result: result.code || 'OAuth start failed',
           userId: feedback.userId,
         });
+        notify({
+          type: 'error',
+          title: 'GitHub link could not start',
+          message: result.message || 'Failed to create the GitHub authorization URL.',
+        });
         setLinking(false);
         return;
       }
@@ -211,6 +243,11 @@ export default function Register() {
           result: error.mappedError.result,
           userId: feedback.userId,
         });
+        notify({
+          type: error.mappedError.type === 'warning' ? 'warning' : 'error',
+          title: error.mappedError.title,
+          message: error.response?.data?.message || 'Failed to create the GitHub authorization URL.',
+        });
       } else {
         setFeedback({
           type: 'error',
@@ -219,6 +256,11 @@ export default function Register() {
           studentId: feedback.studentId,
           result: 'Network error',
           userId: feedback.userId,
+        });
+        notify({
+          type: 'error',
+          title: 'GitHub link could not start',
+          message: 'The backend could not be reached while starting GitHub OAuth.',
         });
       }
       setLinking(false);

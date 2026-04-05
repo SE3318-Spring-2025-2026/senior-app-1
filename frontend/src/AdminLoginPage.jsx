@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useNotification } from './contexts/NotificationContext';
 
 const initialForm = {
   email: 'admin@example.com',
@@ -39,6 +41,8 @@ export default function AdminLoginPage() {
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
   const [submitting, setSubmitting] = useState(false);
+  const navigate = useNavigate();
+  const { notify } = useNotification();
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -73,15 +77,25 @@ export default function AdminLoginPage() {
         title: 'Signed in successfully',
         message: result.message || 'Admin login successful. Redirecting to the admin workspace.',
       });
+      notify({
+        type: 'success',
+        title: 'Admin signed in',
+        message: result.message || 'Admin login successful.',
+      });
 
       window.setTimeout(() => {
-        window.location.assign('/admin');
+        navigate('/admin');
       }, 500);
     } catch (error) {
       setFeedback({
         type: 'error',
         title: 'Request failed',
         message: 'The admin login request could not reach the backend. Check whether the backend server is running.',
+      });
+      notify({
+        type: 'error',
+        title: 'Admin login failed',
+        message: 'The admin login request could not reach the backend.',
       });
     } finally {
       setSubmitting(false);

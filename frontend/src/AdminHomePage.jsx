@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 function getAdminName() {
   try {
     const storedUser = window.localStorage.getItem('adminUser');
@@ -19,6 +21,14 @@ const adminTools = [
     description: 'Create a professor account and generate the first-time password setup details.',
     href: '/admin/professors/new',
     cta: 'Open Add Professor',
+    status: 'Ready',
+  },
+  {
+    eyebrow: 'Registry',
+    title: 'Coordinator Upload',
+    description: 'Open the coordinator-facing valid student ID import page used to bulk refresh the registry.',
+    href: '/coordinator/student-id-registry/import',
+    cta: 'Open Upload Page',
     status: 'Ready',
   },
 ];
@@ -46,9 +56,9 @@ export default function AdminHomePage() {
               <span className={`gateway-status gateway-status-${tool.status.toLowerCase()}`}>{tool.status}</span>
             </div>
             <p className="gateway-copy">{tool.description}</p>
-            <a className="gateway-link" href={tool.href}>
+            <Link className="gateway-link" to={tool.href}>
               {tool.cta}
-            </a>
+            </Link>
           </article>
         ))}
       </section>
