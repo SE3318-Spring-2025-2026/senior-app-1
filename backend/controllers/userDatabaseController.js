@@ -1,4 +1,20 @@
-const { body, param, validationResult } = require('express-validator');
+// GET /api/v1/user-database/students/:studentId/validation
+const studentService = require('../services/studentService');
+
+const checkStudentValidation = async (req, res) => {
+  const { studentId } = req.params;
+  if (!studentId || !/^[0-9]{11}$/.test(studentId)) {
+    return res.status(400).json({ message: 'Invalid or missing studentId' });
+  }
+
+  // Check if studentId exists in valid registry
+  const valid = await studentService.isStudentIdEligible(studentId);
+  // Check if already registered
+  const alreadyRegistered = await studentService.isStudentRegistered(studentId);
+
+  return res.json({ valid, studentId, alreadyRegistered });
+};
+const { body, validationResult } = require('express-validator');
 const professorService = require('../services/professorService');
 const studentAccountService = require('../services/studentAccountService');
 const studentService = require('../services/studentService');
@@ -116,44 +132,59 @@ const createStudentRecord = [
   },
 ];
 
-const updateProfessorPassword = [
-  param('professorId').isInt({ min: 1 }).toInt(),
-  body('passwordHash').isString().trim().notEmpty(),
 
-  async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json(buildProfessorPasswordUpdateError(errors.array()[0].path));
+const ValidStudentId = require('../models/ValidStudentId');
+
+// POST /api/v1/user-database/valid-student-ids
+const storeValidStudentIds = async (req, res) => {
+  const { studentIds } = req.body;
+  if (!Array.isArray(studentIds)) {
+    return res.status(400).json({ message: 'studentIds must be an array.' });
+  }
+
+  let inserted = 0;
+  let duplicates = 0;
+  let invalidFormat = 0;
+
+  // Validate and deduplicate input
+  const seen = new Set();
+  const validFormatIds = [];
+  for (const id of studentIds) {
+    if (!/^[0-9]{11}$/.test(id)) {
+      invalidFormat++;
+      continue;
     }
+    if (seen.has(id)) continue; // skip duplicates in input
+    seen.add(id);
+    validFormatIds.push(id);
+  }
 
-    const { professorId } = req.params;
-    const { passwordHash } = req.body;
+  // Check which IDs already exist
+  const existing = await ValidStudentId.findAll({
+    where: { studentId: validFormatIds },
+    attributes: ['studentId'],
+    raw: true,
+  });
+  const existingSet = new Set(existing.map(e => e.studentId));
 
-    try {
-      const result = await professorService.updateProfessorPassword(
-        Number(professorId),
-        passwordHash
-      );
+  const toInsert = validFormatIds.filter(id => !existingSet.has(id));
+  duplicates = validFormatIds.length - toInsert.length;
 
-      return res.status(200).json(result);
-    } catch (error) {
-      if (error.message === 'PROFESSOR_NOT_FOUND') {
-        return res.status(404).json({
-          code: 'PROFESSOR_NOT_FOUND',
-          message: 'Professor not found.',
-        });
-      }
+  // Bulk insert new IDs
+  if (toInsert.length > 0) {
+    await ValidStudentId.bulkCreate(
+      toInsert.map(studentId => ({ studentId })),
+      { ignoreDuplicates: true }
+    );
+    inserted = toInsert.length;
+  }
 
-      return res.status(500).json({
-        code: 'UPDATE_PROFESSOR_PASSWORD_FAILED',
-        message: 'Professor password could not be updated.',
-      });
-    }
-  },
-];
+  return res.json({ inserted, duplicates, invalidFormat });
+};
 
 module.exports = {
   createProfessorRecord,
   createStudentRecord,
-  updateProfessorPassword,
+  storeValidStudentIds,
+  checkStudentValidation,
 };
