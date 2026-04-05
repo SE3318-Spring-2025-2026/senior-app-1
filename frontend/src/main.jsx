@@ -1,21 +1,50 @@
 import React from 'react';
-import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import ReactDOM from 'react-dom/client';
 import App from './App';
-import CoordinatorStudentIdUpload from './CoordinatorStudentIdUpload';
-import Layout from './Layout';
-import { NotificationProvider } from './NotificationContext';
+import AdminHomePage from './AdminHomePage';
+import AdminLoginPage from './AdminLoginPage';
+import AuthGatewayPage from './AuthGatewayPage';
+import AuthPlaceholderPage from './AuthPlaceholderPage';
+import ProfessorPasswordSetupPage from './ProfessorPasswordSetupPage';
 import './styles.css';
 
-createRoot(document.getElementById('root')).render(
-  <NotificationProvider>
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<App />} />
-          <Route path="coordinator/upload" element={<CoordinatorStudentIdUpload />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
-  </NotificationProvider>
+const path = window.location.pathname.replace(/\/+$/, '') || '/';
+
+function resolvePage(currentPath) {
+  switch (currentPath) {
+    case '/':
+      return <AuthGatewayPage />;
+    case '/students/register':
+      return <App />;
+    case '/students/login':
+      return (
+        <AuthPlaceholderPage
+          eyebrow="Student Access"
+          title="Student Login"
+          description="Returning students will sign in here before accessing their group, GitHub, and sprint workflows."
+        />
+      );
+    case '/professors/login':
+      return (
+        <AuthPlaceholderPage
+          eyebrow="Professor Access"
+          title="Professor Login"
+          description="Professors will sign in here after setting their initial password."
+        />
+      );
+    case '/admin':
+      return <AdminHomePage />;
+    case '/admin/login':
+      return <AdminLoginPage />;
+    case '/professors/password-setup':
+      return <ProfessorPasswordSetupPage />;
+    default:
+      return <AuthGatewayPage />;
+  }
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    {resolvePage(path)}
+  </React.StrictMode>,
 );
