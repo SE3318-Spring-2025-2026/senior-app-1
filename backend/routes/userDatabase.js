@@ -17,5 +17,11 @@ router.post('/valid-student-ids', authenticate, authorize(['ADMIN', 'COORDINATOR
 
 router.post('/students', authenticate, authorize(['ADMIN']), createStudentRecord);
 router.post('/professors', authenticate, authorize(['ADMIN']), createProfessorRecord);
+router.patch(
+  '/professors/:professorId/password',
+  authenticate,
+  authorize(['ADMIN']),
+  updateProfessorPassword
+);
 
 module.exports = router;

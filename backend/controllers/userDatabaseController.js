@@ -37,6 +37,17 @@ function buildStudentAccountError(field) {
   }
 }
 
+function buildProfessorPasswordUpdateError(field) {
+  switch (field) {
+    case 'professorId':
+      return { code: 'INVALID_PROFESSOR_ID', message: 'Professor ID must be a positive integer.' };
+    case 'passwordHash':
+      return { code: 'INVALID_PASSWORD_HASH', message: 'passwordHash is required.' };
+    default:
+      return { code: 'INVALID_UPDATE_PROFESSOR_PASSWORD_INPUT', message: 'Professor password update input is invalid.' };
+  }
+}
+
 const createProfessorRecord = [
   body('email').isEmail().normalizeEmail(),
   body('fullName').notEmpty().trim(),
