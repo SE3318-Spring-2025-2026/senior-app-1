@@ -182,6 +182,45 @@ test('professor can set an initial password with a valid setup token', async () 
   assert.equal(updatedProfessorUser.passwordSetupTokenExpiresAt, null);
 });
 
+test('professor can set an initial password with email while setup is pending', async () => {
+  await User.create({
+    email: 'emailsetup@example.edu',
+    fullName: 'Email Setup Professor',
+    role: 'PROFESSOR',
+    status: 'PASSWORD_SETUP_REQUIRED',
+  });
+
+  const invalidPassword = await request('/api/v1/professors/password-setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'emailsetup@example.edu',
+      newPassword: 'weak',
+    }),
+  });
+
+  assert.equal(invalidPassword.response.status, 422);
+
+  const successResult = await request('/api/v1/professors/password-setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'emailsetup@example.edu',
+      newPassword: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(successResult.json.message, 'Password set successfully');
+
+  const updatedProfessorUser = await User.findOne({
+    where: { email: 'emailsetup@example.edu' },
+  });
+
+  assert.equal(updatedProfessorUser.status, 'ACTIVE');
+  assert.equal(typeof updatedProfessorUser.password, 'string');
+});
+
 test('password setup token verification enforces admin auth and returns valid true or false correctly', async () => {
   const unauthenticated = await request('/api/v1/password-setup-token-store/verify', {
     method: 'POST',
