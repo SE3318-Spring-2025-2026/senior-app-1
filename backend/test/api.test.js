@@ -57,7 +57,7 @@ test.beforeEach(async () => {
 });
 
 test('admin can log in with email and password', async () => {
-  const password = 'AdminPass1!';
+  const password = 'AdminPass2026!';
 
   await User.create({
     email: 'admin@example.com',

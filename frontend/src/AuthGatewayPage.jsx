@@ -25,8 +25,8 @@ const entryPoints = [
   },
   {
     eyebrow: 'Professor',
-    title: 'Professor Setup Password',
-    description: 'A newly created professor account completes its first-time password setup with the one-time token flow.',
+    title: 'Professor Initial Password',
+    description: 'A newly created professor account completes its first-time password setup here.',
     href: '/professors/password-setup',
     cta: 'Open Password Setup',
     status: 'Ready',

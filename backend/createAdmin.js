@@ -7,7 +7,7 @@ async function createAdmin() {
   try {
     await sequelize.authenticate();
     await sequelize.sync();
-    const adminPassword = process.env.ADMIN_PASSWORD || 'AdminPass1!';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'AdminPass2026!';
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
     const [admin, created] = await User.findOrCreate({

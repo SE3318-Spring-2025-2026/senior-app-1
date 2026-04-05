@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import AdminHomePage from './AdminHomePage';
 import AdminLoginPage from './AdminLoginPage';
+import AdminProfessorCreatePage from './AdminProfessorCreatePage';
 import AuthGatewayPage from './AuthGatewayPage';
 import AuthPlaceholderPage from './AuthPlaceholderPage';
 import ProfessorPasswordSetupPage from './ProfessorPasswordSetupPage';
@@ -36,6 +37,8 @@ function resolvePage(currentPath) {
       return <AdminHomePage />;
     case '/admin/login':
       return <AdminLoginPage />;
+    case '/admin/professors/new':
+      return <AdminProfessorCreatePage />;
     case '/professors/password-setup':
       return <ProfessorPasswordSetupPage />;
     default:

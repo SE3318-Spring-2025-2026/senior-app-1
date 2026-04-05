@@ -100,10 +100,11 @@ const registerProfessor = [
       });
 
     } catch (error) {
-      if (error.message === 'User with this email already exists') {
+      if (error.code === 'DUPLICATE_EMAIL' || error.message === 'User with this email already exists') {
         return res.status(409).json({ message: error.message });
       }
 
+      console.error('Professor registration failed unexpectedly:', error);
       return res.status(500).json({
         message: 'Internal Server Error'
       });
