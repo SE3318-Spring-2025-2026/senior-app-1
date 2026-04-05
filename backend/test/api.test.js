@@ -711,6 +711,21 @@ test('student registration service validates data before creating the account', 
     },
   );
 
+  await assert.rejects(
+    studentRegistrationService.validateRegistrationDetails({
+      studentId: '11070001',
+      email: 'student6@example.edu',
+      fullName: 'Invalid Format',
+      password: 'StrongPass1!',
+    }),
+    (error) => {
+      assert.ok(error instanceof StudentRegistrationError);
+      assert.equal(error.status, 400);
+      assert.equal(error.code, 'INVALID_STUDENT_ID');
+      return true;
+    },
+  );
+
   const validated = await studentRegistrationService.validateRegistrationDetails({
     studentId: '11070001002',
     email: 'CaseSensitive@Example.edu',
