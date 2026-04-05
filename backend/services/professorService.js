@@ -48,6 +48,7 @@ class ProfessorService {
       const professor = await Professor.create({
         userId: user.id,
         department: department.trim(),
+        fullName: fullName.trim(),
       }, { transaction });
 
       await transaction.commit();
@@ -183,27 +184,25 @@ class ProfessorService {
       Date.now() + 24 * 60 * 60 * 1000
     );
 
-    try {
-      const { user, professor } = await this.createProfessorUserAndRecord(
-        email,
-        fullName,
-        department,
-        {
-          passwordSetupTokenHash,
-          passwordSetupTokenExpiresAt,
-        },
-      );
+    const { user, professor } = await this.createProfessorUserAndRecord(
+      email,
+      fullName,
+      department,
+      {
+        passwordSetupTokenHash,
+        passwordSetupTokenExpiresAt,
+      },
+    );
 
-      return {
-        userId: user.id,
-        professorId: professor.id,
-        setupRequired: true,
-        setupTokenGenerated: true,
-        message: 'Password setup link has been generated'
-      };
-    } catch (error) {
-      throw error;
-    }
+    return {
+      userId: user.id,
+      professorId: professor.id,
+      setupRequired: true,
+      setupTokenGenerated: true,
+      setupToken: rawSetupToken,
+      passwordSetupTokenExpiresAt,
+      message: 'Password setup link has been generated',
+    };
   }
 
   async setInitialPassword(setupToken, newPassword) {
@@ -236,6 +235,58 @@ class ProfessorService {
 
     await user.update({
       password: hashedPassword,
+      status: 'ACTIVE',
+      passwordSetupTokenHash: null,
+      passwordSetupTokenExpiresAt: null,
+    });
+
+    return {
+      message: 'Password set successfully',
+    };
+  }
+
+  async setInitialPasswordByEmail(email, newPassword) {
+    if (!email || typeof email !== 'string') {
+      throw new Error('INVALID_PROFESSOR_EMAIL');
+    }
+
+    if (!this.isValidPassword(newPassword)) {
+      throw new Error('INVALID_PASSWORD_POLICY');
+    }
+
+    const normalizedEmail = this.normalizeEmail(email);
+    const existingProfessorUser = await User.findOne({
+      where: {
+        email: normalizedEmail,
+        role: 'PROFESSOR',
+      },
+    });
+
+    if (!existingProfessorUser) {
+      throw new Error('PROFESSOR_SETUP_NOT_FOUND');
+    }
+
+    if (existingProfessorUser.status !== 'PASSWORD_SETUP_REQUIRED') {
+      throw new Error('PROFESSOR_SETUP_ALREADY_COMPLETED');
+    }
+
+    const user = await User.findOne({
+      where: {
+        email: normalizedEmail,
+        role: 'PROFESSOR',
+        status: 'PASSWORD_SETUP_REQUIRED',
+      },
+    });
+
+    if (!user) {
+      throw new Error('PROFESSOR_SETUP_NOT_FOUND');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await user.update({
+      password: hashedPassword,
+      passwordHash: hashedPassword,
       status: 'ACTIVE',
       passwordSetupTokenHash: null,
       passwordSetupTokenExpiresAt: null,

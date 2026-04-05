@@ -40,8 +40,6 @@ export default function App() {
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
   const [page, setPage] = useState('student'); // 'student' or 'coordinator'
-  // The token gate is deliberately temporary: it keeps #24/#25 testable without
-  // introducing a full student authentication feature outside the current scope.
   const [studentToken, setStudentToken] = useState('');
   const [linking, setLinking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -53,12 +51,9 @@ export default function App() {
       return;
     }
 
-    // Clear any token copy after the callback so the page starts clean on the next use.
     setStudentToken('');
     setLinking(false);
 
-    // The backend already condensed the callback outcome into safe UI params.
-    // We render those and then strip them from the visible URL immediately.
     const usedMockOAuth = params.get('mockOAuth') === '1';
     const nextFeedback = githubLinkStatus === 'success'
       ? {
@@ -108,7 +103,6 @@ export default function App() {
     });
 
     try {
-      // Registration UI is intentionally a thin client over the backend business rules.
       const response = await fetch('/api/v1/students/register', {
         method: 'POST',
         headers: {
@@ -168,8 +162,6 @@ export default function App() {
     }
 
     setLinking(true);
-    // This step only requests the authorization URL; the actual linking finishes
-    // after GitHub redirects back through the callback endpoint.
     setFeedback({
       type: 'loading',
       title: 'Starting GitHub linking',

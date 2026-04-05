@@ -7,7 +7,8 @@ const buildErrorResponse = (message, errorCode) => ({
 });
 
 const setupProfessorPassword = [
-  body('setupToken').isString().trim().notEmpty(),
+  body('setupToken').optional().isString().trim().notEmpty(),
+  body('email').optional().isEmail().normalizeEmail(),
   body('newPassword').isString().notEmpty(),
 
   async (req, res) => {
@@ -18,13 +19,18 @@ const setupProfessorPassword = [
       );
     }
 
-    const { setupToken, newPassword } = req.body;
+    const { email, setupToken, newPassword } = req.body;
+
+    if (!setupToken && !email) {
+      return res.status(400).json(
+        buildErrorResponse('Either setup token or professor email is required', 'VALIDATION_FAILED')
+      );
+    }
 
     try {
-      const result = await professorService.setInitialPassword(
-        setupToken,
-        newPassword
-      );
+      const result = setupToken
+        ? await professorService.setInitialPassword(setupToken, newPassword)
+        : await professorService.setInitialPasswordByEmail(email, newPassword);
 
       return res.status(200).json(result);
     } catch (error) {
@@ -33,6 +39,27 @@ const setupProfessorPassword = [
           buildErrorResponse(
             'Setup token is invalid, expired, or already used',
             'SETUP_TOKEN_NOT_FOUND'
+          )
+        );
+      }
+
+      if (
+        error.message === 'INVALID_PROFESSOR_EMAIL' ||
+        error.message === 'PROFESSOR_SETUP_NOT_FOUND'
+      ) {
+        return res.status(404).json(
+          buildErrorResponse(
+            'Professor setup request was not found for this email',
+            'PROFESSOR_SETUP_NOT_FOUND'
+          )
+        );
+      }
+
+      if (error.message === 'PROFESSOR_SETUP_ALREADY_COMPLETED') {
+        return res.status(409).json(
+          buildErrorResponse(
+            'Professor initial password setup has already been completed',
+            'PROFESSOR_SETUP_ALREADY_COMPLETED'
           )
         );
       }

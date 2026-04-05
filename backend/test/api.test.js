@@ -56,6 +56,43 @@ test.beforeEach(async () => {
   await User.destroy({ where: {} });
 });
 
+test('admin can log in with email and password', async () => {
+  const password = 'AdminPass1!';
+
+  await User.create({
+    email: 'admin@example.com',
+    fullName: 'Admin User',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+    password: await bcrypt.hash(password, 10),
+  });
+
+  const successResult = await request('/api/v1/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@example.com',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'ADMIN');
+
+  const invalidResult = await request('/api/v1/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@example.com',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidResult.response.status, 401);
+  assert.equal(invalidResult.json.code, 'INVALID_CREDENTIALS');
+});
+
 test('admin can register professor and duplicate email returns 409', async () => {
   const admin = await User.create({
     email: 'admin@example.com',
@@ -143,6 +180,57 @@ test('professor can set an initial password with a valid setup token', async () 
   assert.equal(typeof updatedProfessorUser.password, 'string');
   assert.equal(updatedProfessorUser.passwordSetupTokenHash, null);
   assert.equal(updatedProfessorUser.passwordSetupTokenExpiresAt, null);
+});
+
+test('professor can set an initial password with email while setup is pending', async () => {
+  await User.create({
+    email: 'emailsetup@example.edu',
+    fullName: 'Email Setup Professor',
+    role: 'PROFESSOR',
+    status: 'PASSWORD_SETUP_REQUIRED',
+  });
+
+  const invalidPassword = await request('/api/v1/professors/password-setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'emailsetup@example.edu',
+      newPassword: 'weak',
+    }),
+  });
+
+  assert.equal(invalidPassword.response.status, 422);
+
+  const successResult = await request('/api/v1/professors/password-setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'emailsetup@example.edu',
+      newPassword: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(successResult.json.message, 'Password set successfully');
+
+  const updatedProfessorUser = await User.findOne({
+    where: { email: 'emailsetup@example.edu' },
+  });
+
+  assert.equal(updatedProfessorUser.status, 'ACTIVE');
+  assert.equal(typeof updatedProfessorUser.password, 'string');
+
+  const repeatedAttempt = await request('/api/v1/professors/password-setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'emailsetup@example.edu',
+      newPassword: 'AnotherStrong1!',
+    }),
+  });
+
+  assert.equal(repeatedAttempt.response.status, 409);
+  assert.equal(repeatedAttempt.json.errorCode, 'PROFESSOR_SETUP_ALREADY_COMPLETED');
 });
 
 test('password setup token verification enforces admin auth and returns valid true or false correctly', async () => {
@@ -353,6 +441,7 @@ test('internal professor record endpoint requires admin auth, persists record, a
   const professorRecord = await Professor.findByPk(created.json.professorId);
   assert.equal(professorRecord.userId, created.json.userId);
   assert.equal(professorRecord.department, 'Software Engineering');
+  assert.equal(professorRecord.fullName, 'Internal Professor');
 
   const duplicate = await request('/api/v1/user-database/professors', {
     method: 'POST',
@@ -459,8 +548,21 @@ test('internal professor password update requires admin auth and activates the p
     message: 'Professor not found.',
   });
 });
-
 test('student registration validates eligibility, password strength, duplication, and success', async () => {
+  const invalidStudentId = await request('/api/v1/students/registration-validation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001',
+      email: 'invalid-id@example.edu',
+      fullName: 'Invalid Id',
+      password: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidStudentId.response.status, 400);
+  assert.equal(invalidStudentId.json.code, 'INVALID_STUDENT_ID');
+
   const weakPassword = await request('/api/v1/students/registration-validation', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -696,6 +798,21 @@ test('student register creates account after validation passes', async () => {
 });
 
 test('student registration service validates data before creating the account', async () => {
+  await assert.rejects(
+    studentRegistrationService.validateRegistrationDetails({
+      studentId: '11070001',
+      email: 'student6@example.edu',
+      fullName: 'Invalid Format',
+      password: 'StrongPass1!',
+    }),
+    (error) => {
+      assert.ok(error instanceof StudentRegistrationError);
+      assert.equal(error.status, 400);
+      assert.equal(error.code, 'INVALID_STUDENT_ID');
+      return true;
+    },
+  );
+
   await assert.rejects(
     studentRegistrationService.validateRegistrationDetails({
       studentId: '11070001999',
