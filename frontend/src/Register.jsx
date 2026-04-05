@@ -14,6 +14,7 @@ const initialFeedback = {
   title: 'Waiting for input',
   message: 'Fill in the student registration form and submit it to create the account.',
   studentId: '',
+  result: '',
   valid: '',
   userId: '',
 };
@@ -70,6 +71,7 @@ export default function Register() {
             : `${params.get('githubUsername') || 'your GitHub account'} is now linked to this student account.`,
           studentId: params.get('studentId') || '',
           result: usedMockOAuth ? 'Mock OAuth flow' : 'GitHub linked',
+          valid: '',
           userId: '',
         }
       : {
@@ -80,6 +82,7 @@ export default function Register() {
           message: params.get('message') || 'GitHub OAuth callback failed.',
           studentId: params.get('studentId') || '',
           result: params.get('code') || 'OAuth error',
+          valid: '',
           userId: '',
         };
 
@@ -109,13 +112,14 @@ export default function Register() {
       title: 'Creating student account',
       message: 'Submitting the registration form to the backend.',
       studentId: '',
+      result: '',
       valid: '',
       userId: '',
     });
 
     try {
       // Registration UI is intentionally a thin client over the backend business rules.
-      const response = await apiClient.post('/v1/students/registration-validation', form);
+      const response = await apiClient.post('/v1/students/register', form);
       const result = response.data;
 
       if (response.status < 400) {
@@ -124,6 +128,7 @@ export default function Register() {
           title: 'Student account created',
           message: result.message || 'Student account created successfully',
           studentId: result.studentId || form.studentId,
+          result: 'Created',
           valid: typeof result.valid === 'boolean' ? String(result.valid) : '',
           userId: result.userId || '',
         });
@@ -137,14 +142,15 @@ export default function Register() {
       }
 
       const mapped = mapErrorResponse(result);
-        setFeedback({
-          type: mapped.type,
-          title: mapped.title,
-          message: result.message || 'Validation failed',
-          studentId: form.studentId,
-          valid: mapped.result,
-          userId: '',
-        });
+      setFeedback({
+        type: mapped.type,
+        title: mapped.title,
+        message: result.message || 'Validation failed',
+        studentId: form.studentId,
+        result: mapped.result,
+        valid: 'false',
+        userId: '',
+      });
     } catch (error) {
       if (error.mappedError) {
         setFeedback({
@@ -152,6 +158,7 @@ export default function Register() {
           title: error.mappedError.title,
           message: error.response?.data?.message || 'Validation failed',
           studentId: form.studentId,
+          result: error.mappedError.result,
           valid: error.mappedError.result,
           userId: '',
         });
@@ -166,6 +173,7 @@ export default function Register() {
           title: 'Request failed',
           message: 'The registration request could not reach the backend. Check whether the backend server is running.',
           studentId: form.studentId,
+          result: 'Network error',
           valid: 'Network error',
           userId: '',
         });
@@ -187,6 +195,7 @@ export default function Register() {
         title: 'Student token required',
         message: 'Provide an authenticated student token before starting GitHub linking.',
         studentId: feedback.studentId,
+        result: 'Missing token',
         valid: 'Missing token',
         userId: feedback.userId,
       });
@@ -206,6 +215,7 @@ export default function Register() {
       title: 'Starting GitHub linking',
       message: 'Requesting the authorization URL from the backend.',
       studentId: feedback.studentId,
+      result: '',
       valid: '',
       userId: feedback.userId,
     });
@@ -220,6 +230,7 @@ export default function Register() {
           title: 'GitHub link could not start',
           message: result.message || 'Failed to create the GitHub authorization URL.',
           studentId: feedback.studentId,
+          result: result.code || 'OAuth start failed',
           valid: result.code || 'OAuth start failed',
           userId: feedback.userId,
         });
@@ -240,6 +251,7 @@ export default function Register() {
           title: error.mappedError.title,
           message: error.response?.data?.message || 'Failed to create the GitHub authorization URL.',
           studentId: feedback.studentId,
+          result: error.mappedError.result,
           valid: error.mappedError.result,
           userId: feedback.userId,
         });
@@ -254,6 +266,7 @@ export default function Register() {
           title: 'GitHub link could not start',
           message: 'The backend could not be reached while starting GitHub OAuth.',
           studentId: feedback.studentId,
+          result: 'Network error',
           valid: 'Network error',
           userId: feedback.userId,
         });
@@ -385,11 +398,15 @@ export default function Register() {
             <p className="feedback-label">Current Status</p>
             <h2>{feedback.title}</h2>
             <p>{feedback.message}</p>
-            {(feedback.studentId || feedback.valid || feedback.userId) && (
+            {(feedback.studentId || feedback.result || feedback.valid || feedback.userId) && (
               <dl className="feedback-meta">
                 <div>
                   <dt>Student ID</dt>
                   <dd>{feedback.studentId || '-'}</dd>
+                </div>
+                <div>
+                  <dt>Result</dt>
+                  <dd>{feedback.result || '-'}</dd>
                 </div>
                 <div>
                   <dt>User ID</dt>
