@@ -48,6 +48,7 @@ class ProfessorService {
       const professor = await Professor.create({
         userId: user.id,
         department: department.trim(),
+        fullName: fullName.trim(),
       }, { transaction });
 
       await transaction.commit();
@@ -183,27 +184,23 @@ class ProfessorService {
       Date.now() + 24 * 60 * 60 * 1000
     );
 
-    try {
-      const { user, professor } = await this.createProfessorUserAndRecord(
-        email,
-        fullName,
-        department,
-        {
-          passwordSetupTokenHash,
-          passwordSetupTokenExpiresAt,
-        },
-      );
+    const { user, professor } = await this.createProfessorUserAndRecord(
+      email,
+      fullName,
+      department,
+      {
+        passwordSetupTokenHash,
+        passwordSetupTokenExpiresAt,
+      },
+    );
 
-      return {
-        userId: user.id,
-        professorId: professor.id,
-        setupRequired: true,
-        setupTokenGenerated: true,
-        message: 'Password setup link has been generated'
-      };
-    } catch (error) {
-      throw error;
-    }
+    return {
+      userId: user.id,
+      professorId: professor.id,
+      setupRequired: true,
+      setupTokenGenerated: true,
+      message: 'Password setup link has been generated'
+    };
   }
 
   async setInitialPassword(setupToken, newPassword) {

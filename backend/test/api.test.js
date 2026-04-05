@@ -390,6 +390,7 @@ test('internal professor record endpoint requires admin auth, persists record, a
   const professorRecord = await Professor.findByPk(created.json.professorId);
   assert.equal(professorRecord.userId, created.json.userId);
   assert.equal(professorRecord.department, 'Software Engineering');
+  assert.equal(professorRecord.fullName, 'Internal Professor');
 
   const duplicate = await request('/api/v1/user-database/professors', {
     method: 'POST',
@@ -496,7 +497,6 @@ test('internal professor password update requires admin auth and activates the p
     message: 'Professor not found.',
   });
 });
-
 test('student registration validates eligibility, password strength, duplication, and success', async () => {
   const weakPassword = await request('/api/v1/students/registration-validation', {
     method: 'POST',
