@@ -35,10 +35,10 @@ const entryPoints = [
   },
   {
     eyebrow: 'Coordinator',
-    title: 'Coordinator Upload',
-    description: 'Coordinators upload valid student IDs in bulk and review inserted, duplicate, and invalid totals.',
-    href: '/coordinator/student-id-registry/import',
-    cta: 'Open Coordinator Upload',
+    title: 'Coordinator Login',
+    description: 'Coordinators sign in here before accessing coordinator workspace tools such as student ID import.',
+    href: '/coordinator/login',
+    cta: 'Open Coordinator Login',
     status: 'Ready',
   },
   {
@@ -56,7 +56,7 @@ export default function AuthGatewayPage() {
     <main className="page">
       <section className="hero">
         <p className="eyebrow">Senior App Access</p>
-        <h1>Choose an entry point</h1>
+        <h1>Welcome to Senior App</h1>
         <p className="subtitle">
           The system has separate student, professor, and admin-facing auth flows. This landing page keeps those
           routes visible and easy to demo without mixing the screens together.

@@ -3,10 +3,11 @@ import NotificationViewport from './NotificationViewport';
 
 const navItems = [
   { to: '/', label: 'Entry' },
+  { to: '/students/login', label: 'Student Login' },
   { to: '/students/register', label: 'Student Register' },
-  { to: '/coordinator/student-id-registry/import', label: 'Coordinator Upload' },
+  { to: '/professors/login', label: 'Professor Login' },
+  { to: '/coordinator/login', label: 'Coordinator Login' },
   { to: '/admin/login', label: 'Admin Login' },
-  { to: '/admin', label: 'Admin Workspace' },
 ];
 
 export default function AppShell() {

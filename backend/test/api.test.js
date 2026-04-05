@@ -93,6 +93,138 @@ test('admin can log in with email and password', async () => {
   assert.equal(invalidResult.json.code, 'INVALID_CREDENTIALS');
 });
 
+test('coordinator can log in with email and password', async () => {
+  const password = 'CoordinatorPass2026!';
+
+  await User.create({
+    email: 'coordinator-login@example.com',
+    fullName: 'Coordinator Login',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash(password, 10),
+  });
+
+  const successResult = await request('/api/v1/coordinator/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'coordinator-login@example.com',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'COORDINATOR');
+
+  const invalidResult = await request('/api/v1/coordinator/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'coordinator-login@example.com',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidResult.response.status, 401);
+  assert.equal(invalidResult.json.code, 'INVALID_CREDENTIALS');
+});
+
+test('student can log in with student ID and password only when the student ID is eligible', async () => {
+  const password = 'StrongPass1!';
+
+  await createStudent({
+    studentId: '11070001000',
+    email: 'student-login@example.edu',
+    fullName: 'Student Login',
+    password,
+  });
+
+  const successResult = await request('/api/v1/students/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001000',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'STUDENT');
+  assert.equal(successResult.json.user.studentId, '11070001000');
+
+  const wrongPassword = await request('/api/v1/students/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001000',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(wrongPassword.response.status, 401);
+  assert.equal(wrongPassword.json.code, 'INVALID_CREDENTIALS');
+
+  await User.create({
+    email: 'ineligible-login@example.edu',
+    fullName: 'Ineligible Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001999',
+    passwordHash: await bcrypt.hash(password, 10),
+  });
+
+  const ineligibleResult = await request('/api/v1/students/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001999',
+      password,
+    }),
+  });
+
+  assert.equal(ineligibleResult.response.status, 403);
+  assert.equal(ineligibleResult.json.code, 'STUDENT_NOT_ELIGIBLE');
+});
+
+test('professor can log in with email and chosen password after setup', async () => {
+  const password = 'StrongPass1!';
+
+  await User.create({
+    email: 'prof-login@example.edu',
+    fullName: 'Professor Login',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash(password, 10),
+  });
+
+  const successResult = await request('/api/v1/professors/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'prof-login@example.edu',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'PROFESSOR');
+
+  const invalidResult = await request('/api/v1/professors/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'prof-login@example.edu',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidResult.response.status, 401);
+  assert.equal(invalidResult.json.errorCode, 'INVALID_CREDENTIALS');
+});
+
 test('admin can register professor and duplicate email returns 409', async () => {
   const admin = await User.create({
     email: 'admin@example.com',

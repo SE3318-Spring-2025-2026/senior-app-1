@@ -25,10 +25,10 @@ const adminTools = [
   },
   {
     eyebrow: 'Registry',
-    title: 'Coordinator Upload',
-    description: 'Open the coordinator-facing valid student ID import page used to bulk refresh the registry.',
-    href: '/coordinator/student-id-registry/import',
-    cta: 'Open Upload Page',
+    title: 'Coordinator Workspace',
+    description: 'Open the coordinator area, where valid student ID import appears as one of the available tools.',
+    href: '/coordinator',
+    cta: 'Open Coordinator Workspace',
     status: 'Ready',
   },
 ];
