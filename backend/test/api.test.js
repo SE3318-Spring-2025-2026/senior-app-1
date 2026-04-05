@@ -56,6 +56,43 @@ test.beforeEach(async () => {
   await User.destroy({ where: {} });
 });
 
+test('admin can log in with email and password', async () => {
+  const password = 'AdminPass1!';
+
+  await User.create({
+    email: 'admin@example.com',
+    fullName: 'Admin User',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+    password: await bcrypt.hash(password, 10),
+  });
+
+  const successResult = await request('/api/v1/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@example.com',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'ADMIN');
+
+  const invalidResult = await request('/api/v1/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@example.com',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidResult.response.status, 401);
+  assert.equal(invalidResult.json.code, 'INVALID_CREDENTIALS');
+});
+
 test('admin can register professor and duplicate email returns 409', async () => {
   const admin = await User.create({
     email: 'admin@example.com',

@@ -1,6 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import AdminHomePage from './AdminHomePage';
+import AdminLoginPage from './AdminLoginPage';
 import AdminProfessorRegistrationPage from './AdminProfessorRegistrationPage';
 import AuthGatewayPage from './AuthGatewayPage';
 import AuthPlaceholderPage from './AuthPlaceholderPage';
@@ -30,14 +32,10 @@ function resolvePage(currentPath) {
           description="Professors will sign in here after setting their initial password."
         />
       );
+    case '/admin':
+      return <AdminHomePage />;
     case '/admin/login':
-      return (
-        <AuthPlaceholderPage
-          eyebrow="Admin Access"
-          title="Admin Login"
-          description="Admins will sign in here before opening admin-only features such as professor registration."
-        />
-      );
+      return <AdminLoginPage />;
     case '/professors/password-setup':
       return (
         <AuthPlaceholderPage

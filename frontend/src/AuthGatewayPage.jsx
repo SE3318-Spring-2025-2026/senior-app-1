@@ -37,7 +37,7 @@ const entryPoints = [
     description: 'Admins sign in here before accessing admin-only tools such as professor account registration.',
     href: '/admin/login',
     cta: 'Open Admin Login',
-    status: 'Planned',
+    status: 'Ready',
   },
 ];
 
