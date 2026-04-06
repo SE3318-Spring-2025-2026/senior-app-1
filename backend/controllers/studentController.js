@@ -345,7 +345,8 @@ async function handleGitHubCallback(req, res) {
   } catch (error) {
     const status = (
       error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED' ||
-      error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT'
+      error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT' ||
+      error.code === 'GITHUB_RELINK_NOT_ALLOWED'
     ) ? 409 : 500;
 
     if (shouldRedirectToFrontend(req)) {
@@ -404,6 +405,13 @@ const storeLinkedGitHubAccount = [
       }
 
       if (error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT') {
+        return res.status(409).json({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
+      if (error.code === 'GITHUB_RELINK_NOT_ALLOWED') {
         return res.status(409).json({
           code: error.code,
           message: error.message,

@@ -33,6 +33,8 @@ function mapErrorResponse(payload) {
       return { type: 'error', title: 'Student not eligible', result: 'Rejected' };
     case 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT':
       return { type: 'warning', title: 'GitHub already linked', result: 'Already linked' };
+    case 'GITHUB_RELINK_NOT_ALLOWED':
+      return { type: 'warning', title: 'Re-link not allowed', result: 'Already linked' };
     default:
       return { type: 'error', title: 'Validation failed', result: 'Failed' };
   }
@@ -189,7 +191,9 @@ export default function Register() {
   }
 
   async function handleGitHubLink() {
-    if (!studentToken.trim()) {
+    const trimmedStudentToken = studentToken.trim();
+
+    if (!trimmedStudentToken) {
       setFeedback({
         type: 'warning',
         title: 'Student token required',
@@ -221,10 +225,15 @@ export default function Register() {
     });
 
     try {
-      const response = await apiClient.get('/v1/students/me/github/link');
-      const result = response.data;
+      const response = await fetch('/api/v1/students/me/github/link', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${trimmedStudentToken}`,
+        },
+      });
+      const result = await response.json();
 
-      if (response.status >= 400) {
+      if (!response.ok) {
         setFeedback({
           type: 'error',
           title: 'GitHub link could not start',

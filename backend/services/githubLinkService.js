@@ -36,7 +36,7 @@ function buildAuthorizationUrl(state) {
 }
 
 function getFrontendUrl() {
-  return process.env.FRONTEND_URL || 'http://localhost:5173';
+  return process.env.FRONTEND_GITHUB_RETURN_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
 }
 
 async function createOAuthState(userId) {
@@ -175,20 +175,18 @@ async function storeLinkedGitHubAccount({ studentId, githubId, githubUsername })
       throw error;
     }
 
-    let linkedAccount;
     if (existingLinkedAccount) {
-      // Re-linking the same student updates the stored GitHub identity instead of
-      // creating duplicate rows for the same user.
-      existingLinkedAccount.githubId = githubId;
-      existingLinkedAccount.githubUsername = githubUsername;
-      linkedAccount = await existingLinkedAccount.save({ transaction });
-    } else {
-      linkedAccount = await LinkedGitHubAccount.create({
-        userId: student.id,
-        githubId,
-        githubUsername,
-      }, { transaction });
+      const error = new Error('A GitHub account is already linked for this student. Unlink is required before linking a different account.');
+      error.code = 'GITHUB_RELINK_NOT_ALLOWED';
+      throw error;
     }
+
+    let linkedAccount;
+    linkedAccount = await LinkedGitHubAccount.create({
+      userId: student.id,
+      githubId,
+      githubUsername,
+    }, { transaction });
 
     student.githubUsername = githubUsername;
     student.githubLinked = true;

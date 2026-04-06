@@ -1,7 +1,7 @@
-require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') }); // Load environment variables from .env file
 const { User } = require('./models');
 const adminRoutes = require('./routes/admin');
 const coordinatorRoutes = require('./routes/coordinator');
