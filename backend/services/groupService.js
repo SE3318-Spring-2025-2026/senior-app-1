@@ -1,5 +1,8 @@
+const { Op } = require('sequelize');
 const sequelize = require('../db');
 const Group = require('../models/Group');
+const Invitation = require('../models/Invitation');
+const User = require('../models/User');
 
 class GroupService {
   async createShell(name, leaderId) {
@@ -36,6 +39,68 @@ class GroupService {
 
       throw error;
     }
+  }
+
+  async dispatchInvitations(groupId, rawStudentIds) {
+    // De-duplicate incoming student IDs
+    const studentIds = [...new Set(rawStudentIds)];
+
+    // f2 → validate groupId exists in D2
+    const group = await Group.findByPk(groupId);
+    if (!group) {
+      const err = new Error('Group not found');
+      err.code = 'GROUP_NOT_FOUND';
+      throw err;
+    }
+
+    // f4 → fetch D1 profiles for every requested student ID
+    const users = await User.findAll({
+      where: {
+        studentId: { [Op.in]: studentIds },
+        role: 'STUDENT',
+      },
+    });
+
+    const foundStudentIds = users.map((u) => u.studentId);
+    const missing = studentIds.filter((sid) => !foundStudentIds.includes(sid));
+    if (missing.length > 0) {
+      const err = new Error('One or more students not found');
+      err.code = 'STUDENT_NOT_FOUND';
+      err.missing = missing;
+      throw err;
+    }
+
+    // f5 → persist D8 invitations atomically
+    const transaction = await sequelize.transaction();
+    let invitations;
+    try {
+      invitations = await Promise.all(
+        users.map((user) =>
+          Invitation.create(
+            { groupId, inviteeId: user.id, status: 'PENDING' },
+            { transaction }
+          )
+        )
+      );
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+
+    // f6 → trigger notifications only after successful persistence
+    for (const user of users) {
+      console.log(
+        `[Notification] Invitation dispatched → studentId: ${user.studentId}, groupId: ${groupId}`
+      );
+    }
+
+    return invitations.map((inv, i) => ({
+      id: inv.id,
+      groupId: inv.groupId,
+      studentId: users[i].studentId,
+      status: inv.status,
+    }));
   }
 }
 
