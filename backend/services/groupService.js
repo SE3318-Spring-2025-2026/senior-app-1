@@ -3,6 +3,7 @@ const sequelize = require('../db');
 const Group = require('../models/Group');
 const Invitation = require('../models/Invitation');
 const User = require('../models/User');
+const auditLogRepository = require('../repositories/auditLogRepository');
 
 class GroupService {
   async createShell(name, leaderId) {
@@ -15,6 +16,19 @@ class GroupService {
         memberIds: [leaderId],
         advisorId: null,
       }, { transaction });
+
+      // D6 audit — written inside the same transaction so it rolls back
+      // automatically if the group write fails for any reason.
+      await auditLogRepository.create(
+        {
+          action: 'GROUP_CREATED',
+          actorId: leaderId,
+          targetId: group.id,
+          targetType: 'GROUP',
+          metadata: { groupName: group.name },
+        },
+        transaction
+      );
 
       await transaction.commit();
 
