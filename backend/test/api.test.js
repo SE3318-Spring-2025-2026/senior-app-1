@@ -1204,6 +1204,19 @@ test('manual linked account store and github patch endpoint update student statu
   assert.equal(storeResult.response.status, 200);
   assert.equal(storeResult.json.linked, true);
 
+  const relinkAttempt = await request('/api/v1/linked-github-account-store/links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001001',
+      githubId: '87654321',
+      githubUsername: 'student-gh-second',
+    }),
+  });
+
+  assert.equal(relinkAttempt.response.status, 409);
+  assert.equal(relinkAttempt.json.code, 'GITHUB_RELINK_NOT_ALLOWED');
+
   const patchResult = await request('/api/v1/user-database/students/11070001001/github-link', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
