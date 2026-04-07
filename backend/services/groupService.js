@@ -1,8 +1,8 @@
 const { Op } = require('sequelize');
 const sequelize = require('../db');
 const Group = require('../models/Group');
-const Invitation = require('../models/Invitation');
 const User = require('../models/User');
+const invitationsRepository = require('../repositories/invitationsRepository');
 
 class GroupService {
   async createShell(name, leaderId) {
@@ -70,18 +70,12 @@ class GroupService {
       throw err;
     }
 
-    // f5 → persist D8 invitations atomically
+    // f5 → persist D8 invitations atomically via repository
+    const inviteeIds = users.map((u) => u.id);
     const transaction = await sequelize.transaction();
     let invitations;
     try {
-      invitations = await Promise.all(
-        users.map((user) =>
-          Invitation.create(
-            { groupId, inviteeId: user.id, status: 'PENDING' },
-            { transaction }
-          )
-        )
-      );
+      invitations = await invitationsRepository.bulkCreate(groupId, inviteeIds, transaction);
       await transaction.commit();
     } catch (error) {
       await transaction.rollback();

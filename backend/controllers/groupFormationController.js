@@ -40,6 +40,15 @@ const handleDispatchInvites = [
         );
       }
 
+      if (error.code === 'DUPLICATE_INVITATION') {
+        return res.status(400).json(
+          buildErrorResponse(
+            'One or more students already have a pending invitation for this group',
+            'DUPLICATE_INVITATION'
+          )
+        );
+      }
+
       return res.status(500).json(
         buildErrorResponse('Internal Server Error', 'INTERNAL_SERVER_ERROR')
       );
