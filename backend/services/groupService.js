@@ -3,6 +3,7 @@ const { Group, AuditLog } = require('../models');
 
 const GROUP_NAME_MIN_LENGTH = 3;
 const GROUP_NAME_MAX_LENGTH = 80;
+const NORMALIZED_NAME_FIELD = 'normalizedName';
 
 function createServiceError(status, code, message) {
   const error = new Error(message);
@@ -64,7 +65,7 @@ async function createShell(name, leaderId) {
     } catch (error) {
       if (
         error.name === 'SequelizeUniqueConstraintError' &&
-        error.errors?.some((e) => e.path === 'normalizedName')
+        error.errors?.some((e) => e.path === NORMALIZED_NAME_FIELD)
       ) {
         throw createServiceError(409, 'DUPLICATE_GROUP_NAME', 'Group name already exists.');
       }
