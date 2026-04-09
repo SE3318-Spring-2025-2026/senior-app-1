@@ -2,8 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { User } = require('./models');
+const { User, Group, AuditLog } = require('./models');
 const adminRoutes = require('./routes/admin');
+const coordinatorRoutes = require('./routes/coordinator');
 const professorRoutes = require('./routes/professors');
 const studentRoutes = require('./routes/students');
 const passwordSetupTokenStoreRoutes = require('./routes/passwordSetupTokenStore');
@@ -16,8 +17,9 @@ app.use(express.json());
 if (fs.existsSync(frontendDistPath)) {
   app.use(express.static(frontendDistPath));
 }
-app.locals.models = { User };
+app.locals.models = { User, Group, AuditLog };
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/coordinator', coordinatorRoutes);
 app.use('/api/v1/professors', professorRoutes);
 app.use('/api/v1', studentRoutes);
 app.use('/api/v1/password-setup-token-store', passwordSetupTokenStoreRoutes);
