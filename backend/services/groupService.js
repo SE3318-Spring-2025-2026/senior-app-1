@@ -41,7 +41,7 @@ class GroupService {
     }
   }
 
-  async dispatchInvitations(groupId, rawStudentIds) {
+  async dispatchInvitations(groupId, rawStudentIds, caller) {
     // De-duplicate incoming student IDs
     const studentIds = [...new Set(rawStudentIds)];
 
@@ -50,6 +50,16 @@ class GroupService {
     if (!group) {
       const err = new Error('Group not found');
       err.code = 'GROUP_NOT_FOUND';
+      throw err;
+    }
+
+    // f3 → enforce ownership/role: only the group leader, a coordinator, or an
+    // admin may dispatch invitations on behalf of a group.
+    const isLeader = group.leaderId === caller.id;
+    const isPrivileged = ['COORDINATOR', 'ADMIN'].includes(caller.role);
+    if (!isLeader && !isPrivileged) {
+      const err = new Error('Not authorized to dispatch invitations for this group');
+      err.code = 'FORBIDDEN';
       throw err;
     }
 
@@ -62,7 +72,8 @@ class GroupService {
     });
 
     const foundStudentIds = users.map((u) => u.studentId);
-    const missing = studentIds.filter((sid) => !foundStudentIds.includes(sid));
+    const foundSet = new Set(foundStudentIds);
+    const missing = studentIds.filter((sid) => !foundSet.has(sid));
     if (missing.length > 0) {
       const err = new Error('One or more students not found');
       err.code = 'STUDENT_NOT_FOUND';
