@@ -7,6 +7,7 @@ import AuthGatewayPage from './AuthGatewayPage';
 import CoordinatorHomePage from './CoordinatorHomePage';
 import CoordinatorLoginPage from './CoordinatorLoginPage';
 import CoordinatorStudentIdUploadPage from './CoordinatorStudentIdUploadPage';
+import GroupPage from './GroupPage';
 import ProfessorLoginPage from './ProfessorLoginPage';
 import ProfessorPasswordSetupPage from './ProfessorPasswordSetupPage';
 import Register from './Register';
@@ -37,6 +38,7 @@ export default function App() {
               <Route path="/coordinator/student-id-registry/import" element={<CoordinatorStudentIdUploadPage />} />
               <Route path="/students/groups" element={<GroupFormationPage />} />
               <Route path="/students/invitations" element={<StudentInvitationsPage />} />
+              <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="*" element={<AuthGatewayPage />} />
             </Route>
           </Routes>
