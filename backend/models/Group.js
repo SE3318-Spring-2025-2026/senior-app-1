@@ -19,6 +19,12 @@ const Group = sequelize.define('Group', {
   leaderId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    references: {
+      model: 'Users',
+      key: 'id',
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE',
   },
   memberIds: {
     type: DataTypes.JSON,
@@ -28,6 +34,12 @@ const Group = sequelize.define('Group', {
   advisorId: {
     type: DataTypes.INTEGER,
     allowNull: true,
+    references: {
+      model: 'Users',
+      key: 'id',
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
   },
 });
 

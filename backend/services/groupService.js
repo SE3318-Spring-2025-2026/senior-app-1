@@ -47,18 +47,29 @@ async function createShell(name, leaderId) {
     });
 
     if (existing) {
-      throw createServiceError(400, 'DUPLICATE_GROUP_NAME', 'Group name already exists.');
+      throw createServiceError(409, 'DUPLICATE_GROUP_NAME', 'Group name already exists.');
     }
 
-    const group = await Group.create(
-      {
-        name: sanitizedName,
-        normalizedName,
-        leaderId,
-        memberIds: [leaderId],
-      },
-      { transaction },
-    );
+    let group;
+    try {
+      group = await Group.create(
+        {
+          name: sanitizedName,
+          normalizedName,
+          leaderId,
+          memberIds: [leaderId],
+        },
+        { transaction },
+      );
+    } catch (error) {
+      if (
+        error.name === 'SequelizeUniqueConstraintError' &&
+        error.errors?.some((e) => e.path === 'normalizedName')
+      ) {
+        throw createServiceError(409, 'DUPLICATE_GROUP_NAME', 'Group name already exists.');
+      }
+      throw error;
+    }
 
     await AuditLog.create(
       {

@@ -12,7 +12,7 @@ process.env.GITHUB_CLIENT_SECRET = '';
 const sequelize = require('../db');
 const app = require('../app');
 require('../models');
-const { User, Professor, LinkedGitHubAccount, OAuthState } = require('../models');
+const { User, Professor, LinkedGitHubAccount, OAuthState, Group, AuditLog } = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
 const { createStudent, ensureValidStudentRegistry } = require('../services/studentService');
@@ -51,6 +51,8 @@ test.after(async () => {
 });
 
 test.beforeEach(async () => {
+  await AuditLog.destroy({ where: {} });
+  await Group.destroy({ where: {} });
   await LinkedGitHubAccount.destroy({ where: {} });
   await OAuthState.destroy({ where: {} });
   await User.destroy({ where: {} });
@@ -993,3 +995,114 @@ test('manual linked account store and github patch endpoint update student statu
     message: 'Student GitHub link updated successfully',
   });
 });
+
+test('POST /api/v1/groups - unauthenticated request is rejected with 401', async () => {
+  const result = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'My Group' }),
+  });
+
+  assert.equal(result.response.status, 401);
+});
+
+test('POST /api/v1/groups - non-student role is rejected with 403', async () => {
+  const admin = await User.create({
+    email: 'admin-groups@example.com',
+    fullName: 'Admin User',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+    password: 'hashed',
+  });
+
+  const result = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(admin)),
+    },
+    body: JSON.stringify({ name: 'My Group' }),
+  });
+
+  assert.equal(result.response.status, 403);
+});
+
+test('POST /api/v1/groups - invalid/too-short name returns 400 with INVALID_GROUP_NAME', async () => {
+  const student = await User.create({
+    email: 'student-groups@example.edu',
+    fullName: 'Group Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001000',
+  });
+
+  const result = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(student)),
+    },
+    body: JSON.stringify({ name: 'ab' }),
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'INVALID_GROUP_NAME');
+});
+
+test('POST /api/v1/groups - successful creation returns 201 with group data', async () => {
+  const student = await User.create({
+    email: 'student-groups@example.edu',
+    fullName: 'Group Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001000',
+  });
+
+  const result = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(student)),
+    },
+    body: JSON.stringify({ name: 'Awesome Group' }),
+  });
+
+  assert.equal(result.response.status, 201);
+  assert.equal(typeof result.json.id, 'string');
+  assert.equal(result.json.name, 'Awesome Group');
+  assert.equal(result.json.leaderId, student.id);
+  assert.deepEqual(result.json.memberIds, [student.id]);
+});
+
+test('POST /api/v1/groups - duplicate name returns 409 with DUPLICATE_GROUP_NAME', async () => {
+  const student = await User.create({
+    email: 'student-groups@example.edu',
+    fullName: 'Group Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001000',
+  });
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(await authHeaderFor(student)),
+  };
+
+  const first = await request('/api/v1/groups', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ name: 'Unique Group' }),
+  });
+
+  assert.equal(first.response.status, 201);
+
+  const duplicate = await request('/api/v1/groups', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ name: 'Unique Group' }),
+  });
+
+  assert.equal(duplicate.response.status, 409);
+  assert.equal(duplicate.json.code, 'DUPLICATE_GROUP_NAME');
+});
+
