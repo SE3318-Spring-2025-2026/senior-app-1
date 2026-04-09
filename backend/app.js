@@ -7,6 +7,7 @@ const adminRoutes = require('./routes/admin');
 const coordinatorRoutes = require('./routes/coordinator');
 const professorRoutes = require('./routes/professors');
 const studentRoutes = require('./routes/students');
+const invitationRoutes = require('./routes/invitations');
 const passwordSetupTokenStoreRoutes = require('./routes/passwordSetupTokenStore');
 const userDatabaseRoutes = require('./routes/userDatabase');
 
@@ -22,6 +23,7 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/coordinator', coordinatorRoutes);
 app.use('/api/v1/professors', professorRoutes);
 app.use('/api/v1', studentRoutes);
+app.use('/api/v1', invitationRoutes);
 app.use('/api/v1/password-setup-token-store', passwordSetupTokenStoreRoutes);
 app.use('/api/v1/user-database', userDatabaseRoutes);
 

@@ -12,7 +12,15 @@ process.env.GITHUB_CLIENT_SECRET = '';
 const sequelize = require('../db');
 const app = require('../app');
 require('../models');
-const { User, Professor, ValidStudentId, LinkedGitHubAccount, OAuthState } = require('../models');
+const {
+  User,
+  Professor,
+  ValidStudentId,
+  LinkedGitHubAccount,
+  OAuthState,
+  Invitation,
+  AuditLog,
+} = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
 const { createStudent, ensureValidStudentRegistry } = require('../services/studentService');
@@ -53,6 +61,8 @@ test.after(async () => {
 test.beforeEach(async () => {
   await LinkedGitHubAccount.destroy({ where: {} });
   await OAuthState.destroy({ where: {} });
+  await AuditLog.destroy({ where: {} });
+  await Invitation.destroy({ where: {} });
   await User.destroy({ where: {} });
 });
 
@@ -773,6 +783,132 @@ test('coordinator import endpoint requires coordinator role and stores valid stu
   });
 
   assert.equal(forbidden.response.status, 403);
+});
+
+test('invitation response updates status and writes a D6 audit event for accept/reject', async () => {
+  const invitee = await createStudent({
+    studentId: '11070001000',
+    email: 'invitee@example.edu',
+    fullName: 'Invitee Student',
+    password: 'StrongPass1!',
+  });
+
+  const acceptedInvitation = await Invitation.create({
+    groupId: 'grp_accept_001',
+    studentId: invitee.studentId,
+  });
+
+  const acceptResult = await request(`/api/v1/invitations/${acceptedInvitation.id}/respond`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(invitee)),
+    },
+    body: JSON.stringify({ response: 'ACCEPT' }),
+  });
+
+  assert.equal(acceptResult.response.status, 200);
+  assert.equal(acceptResult.json.status, 'ACCEPTED');
+
+  const acceptAudit = await AuditLog.findOne({ where: { targetId: acceptedInvitation.id } });
+  assert.equal(acceptAudit.action, 'INVITE_ACCEPTED');
+  assert.equal(acceptAudit.actorId, invitee.studentId);
+  assert.equal(acceptAudit.metadata.groupId, 'grp_accept_001');
+
+  const rejectedInvitation = await Invitation.create({
+    groupId: 'grp_reject_001',
+    studentId: invitee.studentId,
+  });
+
+  const rejectResult = await request(`/api/v1/invitations/${rejectedInvitation.id}/response`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(invitee)),
+    },
+    body: JSON.stringify({ response: 'REJECT' }),
+  });
+
+  assert.equal(rejectResult.response.status, 200);
+  assert.equal(rejectResult.json.status, 'REJECTED');
+
+  const rejectAudit = await AuditLog.findOne({ where: { targetId: rejectedInvitation.id } });
+  assert.equal(rejectAudit.action, 'INVITE_REJECTED');
+  assert.equal(rejectAudit.actorId, invitee.studentId);
+  assert.equal(rejectAudit.metadata.groupId, 'grp_reject_001');
+});
+
+test('invitation response validates auth/ownership/input and surfaces audit write failures', async () => {
+  const invitee = await createStudent({
+    studentId: '11070001000',
+    email: 'invitee-2@example.edu',
+    fullName: 'Invitee Two',
+    password: 'StrongPass1!',
+  });
+  const otherStudent = await createStudent({
+    studentId: '11070001001',
+    email: 'other-student@example.edu',
+    fullName: 'Other Student',
+    password: 'StrongPass1!',
+  });
+
+  const invitation = await Invitation.create({
+    groupId: 'grp_guard_001',
+    studentId: invitee.studentId,
+  });
+
+  const unauthenticated = await request(`/api/v1/invitations/${invitation.id}/respond`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ response: 'ACCEPT' }),
+  });
+  assert.equal(unauthenticated.response.status, 401);
+
+  const invalidInput = await request(`/api/v1/invitations/${invitation.id}/respond`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(invitee)),
+    },
+    body: JSON.stringify({ response: 'MAYBE' }),
+  });
+  assert.equal(invalidInput.response.status, 400);
+  assert.equal(invalidInput.json.code, 'INVALID_INVITATION_RESPONSE');
+
+  const forbidden = await request(`/api/v1/invitations/${invitation.id}/respond`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(otherStudent)),
+    },
+    body: JSON.stringify({ response: 'ACCEPT' }),
+  });
+  assert.equal(forbidden.response.status, 403);
+  assert.equal(forbidden.json.code, 'INVITATION_FORBIDDEN');
+
+  const originalCreate = AuditLog.create;
+  AuditLog.create = async () => {
+    throw new Error('forced audit failure');
+  };
+
+  try {
+    const auditFailureResult = await request(`/api/v1/invitations/${invitation.id}/respond`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(invitee)),
+      },
+      body: JSON.stringify({ response: 'ACCEPT' }),
+    });
+
+    assert.equal(auditFailureResult.response.status, 500);
+    assert.equal(auditFailureResult.json.code, 'AUDIT_LOG_WRITE_FAILED');
+
+    const reloadedInvitation = await Invitation.findByPk(invitation.id);
+    assert.equal(reloadedInvitation.status, 'PENDING');
+  } finally {
+    AuditLog.create = originalCreate;
+  }
 });
 
 test('student registration validates eligibility, password strength, duplication, and success', async () => {
