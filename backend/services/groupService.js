@@ -62,7 +62,8 @@ class GroupService {
     });
 
     const foundStudentIds = users.map((u) => u.studentId);
-    const missing = studentIds.filter((sid) => !foundStudentIds.includes(sid));
+    const foundSet = new Set(foundStudentIds);
+    const missing = studentIds.filter((sid) => !foundSet.has(sid));
     if (missing.length > 0) {
       const err = new Error('One or more students not found');
       err.code = 'STUDENT_NOT_FOUND';
@@ -75,12 +76,14 @@ class GroupService {
     let invitations;
     try {
       invitations = await Promise.all(
-        users.map((user) =>
-          Invitation.create(
-            { groupId, inviteeId: user.id, status: 'PENDING' },
-            { transaction }
-          )
-        )
+        users.map(async (user) => {
+          const [inv] = await Invitation.findOrCreate({
+            where: { groupId, inviteeId: user.id },
+            defaults: { status: 'PENDING' },
+            transaction,
+          });
+          return inv;
+        })
       );
       await transaction.commit();
     } catch (error) {

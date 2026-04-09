@@ -35,9 +35,10 @@ const handleDispatchInvites = [
       }
 
       if (error.code === 'STUDENT_NOT_FOUND') {
-        return res.status(400).json(
-          buildErrorResponse('One or more students not found', 'STUDENT_NOT_FOUND')
-        );
+        return res.status(400).json({
+          ...buildErrorResponse('One or more students not found', 'STUDENT_NOT_FOUND'),
+          missingStudentIds: error.missing,
+        });
       }
 
       return res.status(500).json(

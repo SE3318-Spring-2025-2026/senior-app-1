@@ -30,6 +30,10 @@ const Invitation = sequelize.define('Invitation', {
     allowNull: false,
     defaultValue: 'PENDING',
   },
+}, {
+  indexes: [
+    { unique: true, fields: ['groupId', 'inviteeId'] },
+  ],
 });
 
 Group.hasMany(Invitation, { foreignKey: 'groupId' });
