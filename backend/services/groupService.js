@@ -1,14 +1,16 @@
 const Group = require('../models/Group');
 const sequelize = require('../db');
+const NotificationService = require('./notificationService');
 
 class GroupService {
   /**
    * Create a new group
    */
-  static async createGroup(groupName, maxMembers) {
+  static async createGroup(groupName, maxMembers, leaderId = null) {
     const group = await Group.create({
       groupName,
       maxMembers,
+      leaderId,
       status: 'FORMATION',
       members: [],
     });
@@ -34,6 +36,7 @@ class GroupService {
   /**
    * Finalize membership - add a student to group with atomic transactions
    * Uses pessimistic locking to prevent race conditions
+   * Emits notification to Team Leader after successful update (fire-and-forget)
    */
   static async finalizeMembership(groupId, studentId) {
     const transaction = await sequelize.transaction();
@@ -85,6 +88,18 @@ class GroupService {
 
       // Commit transaction
       await transaction.commit();
+
+      // Emit notification AFTER successful transaction commit
+      // Fire-and-forget: failures here do not affect the main operation
+      if (group.leaderId) {
+        NotificationService.notifyMembershipAccepted({
+          groupId: group.id,
+          leaderId: group.leaderId,
+          studentId,
+          totalMembers: updatedMembers.length,
+          maxMembers: group.maxMembers,
+        });
+      }
 
       return {
         groupId: group.id,
