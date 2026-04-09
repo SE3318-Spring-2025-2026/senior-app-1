@@ -159,7 +159,164 @@ async function dispatchInvitations(groupId, rawStudentIds, caller) {
   }));
 }
 
+/**
+ * Finalize membership: Add accepted student to group (Data Flow: f11)
+ * Enforces constraints, ensures atomicity, and prevents lost updates
+ */
+async function finalizeMembership(groupId, studentId) {
+  const transaction = await sequelize.transaction();
+
+  try {
+    // Fetch group with row-level locking to prevent concurrent modifications
+    const group = await Group.findByPk(groupId, {
+      transaction,
+      lock: transaction.LOCK.UPDATE, // Pessimistic locking
+    });
+
+    if (!group) {
+      const error = new Error('Group not found');
+      error.code = 'GROUP_NOT_FOUND';
+      error.status = 404;
+      throw error;
+    }
+
+    // Check if student is already a member
+    const currentMembers = group.memberIds || [];
+    if (currentMembers.includes(String(studentId))) {
+      const error = new Error('Student is already a member of this group');
+      error.code = 'DUPLICATE_MEMBER';
+      error.status = 400;
+      throw error;
+    }
+
+    // Add student to memberIds array
+    const updatedMembers = [...currentMembers, String(studentId)];
+
+    // Atomically update database
+    await group.update(
+      {
+        memberIds: updatedMembers,
+        updatedAt: new Date(),
+      },
+      { transaction },
+    );
+
+    // Commit transaction
+    await transaction.commit();
+
+    // Log the membership finalization
+    await AuditLog.create({
+      action: 'MEMBER_ADDED',
+      actorId: group.leaderId,
+      targetId: groupId,
+      targetType: 'GROUP',
+      metadata: { studentId, totalMembers: updatedMembers.length },
+    });
+
+    return {
+      success: true,
+      groupId: group.id,
+      studentId: String(studentId),
+      totalMembers: updatedMembers.length,
+      message: 'Membership finalized successfully',
+    };
+  } catch (error) {
+    // Rollback on any error
+    await transaction.rollback();
+
+    // Re-throw with context
+    if (error.code && error.status) {
+      throw error;
+    }
+
+    const serverError = new Error('Failed to finalize membership');
+    serverError.code = 'FINALIZE_FAILED';
+    serverError.status = 500;
+    serverError.originalError = error;
+    throw serverError;
+  }
+}
+
 module.exports = {
   createShell,
   dispatchInvitations,
+  finalizeMembership,
 };
+      serverError.code = 'FINALIZE_FAILED';
+      serverError.status = 500;
+      serverError.originalError = error;
+      throw serverError;
+    }
+  }
+
+  /**
+   * Retrieve group membership details
+   */
+  async getGroupMembership(groupId) {
+    const group = await Group.findByPk(groupId);
+
+    if (!group) {
+      const error = new Error('Group not found');
+      error.code = 'GROUP_NOT_FOUND';
+      error.status = 404;
+      throw error;
+    }
+
+    return {
+      groupId: group.id,
+      groupName: group.groupName,
+      members: group.members || [],
+      status: group.status,
+      maxMembers: group.maxMembers,
+      currentMemberCount: (group.members || []).length,
+      availableSlots: group.maxMembers - (group.members || []).length,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+  }
+
+  /**
+   * Create a new group
+   */
+  async createGroup(groupName, maxMembers = 5) {
+    try {
+      const group = await Group.create({
+        groupName: groupName || null,
+        maxMembers,
+        members: [],
+        status: 'FORMATION',
+      });
+
+      return {
+        groupId: group.id,
+        groupName: group.groupName,
+        status: group.status,
+        maxMembers: group.maxMembers,
+        members: group.members,
+        createdAt: group.createdAt,
+      };
+    } catch (error) {
+      const serverError = new Error('Failed to create group');
+      serverError.code = 'CREATE_GROUP_FAILED';
+      serverError.status = 500;
+      serverError.originalError = error;
+      throw serverError;
+    }
+  }
+
+  /**
+   * Check if student is member of group
+   */
+  async isStudentMember(groupId, studentId) {
+    const group = await Group.findByPk(groupId);
+
+    if (!group) {
+      return false;
+    }
+
+    return (group.members || []).includes(String(studentId));
+  }
+}
+
+module.exports = new GroupService();
+>>>>>>> e2aa08d (feat: Issue 84 - Finalize Group Membership Write (Data Flow: f11) Backend)
