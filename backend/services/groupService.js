@@ -55,7 +55,7 @@ class GroupService {
     }
   }
 
-  async dispatchInvitations(groupId, rawStudentIds) {
+  async dispatchInvitations(groupId, rawStudentIds, caller) {
     // De-duplicate incoming student IDs
     const studentIds = [...new Set(rawStudentIds)];
 
@@ -64,6 +64,16 @@ class GroupService {
     if (!group) {
       const err = new Error('Group not found');
       err.code = 'GROUP_NOT_FOUND';
+      throw err;
+    }
+
+    // f3 → enforce ownership/role: only the group leader, a coordinator, or an
+    // admin may dispatch invitations on behalf of a group.
+    const isLeader = group.leaderId === caller.id;
+    const isPrivileged = ['COORDINATOR', 'ADMIN'].includes(caller.role);
+    if (!isLeader && !isPrivileged) {
+      const err = new Error('Not authorized to dispatch invitations for this group');
+      err.code = 'FORBIDDEN';
       throw err;
     }
 
@@ -76,7 +86,8 @@ class GroupService {
     });
 
     const foundStudentIds = users.map((u) => u.studentId);
-    const missing = studentIds.filter((sid) => !foundStudentIds.includes(sid));
+    const foundSet = new Set(foundStudentIds);
+    const missing = studentIds.filter((sid) => !foundSet.has(sid));
     if (missing.length > 0) {
       const err = new Error('One or more students not found');
       err.code = 'STUDENT_NOT_FOUND';
@@ -84,17 +95,21 @@ class GroupService {
       throw err;
     }
 
-    // f5 → persist D8 invitations atomically
+    // f5 → persist D8 invitations atomically; findOrCreate ensures idempotency
+    // — re-dispatching to an existing invitee returns the existing record
+    // instead of crashing on the unique constraint.
     const transaction = await sequelize.transaction();
     let invitations;
     try {
       invitations = await Promise.all(
-        users.map((user) =>
-          Invitation.create(
-            { groupId, inviteeId: user.id, status: 'PENDING' },
-            { transaction }
-          )
-        )
+        users.map(async (user) => {
+          const [inv] = await Invitation.findOrCreate({
+            where: { groupId, inviteeId: user.id },
+            defaults: { status: 'PENDING' },
+            transaction,
+          });
+          return inv;
+        })
       );
       await transaction.commit();
     } catch (error) {
