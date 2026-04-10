@@ -6,6 +6,7 @@ import AuthGatewayPage from './AuthGatewayPage';
 import CoordinatorHomePage from './CoordinatorHomePage';
 import CoordinatorLoginPage from './CoordinatorLoginPage';
 import CoordinatorStudentIdUploadPage from './CoordinatorStudentIdUploadPage';
+import CoordinatorGroupMembershipPage from './CoordinatorGroupMembershipPage';
 import ProfessorLoginPage from './ProfessorLoginPage';
 import ProfessorPasswordSetupPage from './ProfessorPasswordSetupPage';
 import Register from './Register';
@@ -33,6 +34,7 @@ export default function App() {
               <Route path="/coordinator/login" element={<CoordinatorLoginPage />} />
               <Route path="/coordinator" element={<CoordinatorHomePage />} />
               <Route path="/coordinator/student-id-registry/import" element={<CoordinatorStudentIdUploadPage />} />
+              <Route path="/coordinator/groups/membership" element={<CoordinatorGroupMembershipPage />} />
               <Route path="*" element={<AuthGatewayPage />} />
             </Route>
           </Routes>

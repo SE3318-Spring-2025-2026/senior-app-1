@@ -343,6 +343,41 @@ textarea {
   border-color: var(--accent);
 }
 
+.field--inline {
+  border: 0;
+  padding: 0;
+  margin: 0 0 16px;
+}
+
+.field--inline legend {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.field--inline .radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 20px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.membership-preview {
+  margin: 12px 0 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  text-align: left;
+  overflow: auto;
+  max-height: 280px;
+  background: rgba(31, 42, 31, 0.06);
+  border: 1px solid var(--line);
+}
+
 button {
   width: 100%;
   border: 0;
