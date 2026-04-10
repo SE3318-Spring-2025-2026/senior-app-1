@@ -1,0 +1,4 @@
+const invitationRoutes = require('./routes/invitationRoutes');
+
+// Diğer route'ların yanına ekle
+app.use('/api/invitations', invitationRoutes);
