@@ -28,6 +28,8 @@ const AuditLog = sequelize.define('AuditLog', {
     type: DataTypes.JSON,
     allowNull: true,
   },
+}, {
+  timestamps: false,
 });
 
 module.exports = AuditLog;

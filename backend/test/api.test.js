@@ -551,7 +551,7 @@ test('internal professor password update requires admin auth and activates the p
   });
 });
 
-test('coordinator can update group membership and writes f21 audit logs', async () => {
+test('coordinator can update group membership and creates audit log entries', async () => {
   const coordinator = await User.create({
     email: 'coord-edit@example.edu',
     fullName: 'Coordinator Editor',
@@ -609,7 +609,7 @@ test('coordinator can update group membership and writes f21 audit logs', async 
   assert.deepEqual(removeAudit.metadata.updatedMemberIds, ['11070001001']);
 });
 
-test('coordinator membership edit enforces auth and surfaces audit failures without silent drops', async () => {
+test('coordinator membership edit enforces auth and surfaces audit failures without silent drops', async (t) => {
   const coordinator = await User.create({
     email: 'coord-guard@example.edu',
     fullName: 'Coordinator Guard',
@@ -667,29 +667,24 @@ test('coordinator membership edit enforces auth and surfaces audit failures with
   assert.equal(notFound.response.status, 404);
   assert.equal(notFound.json.code, 'GROUP_NOT_FOUND');
 
-  const originalCreate = AuditLog.create;
-  AuditLog.create = async () => {
+  t.mock.method(AuditLog, 'create', async () => {
     throw new Error('forced audit failure');
-  };
+  });
 
-  try {
-    const auditFailure = await request(`/api/v1/coordinator/groups/${group.id}/members`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(await authHeaderFor(coordinator)),
-      },
-      body: JSON.stringify({ action: 'ADD', studentId: '11070001001' }),
-    });
+  const auditFailure = await request(`/api/v1/coordinator/groups/${group.id}/members`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({ action: 'ADD', studentId: '11070001001' }),
+  });
 
-    assert.equal(auditFailure.response.status, 500);
-    assert.equal(auditFailure.json.code, 'AUDIT_LOG_WRITE_FAILED');
+  assert.equal(auditFailure.response.status, 500);
+  assert.equal(auditFailure.json.code, 'AUDIT_LOG_WRITE_FAILED');
 
-    const reloadedGroup = await Group.findByPk(group.id);
-    assert.deepEqual(reloadedGroup.memberIds, ['11070001000']);
-  } finally {
-    AuditLog.create = originalCreate;
-  }
+  const reloadedGroup = await Group.findByPk(group.id);
+  assert.deepEqual(reloadedGroup.memberIds, ['11070001000']);
 });
 
 test('student registration validates eligibility, password strength, duplication, and success', async () => {
