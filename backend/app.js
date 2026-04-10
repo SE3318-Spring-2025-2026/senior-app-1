@@ -13,7 +13,11 @@ const userDatabaseRoutes = require('./routes/userDatabase');
 const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 
-app.use(express.json());
+app.use(express.json()); // ← buraya taşı
+
+const invitationRoutes = require('./routes/invitationRoutes');
+app.use('/api/invitations', invitationRoutes);
+
 if (fs.existsSync(frontendDistPath)) {
   app.use(express.static(frontendDistPath));
 }
