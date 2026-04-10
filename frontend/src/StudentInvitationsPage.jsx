@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useNotification } from './contexts/NotificationContext';
 import { useStudentInvitations } from './hooks/useStudentInvitations';
+
+const LS_KEY = 'invite_notifications';
 
 function InvitationCard({ invitation, respondingId, responseErrors, onRespond }) {
   const isResponding = respondingId === invitation.id;
@@ -51,11 +54,33 @@ export default function StudentInvitationsPage() {
     respondToInvitation,
   } = useStudentInvitations();
 
+  const { notify } = useNotification();
+
   // Transient success banner shown after each resolved invitation.
   const [lastResolved, setLastResolved] = useState(null);
 
   useEffect(() => {
     fetchInvitations();
+
+    // Mock push: drain localStorage entries written by InviteMembersSection.
+    // Each entry represents one invitation dispatched by a Team Leader.
+    // Fire one toast per entry so the student sees "New Invitation Received!" for each group.
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) {
+        const entries = JSON.parse(raw);
+        entries.forEach((entry) => {
+          notify({
+            type: 'info',
+            title: 'New Invitation Received!',
+            message: `You have been invited to join ${entry.groupName}. See your pending invitations below.`,
+          });
+        });
+        localStorage.removeItem(LS_KEY);
+      }
+    } catch {
+      // Ignore malformed localStorage data
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
