@@ -886,6 +886,33 @@ test('invitation response validates auth/ownership/input and surfaces audit writ
   assert.equal(forbidden.response.status, 403);
   assert.equal(forbidden.json.code, 'INVITATION_FORBIDDEN');
 
+  const notFound = await request('/api/v1/invitations/00000000-0000-0000-0000-000000000000/respond', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(invitee)),
+    },
+    body: JSON.stringify({ response: 'ACCEPT' }),
+  });
+  assert.equal(notFound.response.status, 404);
+  assert.equal(notFound.json.code, 'INVITATION_NOT_FOUND');
+
+  const alreadyProcessed = await Invitation.create({
+    groupId: 'grp_guard_002',
+    studentId: invitee.studentId,
+    status: 'ACCEPTED',
+  });
+  const alreadyResponded = await request(`/api/v1/invitations/${alreadyProcessed.id}/respond`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(invitee)),
+    },
+    body: JSON.stringify({ response: 'REJECT' }),
+  });
+  assert.equal(alreadyResponded.response.status, 409);
+  assert.equal(alreadyResponded.json.code, 'INVITATION_ALREADY_RESPONDED');
+
   const originalCreate = AuditLog.create;
   AuditLog.create = async () => {
     throw new Error('forced audit failure');

@@ -41,12 +41,17 @@ async function processInviteeResponse(invitationId, response, actor) {
       throw createServiceError(403, 'INVITATION_FORBIDDEN', 'This invitation does not belong to the authenticated student.');
     }
 
-    if (invitation.status !== 'PENDING') {
-      throw createServiceError(400, 'INVITATION_ALREADY_RESPONDED', 'Invitation has already been processed.');
+    const newStatus = normalizedResponse === 'ACCEPT' ? 'ACCEPTED' : 'REJECTED';
+    const [affectedRows] = await Invitation.update(
+      { status: newStatus },
+      { where: { id: invitationId, studentId: actor.studentId, status: 'PENDING' }, transaction },
+    );
+
+    if (affectedRows === 0) {
+      throw createServiceError(409, 'INVITATION_ALREADY_RESPONDED', 'Invitation has already been processed.');
     }
 
-    invitation.status = normalizedResponse === 'ACCEPT' ? 'ACCEPTED' : 'REJECTED';
-    await invitation.save({ transaction });
+    await invitation.reload({ transaction });
 
     try {
       await AuditLog.create(
