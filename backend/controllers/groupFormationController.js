@@ -29,6 +29,7 @@ const handleCreateGroup = [
         });
       }
 
+      console.error('Group creation failed unexpectedly:', error);
       return res.status(500).json({
         code: 'GROUP_CREATION_FAILED',
         message: 'Group could not be created.',
