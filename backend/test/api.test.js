@@ -1072,6 +1072,10 @@ test('POST /api/v1/groups - successful creation returns 201 with group data', as
   assert.equal(result.json.name, 'Awesome Group');
   assert.equal(result.json.leaderId, student.id);
   assert.deepEqual(result.json.memberIds, [student.id]);
+
+  const auditLog = await AuditLog.findOne({ where: { action: 'GROUP_CREATED', targetId: result.json.id } });
+  assert.ok(auditLog, 'AuditLog entry should be created for group creation');
+  assert.equal(auditLog.actorId, String(student.id));
 });
 
 test('POST /api/v1/groups - duplicate name returns 409 with DUPLICATE_GROUP_NAME', async () => {
