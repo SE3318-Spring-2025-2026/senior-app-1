@@ -32,6 +32,21 @@ function buildProfessorPasswordUpdateError(field) {
   }
 }
 
+function buildValidStudentIdImportError(field) {
+  switch (field) {
+    case 'studentIds':
+      return {
+        code: 'INVALID_VALID_STUDENT_IDS_INPUT',
+        message: 'studentIds must be a non-empty array.',
+      };
+    default:
+      return {
+        code: 'INVALID_VALID_STUDENT_IDS_INPUT',
+        message: 'Valid student ID import input is invalid.',
+      };
+  }
+}
+
 const createProfessorRecord = [
   body('email').isEmail().normalizeEmail(),
   body('fullName').notEmpty().trim(),
@@ -152,8 +167,30 @@ const updateProfessorPassword = [
   },
 ];
 
+const importValidStudentIds = [
+  body('studentIds').isArray({ min: 1 }),
+
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json(buildValidStudentIdImportError(errors.array()[0].path));
+    }
+
+    const { insertedCount, duplicateCount, invalidFormatCount } =
+      await studentService.bulkStoreValidStudentIds(req.body.studentIds);
+
+    return res.status(201).json({
+      insertedCount,
+      duplicateCount,
+      invalidFormatCount,
+      message: 'Valid student IDs processed successfully.',
+    });
+  },
+];
+
 module.exports = {
   createProfessorRecord,
   createStudentRecord,
+  importValidStudentIds,
   updateProfessorPassword,
 };

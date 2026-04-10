@@ -1,4 +1,6 @@
+const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
+const jwt = require('jsonwebtoken');
 const githubLinkService = require('../services/githubLinkService');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
@@ -37,6 +39,17 @@ function buildRegistrationValidationError(field) {
       };
     default:
       return { code: 'INVALID_REGISTRATION_INPUT', message: 'Registration input is invalid.' };
+  }
+}
+
+function buildStudentLoginError(field) {
+  switch (field) {
+    case 'studentId':
+      return { code: 'INVALID_STUDENT_ID', message: 'Student ID must be an 11-digit number.' };
+    case 'password':
+      return { code: 'INVALID_PASSWORD', message: 'Password is required.' };
+    default:
+      return { code: 'INVALID_LOGIN_INPUT', message: 'Student login input is invalid.' };
   }
 }
 
@@ -126,6 +139,62 @@ const registerStudent = [
 
       throw error;
     }
+  },
+];
+
+const loginStudent = [
+  body('studentId').isString().trim().matches(/^[0-9]{11}$/),
+  body('password').isString().notEmpty(),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json(buildStudentLoginError(errors.array()[0].path));
+    }
+
+    const { studentId, password } = req.body;
+
+    if (!(await studentService.isStudentIdEligible(studentId))) {
+      return res.status(403).json({
+        code: 'STUDENT_NOT_ELIGIBLE',
+        message: 'Student ID is not eligible for login.',
+      });
+    }
+
+    const student = await studentService.getStudentByStudentId(studentId);
+    if (!student || student.status !== 'ACTIVE' || !student.passwordHash) {
+      return res.status(401).json({
+        code: 'INVALID_CREDENTIALS',
+        message: 'Invalid student ID or password.',
+      });
+    }
+
+    const passwordMatches = await bcrypt.compare(password, student.passwordHash);
+    if (!passwordMatches) {
+      return res.status(401).json({
+        code: 'INVALID_CREDENTIALS',
+        message: 'Invalid student ID or password.',
+      });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({
+        message: 'JWT secret is not configured.',
+        code: 'JWT_SECRET_MISSING',
+      });
+    }
+
+    const token = jwt.sign({ id: student.id, role: student.role }, process.env.JWT_SECRET);
+    return res.status(200).json({
+      token,
+      user: {
+        id: student.id,
+        studentId: student.studentId,
+        fullName: student.fullName,
+        email: student.email,
+        role: student.role,
+      },
+      message: 'Student login successful.',
+    });
   },
 ];
 
@@ -276,7 +345,8 @@ async function handleGitHubCallback(req, res) {
   } catch (error) {
     const status = (
       error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED' ||
-      error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT'
+      error.code === 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT' ||
+      error.code === 'GITHUB_RELINK_NOT_ALLOWED'
     ) ? 409 : 500;
 
     if (shouldRedirectToFrontend(req)) {
@@ -341,6 +411,13 @@ const storeLinkedGitHubAccount = [
         });
       }
 
+      if (error.code === 'GITHUB_RELINK_NOT_ALLOWED') {
+        return res.status(409).json({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
       return res.status(500).json({
         code: 'LINK_UPDATE_FAILED',
         message: 'Student GitHub link could not be updated.',
@@ -352,6 +429,7 @@ const storeLinkedGitHubAccount = [
 module.exports = {
   getStudentValidation,
   handleGitHubCallback,
+  loginStudent,
   registerStudent,
   registerStudentValidation,
   startGitHubLink,

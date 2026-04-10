@@ -12,7 +12,7 @@ process.env.GITHUB_CLIENT_SECRET = '';
 const sequelize = require('../db');
 const app = require('../app');
 require('../models');
-const { User, Professor, LinkedGitHubAccount, OAuthState } = require('../models');
+const { User, Professor, ValidStudentId, LinkedGitHubAccount, OAuthState } = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
 const { createStudent, ensureValidStudentRegistry } = require('../services/studentService');
@@ -54,6 +54,175 @@ test.beforeEach(async () => {
   await LinkedGitHubAccount.destroy({ where: {} });
   await OAuthState.destroy({ where: {} });
   await User.destroy({ where: {} });
+});
+
+test('admin can log in with email and password', async () => {
+  const password = 'AdminPass2026!';
+
+  await User.create({
+    email: 'admin@example.com',
+    fullName: 'Admin User',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+    password: await bcrypt.hash(password, 10),
+  });
+
+  const successResult = await request('/api/v1/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@example.com',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'ADMIN');
+
+  const invalidResult = await request('/api/v1/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@example.com',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidResult.response.status, 401);
+  assert.equal(invalidResult.json.code, 'INVALID_CREDENTIALS');
+});
+
+test('coordinator can log in with email and password', async () => {
+  const password = 'CoordinatorPass2026!';
+
+  await User.create({
+    email: 'coordinator-login@example.com',
+    fullName: 'Coordinator Login',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash(password, 10),
+  });
+
+  const successResult = await request('/api/v1/coordinator/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'coordinator-login@example.com',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'COORDINATOR');
+
+  const invalidResult = await request('/api/v1/coordinator/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'coordinator-login@example.com',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidResult.response.status, 401);
+  assert.equal(invalidResult.json.code, 'INVALID_CREDENTIALS');
+});
+
+test('student can log in with student ID and password only when the student ID is eligible', async () => {
+  const password = 'StrongPass1!';
+
+  await createStudent({
+    studentId: '11070001000',
+    email: 'student-login@example.edu',
+    fullName: 'Student Login',
+    password,
+  });
+
+  const successResult = await request('/api/v1/students/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001000',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'STUDENT');
+  assert.equal(successResult.json.user.studentId, '11070001000');
+
+  const wrongPassword = await request('/api/v1/students/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001000',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(wrongPassword.response.status, 401);
+  assert.equal(wrongPassword.json.code, 'INVALID_CREDENTIALS');
+
+  await User.create({
+    email: 'ineligible-login@example.edu',
+    fullName: 'Ineligible Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001999',
+    passwordHash: await bcrypt.hash(password, 10),
+  });
+
+  const ineligibleResult = await request('/api/v1/students/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001999',
+      password,
+    }),
+  });
+
+  assert.equal(ineligibleResult.response.status, 403);
+  assert.equal(ineligibleResult.json.code, 'STUDENT_NOT_ELIGIBLE');
+});
+
+test('professor can log in with email and chosen password after setup', async () => {
+  const password = 'StrongPass1!';
+
+  await User.create({
+    email: 'prof-login@example.edu',
+    fullName: 'Professor Login',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash(password, 10),
+  });
+
+  const successResult = await request('/api/v1/professors/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'prof-login@example.edu',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'PROFESSOR');
+
+  const invalidResult = await request('/api/v1/professors/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'prof-login@example.edu',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidResult.response.status, 401);
+  assert.equal(invalidResult.json.errorCode, 'INVALID_CREDENTIALS');
 });
 
 test('admin can register professor and duplicate email returns 409', async () => {
@@ -143,6 +312,57 @@ test('professor can set an initial password with a valid setup token', async () 
   assert.equal(typeof updatedProfessorUser.password, 'string');
   assert.equal(updatedProfessorUser.passwordSetupTokenHash, null);
   assert.equal(updatedProfessorUser.passwordSetupTokenExpiresAt, null);
+});
+
+test('professor can set an initial password with email while setup is pending', async () => {
+  await User.create({
+    email: 'emailsetup@example.edu',
+    fullName: 'Email Setup Professor',
+    role: 'PROFESSOR',
+    status: 'PASSWORD_SETUP_REQUIRED',
+  });
+
+  const invalidPassword = await request('/api/v1/professors/password-setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'emailsetup@example.edu',
+      newPassword: 'weak',
+    }),
+  });
+
+  assert.equal(invalidPassword.response.status, 422);
+
+  const successResult = await request('/api/v1/professors/password-setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'emailsetup@example.edu',
+      newPassword: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(successResult.json.message, 'Password set successfully');
+
+  const updatedProfessorUser = await User.findOne({
+    where: { email: 'emailsetup@example.edu' },
+  });
+
+  assert.equal(updatedProfessorUser.status, 'ACTIVE');
+  assert.equal(typeof updatedProfessorUser.password, 'string');
+
+  const repeatedAttempt = await request('/api/v1/professors/password-setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'emailsetup@example.edu',
+      newPassword: 'AnotherStrong1!',
+    }),
+  });
+
+  assert.equal(repeatedAttempt.response.status, 409);
+  assert.equal(repeatedAttempt.json.errorCode, 'PROFESSOR_SETUP_ALREADY_COMPLETED');
 });
 
 test('password setup token verification enforces admin auth and returns valid true or false correctly', async () => {
@@ -353,6 +573,7 @@ test('internal professor record endpoint requires admin auth, persists record, a
   const professorRecord = await Professor.findByPk(created.json.professorId);
   assert.equal(professorRecord.userId, created.json.userId);
   assert.equal(professorRecord.department, 'Software Engineering');
+  assert.equal(professorRecord.fullName, 'Internal Professor');
 
   const duplicate = await request('/api/v1/user-database/professors', {
     method: 'POST',
@@ -460,7 +681,115 @@ test('internal professor password update requires admin auth and activates the p
   });
 });
 
+test('admin can bulk store valid student IDs and receives inserted, duplicate, and invalid counts', async () => {
+  const admin = await User.create({
+    email: 'valid-id-admin@example.edu',
+    fullName: 'Valid ID Admin',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+
+  const response = await request('/api/v1/user-database/valid-student-ids', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(admin)),
+    },
+    body: JSON.stringify({
+      studentIds: [
+        '22070001000',
+        '22070001000',
+        '22070001001',
+        '11070001000',
+        'invalid-id',
+        '2207',
+      ],
+    }),
+  });
+
+  assert.equal(response.response.status, 201);
+  assert.deepEqual(response.json, {
+    insertedCount: 2,
+    duplicateCount: 2,
+    invalidFormatCount: 2,
+    message: 'Valid student IDs processed successfully.',
+  });
+
+  const storedIds = await ValidStudentId.findAll({
+    where: {
+      studentId: ['22070001000', '22070001001'],
+    },
+  });
+
+  assert.equal(storedIds.length, 2);
+});
+
+test('coordinator import endpoint requires coordinator role and stores valid student IDs', async () => {
+  const coordinator = await User.create({
+    email: 'coordinator@example.edu',
+    fullName: 'Coordinator User',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+  });
+
+  const coordinatorResponse = await request('/api/v1/coordinator/student-id-registry/import', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({
+      studentIds: ['33070001000', 'bad-value'],
+    }),
+  });
+
+  assert.equal(coordinatorResponse.response.status, 201);
+  assert.deepEqual(coordinatorResponse.json, {
+    insertedCount: 1,
+    duplicateCount: 0,
+    invalidFormatCount: 1,
+    message: 'Valid student IDs processed successfully.',
+  });
+
+  const storedId = await ValidStudentId.findByPk('33070001000');
+  assert.equal(storedId.studentId, '33070001000');
+
+  const admin = await User.create({
+    email: 'not-coordinator@example.edu',
+    fullName: 'Not Coordinator',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+
+  const forbidden = await request('/api/v1/coordinator/student-id-registry/import', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(admin)),
+    },
+    body: JSON.stringify({
+      studentIds: ['33070001001'],
+    }),
+  });
+
+  assert.equal(forbidden.response.status, 403);
+});
+
 test('student registration validates eligibility, password strength, duplication, and success', async () => {
+  const invalidStudentId = await request('/api/v1/students/registration-validation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001',
+      email: 'invalid-id@example.edu',
+      fullName: 'Invalid Id',
+      password: 'StrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidStudentId.response.status, 400);
+  assert.equal(invalidStudentId.json.code, 'INVALID_STUDENT_ID');
+
   const weakPassword = await request('/api/v1/students/registration-validation', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -698,6 +1027,21 @@ test('student register creates account after validation passes', async () => {
 test('student registration service validates data before creating the account', async () => {
   await assert.rejects(
     studentRegistrationService.validateRegistrationDetails({
+      studentId: '11070001',
+      email: 'student6@example.edu',
+      fullName: 'Invalid Format',
+      password: 'StrongPass1!',
+    }),
+    (error) => {
+      assert.ok(error instanceof StudentRegistrationError);
+      assert.equal(error.status, 400);
+      assert.equal(error.code, 'INVALID_STUDENT_ID');
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    studentRegistrationService.validateRegistrationDetails({
       studentId: '11070001999',
       email: 'student5@example.edu',
       fullName: 'Invalid Registry',
@@ -859,6 +1203,19 @@ test('manual linked account store and github patch endpoint update student statu
 
   assert.equal(storeResult.response.status, 200);
   assert.equal(storeResult.json.linked, true);
+
+  const relinkAttempt = await request('/api/v1/linked-github-account-store/links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001001',
+      githubId: '87654321',
+      githubUsername: 'student-gh-second',
+    }),
+  });
+
+  assert.equal(relinkAttempt.response.status, 409);
+  assert.equal(relinkAttempt.json.code, 'GITHUB_RELINK_NOT_ALLOWED');
 
   const patchResult = await request('/api/v1/user-database/students/11070001001/github-link', {
     method: 'PATCH',
