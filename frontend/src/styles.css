@@ -520,3 +520,55 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* Field Error Styles */
+.field input[aria-invalid="true"],
+.field select[aria-invalid="true"],
+.field textarea[aria-invalid="true"] {
+  border-color: #dc2626;
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.field input[aria-invalid="true"]:focus,
+.field select[aria-invalid="true"]:focus,
+.field textarea[aria-invalid="true"]:focus {
+  outline: 2px solid rgba(220, 38, 38, 0.2);
+  border-color: #dc2626;
+}
+
+.field-error {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: rgba(220, 38, 38, 0.08);
+  border-left: 3px solid #dc2626;
+  border-radius: 4px;
+}
+
+.field-error p {
+  margin: 4px 0;
+  font-size: 0.85rem;
+  color: #991b1b;
+  line-height: 1.4;
+}
+
+.field-error p:first-child {
+  margin-top: 0;
+}
+
+.field-error p:last-child {
+  margin-bottom: 0;
+}
+
+.field select {
+  width: 100%;
+  border: 1px solid rgba(31, 42, 31, 0.14);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink);
+}
+
+.field select:focus {
+  outline: 2px solid rgba(15, 118, 110, 0.2);
+  border-color: var(--accent);
+}
