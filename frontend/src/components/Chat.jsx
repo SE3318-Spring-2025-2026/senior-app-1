@@ -15,7 +15,7 @@ const Chat = () => {
 
     setLoading(true);
     try {
-      const res = await apiClient.post('/ai/chat', { model, message });
+      const res = await apiClient.post('/v1/ai/chat', { model, message });
       setResponse(res.data.response);
     } catch (error) {
       setResponse('Error: ' + (error.mappedError?.title || 'Failed to get response'));

@@ -6,13 +6,13 @@ const { authenticate } = require('../middleware/auth');
 const router = express.Router();
 
 // Initialize clients (add API keys to .env)
-const anthropic = new Anthropic({
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-});
+}) : null;
 
-const openai = new OpenAI({
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-});
+}) : null;
 
 // Chat endpoint - requires authentication
 router.post('/chat', authenticate, async (req, res) => {
@@ -26,6 +26,9 @@ router.post('/chat', authenticate, async (req, res) => {
     let response;
 
     if (model === 'opus') {
+      if (!anthropic) {
+        return res.status(500).json({ error: 'Anthropic API key not configured' });
+      }
       // Use Anthropic Claude Opus
       const result = await anthropic.messages.create({
         model: 'claude-3-opus-20240229', // Opus 4.6 equivalent
@@ -34,6 +37,9 @@ router.post('/chat', authenticate, async (req, res) => {
       });
       response = result.content[0].text;
     } else if (model === 'gpt') {
+      if (!openai) {
+        return res.status(500).json({ error: 'OpenAI API key not configured' });
+      }
       // Use OpenAI GPT
       const result = await openai.chat.completions.create({
         model: 'gpt-4', // GPT-4 (5.4 not available yet, use latest)
