@@ -84,8 +84,9 @@ async function createShell(name, leaderId) {
     await AuditLog.create(
       {
         action: 'GROUP_CREATED',
-        actorId: String(leaderId),
+        actorId: leaderId,
         targetId: group.id,
+        targetType: 'GROUP',
         metadata: { groupName: sanitizedName },
       },
       { transaction },
@@ -95,13 +96,23 @@ async function createShell(name, leaderId) {
   });
 }
 
-async function dispatchInvitations(groupId, rawStudentIds) {
+async function dispatchInvitations(groupId, rawStudentIds, caller) {
   const studentIds = [...new Set(rawStudentIds)];
 
   const group = await Group.findByPk(groupId);
   if (!group) {
     const err = new Error('Group not found');
     err.code = 'GROUP_NOT_FOUND';
+    throw err;
+  }
+
+  // enforce ownership/role: only the group leader, a coordinator, or an admin
+  // may dispatch invitations on behalf of a group.
+  const isLeader = group.leaderId === caller.id;
+  const isPrivileged = ['COORDINATOR', 'ADMIN'].includes(caller.role);
+  if (!isLeader && !isPrivileged) {
+    const err = new Error('Not authorized to dispatch invitations for this group');
+    err.code = 'FORBIDDEN';
     throw err;
   }
 
