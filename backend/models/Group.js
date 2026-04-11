@@ -14,6 +14,11 @@ const Group = sequelize.define('Group', {
       len: [1, 255],
     },
   },
+  leaderId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'ID of the team leader who created the group',
+  },
   members: {
     type: DataTypes.JSON,
     allowNull: false,

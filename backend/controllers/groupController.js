@@ -28,8 +28,10 @@ exports.createGroup = async (req, res) => {
     }
 
     const { groupName, maxMembers } = req.body;
+    // Get authenticated user as the leader (if available from auth middleware)
+    const leaderId = req.user?.id || null;
 
-    const group = await GroupService.createGroup(groupName, maxMembers);
+    const group = await GroupService.createGroup(groupName, maxMembers, leaderId);
 
     res.status(201).json({
       code: 'SUCCESS',
@@ -37,6 +39,7 @@ exports.createGroup = async (req, res) => {
       data: {
         groupId: group.id,
         groupName: group.groupName,
+        leaderId: group.leaderId,
         maxMembers: group.maxMembers,
         status: group.status,
         members: group.members,
