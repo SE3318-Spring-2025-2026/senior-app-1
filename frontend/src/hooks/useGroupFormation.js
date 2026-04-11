@@ -1,5 +1,37 @@
 import { useState } from 'react';
 
+// Mock: simulates POST /groups/{groupId}/invitations.
+// Replace with apiClient.post(`/v1/groups/${groupId}/invitations`, { studentIds }) when ready.
+// Trigger the 400 path by including an ID that is exactly "error_id" or starts with "invalid".
+function mockPostInvitations(groupId, studentIds) {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      const failures = studentIds
+        .filter((id) => id === 'error_id' || id.toLowerCase().startsWith('invalid'))
+        .map((id) => ({ studentId: id, reason: 'Student not found or is ineligible.' }));
+
+      if (failures.length > 0) {
+        const err = new Error('Some student IDs failed validation.');
+        err.response = {
+          status: 400,
+          data: { message: err.message, code: 'VALIDATION_FAILED', failures },
+        };
+        return reject(err);
+      }
+
+      const invitations = studentIds.map((id) => ({
+        id: crypto.randomUUID(),
+        groupId,
+        studentId: id,
+        status: 'PENDING',
+        createdAt: new Date().toISOString(),
+      }));
+
+      resolve({ data: invitations, status: 201 });
+    }, 800);
+  });
+}
+
 // Mock: simulates POST /groups. Replace the body of the try-block with a real
 // apiClient.post('/v1/groups', { name }) call once the backend is ready.
 function mockPostGroup(name) {
@@ -46,6 +78,10 @@ export function useGroupFormation() {
   const [group, setGroup] = useState(null);
   const [error, setError] = useState(null);
 
+  const [invitesPending, setInvitesPending] = useState(false);
+  const [invitations, setInvitations] = useState([]);
+  const [inviteError, setInviteError] = useState(null);
+
   async function createGroupShell(name) {
     setPending(true);
     setError(null);
@@ -69,10 +105,51 @@ export function useGroupFormation() {
     }
   }
 
+  // Simulates POST /groups/{groupId}/invitations.
+  // studentIds must be a de-duped, trimmed string[].
+  async function dispatchInvites(groupId, studentIds) {
+    setInvitesPending(true);
+    setInviteError(null);
+
+    try {
+      const result = await mockPostInvitations(groupId, studentIds);
+      setInvitations((prev) => [...prev, ...result.data]);
+      return result.data;
+    } catch (err) {
+      const status = err.response?.status;
+      const data = err.response?.data;
+
+      if (status === 400) {
+        setInviteError({
+          type: 'validation',
+          message: data?.message || 'Validation failed.',
+          failures: data?.failures ?? [],
+        });
+      } else {
+        setInviteError({ type: 'unexpected', message: 'Something went wrong. Please try again.' });
+      }
+      throw err;
+    } finally {
+      setInvitesPending(false);
+    }
+  }
+
   function reset() {
     setGroup(null);
     setError(null);
+    setInvitations([]);
+    setInviteError(null);
   }
 
-  return { createGroupShell, pending, group, error, reset };
+  return {
+    createGroupShell,
+    pending,
+    group,
+    error,
+    reset,
+    dispatchInvites,
+    invitesPending,
+    invitations,
+    inviteError,
+  };
 }

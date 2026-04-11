@@ -1,9 +1,20 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import InviteMembersSection from './components/InviteMembersSection';
 import { useGroupFormation } from './hooks/useGroupFormation';
 
 export default function GroupFormationPage() {
-  const { createGroupShell, pending, group, error, reset } = useGroupFormation();
+  const {
+    createGroupShell,
+    pending,
+    group,
+    error,
+    reset,
+    dispatchInvites,
+    invitesPending,
+    invitations,
+    inviteError,
+  } = useGroupFormation();
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
 
@@ -43,13 +54,31 @@ export default function GroupFormationPage() {
       </p>
 
       {group && !showForm && (
-        <section className="panel">
-          <section className="feedback feedback-success" aria-live="polite">
-            <p className="feedback-label">Group Created</p>
-            <h2>{group.name}</h2>
-            <p>Your group shell has been created. You are now the Team Leader.</p>
+        <>
+          <section className="panel">
+            <section className="feedback feedback-success" aria-live="polite">
+              <p className="feedback-label">Group Created</p>
+              <h2>{group.name}</h2>
+              <p>Your group shell has been created. You are now the Team Leader.</p>
+            </section>
           </section>
-        </section>
+
+          <section className="hero">
+            <h2>Invite Members</h2>
+            <p className="subtitle">
+              Send invitations to students by entering their IDs below. Each student will receive a
+              pending invitation they can accept or decline.
+            </p>
+          </section>
+
+          <InviteMembersSection
+            group={group}
+            dispatchInvites={dispatchInvites}
+            invitesPending={invitesPending}
+            invitations={invitations}
+            inviteError={inviteError}
+          />
+        </>
       )}
 
       {!group && !showForm && (
