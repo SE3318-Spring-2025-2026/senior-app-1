@@ -33,20 +33,16 @@ const Invitation = sequelize.define(
       defaultValue: 'PENDING',
     },
   },
-  {
-    indexes: [
-      {
-        // Duplicate-prevention: one active invitation per (group, invitee) pair.
-        // Strategy: DB unique constraint → SequelizeUniqueConstraintError → 400.
-        // Chosen over pre-check to avoid TOCTOU races; over ignore-duplicates to
-        // give callers a deterministic, actionable error.
-        unique: true,
-        fields: ['groupId', 'inviteeId'],
-        name: 'invitations_groupId_inviteeId_unique',
-      },
-    ],
-  }
-);
+  status: {
+    type: DataTypes.ENUM('PENDING', 'ACCEPTED', 'REJECTED'),
+    allowNull: false,
+    defaultValue: 'PENDING',
+  },
+}, {
+  indexes: [
+    { unique: true, fields: ['groupId', 'inviteeId'] },
+  ],
+});
 
 Group.hasMany(Invitation, { foreignKey: 'groupId' });
 Invitation.belongsTo(Group, { foreignKey: 'groupId' });
