@@ -61,7 +61,7 @@ const handleDispatchInvites = [
     const { studentIds } = req.body;
 
     try {
-      const invitations = await groupService.dispatchInvitations(groupId, studentIds);
+      const invitations = await groupService.dispatchInvitations(groupId, studentIds, req.user);
       return res.status(201).json(invitations);
     } catch (error) {
       if (error.code === 'GROUP_NOT_FOUND') {
@@ -70,11 +70,26 @@ const handleDispatchInvites = [
         );
       }
 
+      if (error.code === 'FORBIDDEN') {
+        return res.status(403).json(
+          buildErrorResponse('Not authorized to dispatch invitations for this group', 'FORBIDDEN')
+        );
+      }
+
       if (error.code === 'STUDENT_NOT_FOUND') {
         return res.status(400).json({
           ...buildErrorResponse('One or more students not found', 'STUDENT_NOT_FOUND'),
           missingStudentIds: error.missing,
         });
+      }
+
+      if (error.code === 'DUPLICATE_INVITATION') {
+        return res.status(400).json(
+          buildErrorResponse(
+            'One or more students already have a pending invitation for this group',
+            'DUPLICATE_INVITATION'
+          )
+        );
       }
 
       return res.status(500).json(
