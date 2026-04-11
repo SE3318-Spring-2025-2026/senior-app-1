@@ -1,9 +1,21 @@
-const { Sequelize } = require('sequelize');
+  const path = require('path');
+  const { Sequelize } = require('sequelize');
 
-const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: process.env.SQLITE_STORAGE || 'database.sqlite',
-  logging: false,
-});
+  const configuredStorage = process.env.SQLITE_STORAGE;
+  const resolvedStorage = configuredStorage
+    ? (
+      configuredStorage === ':memory:' || configuredStorage.startsWith('file:')
+        ? configuredStorage
+        : (path.isAbsolute(configuredStorage)
+          ? configuredStorage
+          : path.join(__dirname, configuredStorage))
+    )
+    : path.join(__dirname, 'database.sqlite');
 
-module.exports = sequelize;
+  const sequelize = new Sequelize({
+    dialect: 'sqlite',
+    storage: resolvedStorage,
+    logging: false,
+  });
+
+  module.exports = sequelize;

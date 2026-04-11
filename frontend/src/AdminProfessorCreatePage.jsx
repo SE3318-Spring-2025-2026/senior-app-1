@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useNotification } from './contexts/NotificationContext';
 
 const initialForm = {
   email: '',
@@ -53,6 +55,7 @@ export default function AdminProfessorCreatePage() {
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
   const [submitting, setSubmitting] = useState(false);
+  const { notify } = useNotification();
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -88,6 +91,11 @@ export default function AdminProfessorCreatePage() {
         message: result.message || 'Professor account created. The professor can now choose a password.',
         result: 'Ready for password setup',
       });
+      notify({
+        type: 'success',
+        title: 'Professor created',
+        message: result.message || 'Professor account created successfully.',
+      });
       setForm(initialForm);
     } catch {
       setFeedback({
@@ -95,6 +103,11 @@ export default function AdminProfessorCreatePage() {
         title: 'Request failed',
         message: 'The professor creation request could not reach the backend. Check whether the backend server is running.',
         result: 'Network error',
+      });
+      notify({
+        type: 'error',
+        title: 'Professor creation failed',
+        message: 'The professor creation request could not reach the backend.',
       });
     } finally {
       setSubmitting(false);
@@ -121,9 +134,9 @@ export default function AdminProfessorCreatePage() {
       </section>
 
       <p className="back-link-wrap">
-        <a className="back-link" href="/admin">
+        <Link className="back-link" to="/admin">
           Back to Admin Tools
-        </a>
+        </Link>
       </p>
 
       <section className="panel">

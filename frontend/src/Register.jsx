@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import apiClient from './services/apiClient';
+import { useNotification } from './contexts/NotificationContext';
 
 const initialForm = {
   studentId: '',
@@ -11,9 +12,10 @@ const initialForm = {
 const initialFeedback = {
   type: 'idle',
   title: 'Waiting for input',
-  message: 'Submit the registration form.',
+  message: 'Fill in the student registration form and submit it to create the account.',
   studentId: '',
   result: '',
+  valid: '',
   userId: '',
 };
 
@@ -31,6 +33,8 @@ function mapErrorResponse(payload) {
       return { type: 'error', title: 'Student not eligible', result: 'Rejected' };
     case 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT':
       return { type: 'warning', title: 'GitHub already linked', result: 'Already linked' };
+    case 'GITHUB_RELINK_NOT_ALLOWED':
+      return { type: 'warning', title: 'Re-link not allowed', result: 'Already linked' };
     default:
       return { type: 'error', title: 'Validation failed', result: 'Failed' };
   }
@@ -44,6 +48,7 @@ export default function Register() {
   const [studentToken, setStudentToken] = useState('');
   const [linking, setLinking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const { notify } = useNotification();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -68,6 +73,7 @@ export default function Register() {
             : `${params.get('githubUsername') || 'your GitHub account'} is now linked to this student account.`,
           studentId: params.get('studentId') || '',
           result: usedMockOAuth ? 'Mock OAuth flow' : 'GitHub linked',
+          valid: '',
           userId: '',
         }
       : {
@@ -78,10 +84,16 @@ export default function Register() {
           message: params.get('message') || 'GitHub OAuth callback failed.',
           studentId: params.get('studentId') || '',
           result: params.get('code') || 'OAuth error',
+          valid: '',
           userId: '',
         };
 
     setFeedback(nextFeedback);
+    notify({
+      type: nextFeedback.type === 'warning' ? 'warning' : nextFeedback.type === 'success' ? 'success' : 'error',
+      title: nextFeedback.title,
+      message: nextFeedback.message,
+    });
 
     params.delete('githubLink');
     params.delete('githubUsername');
@@ -100,9 +112,10 @@ export default function Register() {
     setFeedback({
       type: 'loading',
       title: 'Creating student account',
-      message: 'The form is being validated and the student account is being created.',
+      message: 'Submitting the registration form to the backend.',
       studentId: '',
       result: '',
+      valid: '',
       userId: '',
     });
 
@@ -114,11 +127,17 @@ export default function Register() {
       if (response.status < 400) {
         setFeedback({
           type: 'success',
-          title: 'Student registered',
+          title: 'Student account created',
           message: result.message || 'Student account created successfully',
           studentId: result.studentId || form.studentId,
-          result: result.valid ? 'Created' : 'Unknown',
+          result: 'Created',
+          valid: typeof result.valid === 'boolean' ? String(result.valid) : '',
           userId: result.userId || '',
+        });
+        notify({
+          type: 'success',
+          title: 'Student account created',
+          message: result.message || 'Student account created successfully.',
         });
         setForm(initialForm);
         return;
@@ -131,6 +150,7 @@ export default function Register() {
         message: result.message || 'Validation failed',
         studentId: form.studentId,
         result: mapped.result,
+        valid: 'false',
         userId: '',
       });
     } catch (error) {
@@ -141,7 +161,13 @@ export default function Register() {
           message: error.response?.data?.message || 'Validation failed',
           studentId: form.studentId,
           result: error.mappedError.result,
+          valid: error.mappedError.result,
           userId: '',
+        });
+        notify({
+          type: error.mappedError.type === 'warning' ? 'warning' : 'error',
+          title: error.mappedError.title,
+          message: error.response?.data?.message || 'Validation failed',
         });
       } else {
         setFeedback({
@@ -150,7 +176,13 @@ export default function Register() {
           message: 'The registration request could not reach the backend. Check whether the backend server is running.',
           studentId: form.studentId,
           result: 'Network error',
+          valid: 'Network error',
           userId: '',
+        });
+        notify({
+          type: 'error',
+          title: 'Registration request failed',
+          message: 'The registration request could not reach the backend.',
         });
       }
     } finally {
@@ -159,14 +191,22 @@ export default function Register() {
   }
 
   async function handleGitHubLink() {
-    if (!studentToken.trim()) {
+    const trimmedStudentToken = studentToken.trim();
+
+    if (!trimmedStudentToken) {
       setFeedback({
         type: 'warning',
         title: 'Student token required',
         message: 'Provide an authenticated student token before starting GitHub linking.',
         studentId: feedback.studentId,
         result: 'Missing token',
+        valid: 'Missing token',
         userId: feedback.userId,
+      });
+      notify({
+        type: 'warning',
+        title: 'Student token required',
+        message: 'Provide an authenticated student token before starting GitHub linking.',
       });
       return;
     }
@@ -180,21 +220,33 @@ export default function Register() {
       message: 'Requesting the authorization URL from the backend.',
       studentId: feedback.studentId,
       result: '',
+      valid: '',
       userId: feedback.userId,
     });
 
     try {
-      const response = await apiClient.get('/v1/students/me/github/link');
-      const result = response.data;
+      const response = await fetch('/api/v1/students/me/github/link', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${trimmedStudentToken}`,
+        },
+      });
+      const result = await response.json();
 
-      if (response.status >= 400) {
+      if (!response.ok) {
         setFeedback({
           type: 'error',
           title: 'GitHub link could not start',
           message: result.message || 'Failed to create the GitHub authorization URL.',
           studentId: feedback.studentId,
           result: result.code || 'OAuth start failed',
+          valid: result.code || 'OAuth start failed',
           userId: feedback.userId,
+        });
+        notify({
+          type: 'error',
+          title: 'GitHub link could not start',
+          message: result.message || 'Failed to create the GitHub authorization URL.',
         });
         setLinking(false);
         return;
@@ -209,7 +261,13 @@ export default function Register() {
           message: error.response?.data?.message || 'Failed to create the GitHub authorization URL.',
           studentId: feedback.studentId,
           result: error.mappedError.result,
+          valid: error.mappedError.result,
           userId: feedback.userId,
+        });
+        notify({
+          type: error.mappedError.type === 'warning' ? 'warning' : 'error',
+          title: error.mappedError.title,
+          message: error.response?.data?.message || 'Failed to create the GitHub authorization URL.',
         });
       } else {
         setFeedback({
@@ -218,7 +276,13 @@ export default function Register() {
           message: 'The backend could not be reached while starting GitHub OAuth.',
           studentId: feedback.studentId,
           result: 'Network error',
+          valid: 'Network error',
           userId: feedback.userId,
+        });
+        notify({
+          type: 'error',
+          title: 'GitHub link could not start',
+          message: 'The backend could not be reached while starting GitHub OAuth.',
         });
       }
       setLinking(false);
@@ -237,9 +301,9 @@ export default function Register() {
     <main className="page">
       <section className="hero">
         <p className="eyebrow">Senior App</p>
-        <h1>Student Registration Validation</h1>
+        <h1>Student Registration</h1>
         <p className="subtitle">
-          Create a student account, then use the GitHub linking action with an authenticated student token for the OAuth start flow.
+          Create a student account by submitting student ID, email, full name, and password to the registration endpoint.
         </p>
       </section>
 
@@ -304,7 +368,7 @@ export default function Register() {
           </label>
 
           <button id="submit-button" type="submit" disabled={submitting}>
-            {submitting ? 'Creating...' : 'Create Student Account'}
+            {submitting ? 'Submitting...' : 'Register'}
           </button>
         </form>
 
@@ -343,19 +407,23 @@ export default function Register() {
             <p className="feedback-label">Current Status</p>
             <h2>{feedback.title}</h2>
             <p>{feedback.message}</p>
-            {(feedback.studentId || feedback.result || feedback.userId) && (
+            {(feedback.studentId || feedback.result || feedback.valid || feedback.userId) && (
               <dl className="feedback-meta">
                 <div>
                   <dt>Student ID</dt>
                   <dd>{feedback.studentId || '-'}</dd>
                 </div>
                 <div>
+                  <dt>Result</dt>
+                  <dd>{feedback.result || '-'}</dd>
+                </div>
+                <div>
                   <dt>User ID</dt>
                   <dd>{feedback.userId || '-'}</dd>
                 </div>
                 <div>
-                  <dt>Result</dt>
-                  <dd>{feedback.result || '-'}</dd>
+                  <dt>Valid</dt>
+                  <dd>{feedback.valid || '-'}</dd>
                 </div>
               </dl>
             )}

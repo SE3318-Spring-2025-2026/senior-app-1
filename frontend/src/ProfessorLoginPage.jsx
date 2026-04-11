@@ -1,16 +1,15 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
 
 const initialForm = {
-  email: 'admin@example.com',
+  email: '',
   password: '',
 };
 
 const initialFeedback = {
   type: 'idle',
-  title: 'Admin Sign In',
-  message: 'Enter your admin email and password to continue to the admin workspace.',
+  title: 'Professor Sign In',
+  message: 'Enter your professor email and password to sign in.',
 };
 
 function mapLoginError(payload, status) {
@@ -18,7 +17,7 @@ function mapLoginError(payload, status) {
     return {
       type: 'error',
       title: 'Login failed',
-      message: payload.message || 'Invalid admin email or password.',
+      message: payload.message || 'Invalid professor email or password.',
     };
   }
 
@@ -26,22 +25,21 @@ function mapLoginError(payload, status) {
     return {
       type: 'warning',
       title: 'Missing information',
-      message: payload.message || 'Email and password are required.',
+      message: payload.message || 'Professor email and password are required.',
     };
   }
 
   return {
     type: 'error',
     title: 'Request failed',
-    message: payload.message || 'Admin login could not be completed.',
+    message: payload.message || 'Professor login could not be completed.',
   };
 }
 
-export default function AdminLoginPage() {
+export default function ProfessorLoginPage() {
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
   const [submitting, setSubmitting] = useState(false);
-  const navigate = useNavigate();
   const { notify } = useNotification();
 
   async function handleSubmit(event) {
@@ -50,11 +48,11 @@ export default function AdminLoginPage() {
     setFeedback({
       type: 'loading',
       title: 'Signing in',
-      message: 'Checking your admin credentials.',
+      message: 'Checking your professor credentials.',
     });
 
     try {
-      const response = await fetch('/api/v1/admin/login', {
+      const response = await fetch('/api/v1/professors/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -68,34 +66,30 @@ export default function AdminLoginPage() {
         return;
       }
 
-      window.localStorage.setItem('adminToken', result.token);
+      window.localStorage.setItem('professorToken', result.token);
       window.localStorage.setItem('authToken', result.token);
-      window.localStorage.setItem('adminUser', JSON.stringify(result.user || {}));
+      window.localStorage.setItem('professorUser', JSON.stringify(result.user || {}));
 
       setFeedback({
         type: 'success',
         title: 'Signed in successfully',
-        message: result.message || 'Admin login successful. Redirecting to the admin workspace.',
+        message: result.message || 'Professor login successful.',
       });
       notify({
         type: 'success',
-        title: 'Admin signed in',
-        message: result.message || 'Admin login successful.',
+        title: 'Professor signed in',
+        message: result.message || 'Professor login successful.',
       });
-
-      window.setTimeout(() => {
-        navigate('/admin');
-      }, 500);
-    } catch (error) {
+    } catch {
       setFeedback({
         type: 'error',
         title: 'Request failed',
-        message: 'The admin login request could not reach the backend. Check whether the backend server is running.',
+        message: 'The professor login request could not reach the backend. Check whether the backend server is running.',
       });
       notify({
         type: 'error',
-        title: 'Admin login failed',
-        message: 'The admin login request could not reach the backend.',
+        title: 'Professor login failed',
+        message: 'The professor login request could not reach the backend.',
       });
     } finally {
       setSubmitting(false);
@@ -113,11 +107,10 @@ export default function AdminLoginPage() {
   return (
     <main className="page">
       <section className="hero">
-        <p className="eyebrow">Admin Access</p>
-        <h1>Admin Login</h1>
+        <p className="eyebrow">Professor Access</p>
+        <h1>Professor Login</h1>
         <p className="subtitle">
-          Sign in with your admin account. The session token is stored automatically and then reused by admin-only
-          screens such as professor registration.
+          Sign in with the same professor email and password you configured during initial password setup.
         </p>
       </section>
 
@@ -130,6 +123,7 @@ export default function AdminLoginPage() {
               name="email"
               type="email"
               autoComplete="email"
+              placeholder="prof@example.edu"
               value={form.email}
               onChange={handleChange}
               required
@@ -143,7 +137,7 @@ export default function AdminLoginPage() {
               name="password"
               type="password"
               autoComplete="current-password"
-              placeholder="Enter admin password"
+              placeholder="Enter your password"
               value={form.password}
               onChange={handleChange}
               required

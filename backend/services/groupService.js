@@ -1,5 +1,6 @@
+const { Op } = require('sequelize');
 const sequelize = require('../db');
-const { Group, AuditLog } = require('../models');
+const { Group, AuditLog, Invitation, User } = require('../models');
 
 const GROUP_NAME_MIN_LENGTH = 3;
 const GROUP_NAME_MAX_LENGTH = 80;
@@ -59,16 +60,24 @@ async function createShell(name, leaderId) {
           normalizedName,
           leaderId,
           memberIds: [leaderId],
+          advisorId: null,
         },
         { transaction },
       );
     } catch (error) {
       if (
         error.name === 'SequelizeUniqueConstraintError' &&
-        error.errors?.some((e) => e.path === NORMALIZED_NAME_FIELD)
+        error.errors?.some((entry) =>
+          entry.path === 'name' || entry.path === NORMALIZED_NAME_FIELD
+        )
       ) {
         throw createServiceError(409, 'DUPLICATE_GROUP_NAME', 'Group name already exists.');
       }
+
+      if (error.name === 'SequelizeForeignKeyConstraintError') {
+        throw createServiceError(400, 'LEADER_NOT_FOUND', 'Leader not found.');
+      }
+
       throw error;
     }
 
@@ -86,7 +95,60 @@ async function createShell(name, leaderId) {
   });
 }
 
+async function dispatchInvitations(groupId, rawStudentIds) {
+  const studentIds = [...new Set(rawStudentIds)];
+
+  const group = await Group.findByPk(groupId);
+  if (!group) {
+    const err = new Error('Group not found');
+    err.code = 'GROUP_NOT_FOUND';
+    throw err;
+  }
+
+  const users = await User.findAll({
+    where: {
+      studentId: { [Op.in]: studentIds },
+      role: 'STUDENT',
+    },
+  });
+
+  const foundSet = new Set(users.map((user) => user.studentId));
+  const missing = studentIds.filter((sid) => !foundSet.has(sid));
+  if (missing.length > 0) {
+    const err = new Error('One or more students not found');
+    err.code = 'STUDENT_NOT_FOUND';
+    err.missing = missing;
+    throw err;
+  }
+
+  const transaction = await sequelize.transaction();
+  let invitations;
+  try {
+    invitations = await Promise.all(
+      users.map(async (user) => {
+        const [inv] = await Invitation.findOrCreate({
+          where: { groupId, inviteeId: user.id },
+          defaults: { status: 'PENDING' },
+          transaction,
+        });
+        return inv;
+      }),
+    );
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+
+  return invitations.map((inv, i) => ({
+    id: inv.id,
+    groupId: inv.groupId,
+    studentId: users[i].studentId,
+    status: inv.status,
+  }));
+}
+
 module.exports = {
   createShell,
+  dispatchInvitations,
 };
-

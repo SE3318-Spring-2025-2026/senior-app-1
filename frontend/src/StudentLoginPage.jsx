@@ -1,16 +1,15 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
 
 const initialForm = {
-  email: 'admin@example.com',
+  studentId: '',
   password: '',
 };
 
 const initialFeedback = {
   type: 'idle',
-  title: 'Admin Sign In',
-  message: 'Enter your admin email and password to continue to the admin workspace.',
+  title: 'Student Sign In',
+  message: 'Enter your student number and password to sign in.',
 };
 
 function mapLoginError(payload, status) {
@@ -18,7 +17,15 @@ function mapLoginError(payload, status) {
     return {
       type: 'error',
       title: 'Login failed',
-      message: payload.message || 'Invalid admin email or password.',
+      message: payload.message || 'Invalid student ID or password.',
+    };
+  }
+
+  if (status === 403) {
+    return {
+      type: 'error',
+      title: 'Student ID not eligible',
+      message: payload.message || 'Only valid student IDs can sign in.',
     };
   }
 
@@ -26,22 +33,21 @@ function mapLoginError(payload, status) {
     return {
       type: 'warning',
       title: 'Missing information',
-      message: payload.message || 'Email and password are required.',
+      message: payload.message || 'Student ID and password are required.',
     };
   }
 
   return {
     type: 'error',
     title: 'Request failed',
-    message: payload.message || 'Admin login could not be completed.',
+    message: payload.message || 'Student login could not be completed.',
   };
 }
 
-export default function AdminLoginPage() {
+export default function StudentLoginPage() {
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
   const [submitting, setSubmitting] = useState(false);
-  const navigate = useNavigate();
   const { notify } = useNotification();
 
   async function handleSubmit(event) {
@@ -50,11 +56,11 @@ export default function AdminLoginPage() {
     setFeedback({
       type: 'loading',
       title: 'Signing in',
-      message: 'Checking your admin credentials.',
+      message: 'Checking your student credentials.',
     });
 
     try {
-      const response = await fetch('/api/v1/admin/login', {
+      const response = await fetch('/api/v1/students/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -64,38 +70,35 @@ export default function AdminLoginPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        setFeedback(mapLoginError(result, response.status));
+        const mapped = mapLoginError(result, response.status);
+        setFeedback(mapped);
         return;
       }
 
-      window.localStorage.setItem('adminToken', result.token);
+      window.localStorage.setItem('studentToken', result.token);
       window.localStorage.setItem('authToken', result.token);
-      window.localStorage.setItem('adminUser', JSON.stringify(result.user || {}));
+      window.localStorage.setItem('studentUser', JSON.stringify(result.user || {}));
 
       setFeedback({
         type: 'success',
         title: 'Signed in successfully',
-        message: result.message || 'Admin login successful. Redirecting to the admin workspace.',
+        message: result.message || 'Student login successful.',
       });
       notify({
         type: 'success',
-        title: 'Admin signed in',
-        message: result.message || 'Admin login successful.',
+        title: 'Student signed in',
+        message: result.message || 'Student login successful.',
       });
-
-      window.setTimeout(() => {
-        navigate('/admin');
-      }, 500);
-    } catch (error) {
+    } catch {
       setFeedback({
         type: 'error',
         title: 'Request failed',
-        message: 'The admin login request could not reach the backend. Check whether the backend server is running.',
+        message: 'The student login request could not reach the backend. Check whether the backend server is running.',
       });
       notify({
         type: 'error',
-        title: 'Admin login failed',
-        message: 'The admin login request could not reach the backend.',
+        title: 'Student login failed',
+        message: 'The student login request could not reach the backend.',
       });
     } finally {
       setSubmitting(false);
@@ -113,24 +116,26 @@ export default function AdminLoginPage() {
   return (
     <main className="page">
       <section className="hero">
-        <p className="eyebrow">Admin Access</p>
-        <h1>Admin Login</h1>
+        <p className="eyebrow">Student Access</p>
+        <h1>Student Login</h1>
         <p className="subtitle">
-          Sign in with your admin account. The session token is stored automatically and then reused by admin-only
-          screens such as professor registration.
+          Sign in with your 11-digit student number and password. Only students with valid student IDs and active
+          accounts can log in.
         </p>
       </section>
 
       <section className="single-panel">
         <form className="form" onSubmit={handleSubmit}>
           <label className="field">
-            <span>Email</span>
+            <span>Student Number</span>
             <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              value={form.email}
+              id="studentId"
+              name="studentId"
+              type="text"
+              inputMode="numeric"
+              maxLength="11"
+              placeholder="11070001000"
+              value={form.studentId}
               onChange={handleChange}
               required
             />
@@ -143,7 +148,7 @@ export default function AdminLoginPage() {
               name="password"
               type="password"
               autoComplete="current-password"
-              placeholder="Enter admin password"
+              placeholder="Enter your password"
               value={form.password}
               onChange={handleChange}
               required

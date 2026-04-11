@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 const entryPoints = [
   {
     eyebrow: 'Student',
@@ -32,6 +34,14 @@ const entryPoints = [
     status: 'Ready',
   },
   {
+    eyebrow: 'Coordinator',
+    title: 'Coordinator Login',
+    description: 'Coordinators sign in here before accessing coordinator workspace tools such as student ID import.',
+    href: '/coordinator/login',
+    cta: 'Open Coordinator Login',
+    status: 'Ready',
+  },
+  {
     eyebrow: 'Admin',
     title: 'Admin Login',
     description: 'Admins sign in here before accessing admin-only tools such as professor account registration.',
@@ -46,7 +56,7 @@ export default function AuthGatewayPage() {
     <main className="page">
       <section className="hero">
         <p className="eyebrow">Senior App Access</p>
-        <h1>Choose an entry point</h1>
+        <h1>Welcome to Senior App</h1>
         <p className="subtitle">
           The system has separate student, professor, and admin-facing auth flows. This landing page keeps those
           routes visible and easy to demo without mixing the screens together.
@@ -62,9 +72,9 @@ export default function AuthGatewayPage() {
               <span className={`gateway-status gateway-status-${item.status.toLowerCase()}`}>{item.status}</span>
             </div>
             <p className="gateway-copy">{item.description}</p>
-            <a className="gateway-link" href={item.href}>
+            <Link className="gateway-link" to={item.href}>
               {item.cta}
-            </a>
+            </Link>
           </article>
         ))}
       </section>

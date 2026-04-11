@@ -1,10 +1,13 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
-const { handleCreateGroup } = require('../controllers/groupFormationController');
+const {
+  handleCreateGroup,
+  handleDispatchInvites,
+} = require('../controllers/groupFormationController');
 
 const router = express.Router();
 
-router.post('/groups', authenticate, authorize(['STUDENT']), handleCreateGroup);
+router.post('/', authenticate, authorize(['STUDENT']), handleCreateGroup);
+router.post('/:groupId/invitations', authenticate, handleDispatchInvites);
 
 module.exports = router;
-

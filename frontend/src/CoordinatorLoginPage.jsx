@@ -3,14 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
 
 const initialForm = {
-  email: 'admin@example.com',
+  email: 'coordinator@example.com',
   password: '',
 };
 
 const initialFeedback = {
   type: 'idle',
-  title: 'Admin Sign In',
-  message: 'Enter your admin email and password to continue to the admin workspace.',
+  title: 'Coordinator Sign In',
+  message: 'Enter your coordinator email and password to continue to the student ID upload workspace.',
 };
 
 function mapLoginError(payload, status) {
@@ -18,7 +18,7 @@ function mapLoginError(payload, status) {
     return {
       type: 'error',
       title: 'Login failed',
-      message: payload.message || 'Invalid admin email or password.',
+      message: payload.message || 'Invalid coordinator email or password.',
     };
   }
 
@@ -33,11 +33,11 @@ function mapLoginError(payload, status) {
   return {
     type: 'error',
     title: 'Request failed',
-    message: payload.message || 'Admin login could not be completed.',
+    message: payload.message || 'Coordinator login could not be completed.',
   };
 }
 
-export default function AdminLoginPage() {
+export default function CoordinatorLoginPage() {
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
   const [submitting, setSubmitting] = useState(false);
@@ -50,11 +50,11 @@ export default function AdminLoginPage() {
     setFeedback({
       type: 'loading',
       title: 'Signing in',
-      message: 'Checking your admin credentials.',
+      message: 'Checking your coordinator credentials.',
     });
 
     try {
-      const response = await fetch('/api/v1/admin/login', {
+      const response = await fetch('/api/v1/coordinator/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -68,34 +68,34 @@ export default function AdminLoginPage() {
         return;
       }
 
-      window.localStorage.setItem('adminToken', result.token);
+      window.localStorage.setItem('coordinatorToken', result.token);
       window.localStorage.setItem('authToken', result.token);
-      window.localStorage.setItem('adminUser', JSON.stringify(result.user || {}));
+      window.localStorage.setItem('coordinatorUser', JSON.stringify(result.user || {}));
 
       setFeedback({
         type: 'success',
         title: 'Signed in successfully',
-        message: result.message || 'Admin login successful. Redirecting to the admin workspace.',
+        message: result.message || 'Coordinator login successful. Redirecting to the coordinator workspace.',
       });
       notify({
         type: 'success',
-        title: 'Admin signed in',
-        message: result.message || 'Admin login successful.',
+        title: 'Coordinator signed in',
+        message: result.message || 'Coordinator login successful.',
       });
 
       window.setTimeout(() => {
-        navigate('/admin');
+        navigate('/coordinator');
       }, 500);
-    } catch (error) {
+    } catch {
       setFeedback({
         type: 'error',
         title: 'Request failed',
-        message: 'The admin login request could not reach the backend. Check whether the backend server is running.',
+        message: 'The coordinator login request could not reach the backend. Check whether the backend server is running.',
       });
       notify({
         type: 'error',
-        title: 'Admin login failed',
-        message: 'The admin login request could not reach the backend.',
+        title: 'Coordinator login failed',
+        message: 'The coordinator login request could not reach the backend.',
       });
     } finally {
       setSubmitting(false);
@@ -113,11 +113,10 @@ export default function AdminLoginPage() {
   return (
     <main className="page">
       <section className="hero">
-        <p className="eyebrow">Admin Access</p>
-        <h1>Admin Login</h1>
+        <p className="eyebrow">Coordinator Access</p>
+        <h1>Coordinator Login</h1>
         <p className="subtitle">
-          Sign in with your admin account. The session token is stored automatically and then reused by admin-only
-          screens such as professor registration.
+          Sign in with your coordinator account before opening coordinator workspace tools.
         </p>
       </section>
 
@@ -143,7 +142,7 @@ export default function AdminLoginPage() {
               name="password"
               type="password"
               autoComplete="current-password"
-              placeholder="Enter admin password"
+              placeholder="Enter coordinator password"
               value={form.password}
               onChange={handleChange}
               required

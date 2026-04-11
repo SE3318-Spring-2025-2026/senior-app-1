@@ -3,11 +3,8 @@ const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const professorService = require('../services/professorService');
 
-const adminLogin = [
-  body('email').isEmail().normalizeEmail(),
-  body('password').isString().notEmpty(),
-
-  async (req, res) => {
+function buildRoleLoginHandler(role, successMessage, invalidMessage, failureCode) {
+  return async (req, res) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -21,13 +18,13 @@ const adminLogin = [
       const user = await req.app.locals.models.User.findOne({
         where: {
           email,
-          role: 'ADMIN',
+          role,
         },
       });
 
       if (!user || !user.password) {
         return res.status(401).json({
-          message: 'Invalid admin email or password.',
+          message: invalidMessage,
           code: 'INVALID_CREDENTIALS',
         });
       }
@@ -36,7 +33,7 @@ const adminLogin = [
 
       if (!passwordMatches) {
         return res.status(401).json({
-          message: 'Invalid admin email or password.',
+          message: invalidMessage,
           code: 'INVALID_CREDENTIALS',
         });
       }
@@ -58,16 +55,38 @@ const adminLogin = [
           fullName: user.fullName,
           role: user.role,
         },
-        message: 'Admin login successful.',
+        message: successMessage,
       });
     } catch (error) {
-      console.error('Admin login failed unexpectedly:', error);
+      console.error(`${role} login failed unexpectedly:`, error);
       return res.status(500).json({
-        message: 'Admin login could not be completed.',
-        code: 'ADMIN_LOGIN_FAILED',
+        message: `${role} login could not be completed.`,
+        code: failureCode,
       });
     }
-  },
+  };
+}
+
+const adminLogin = [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isString().notEmpty(),
+  buildRoleLoginHandler(
+    'ADMIN',
+    'Admin login successful.',
+    'Invalid admin email or password.',
+    'ADMIN_LOGIN_FAILED',
+  ),
+];
+
+const coordinatorLogin = [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isString().notEmpty(),
+  buildRoleLoginHandler(
+    'COORDINATOR',
+    'Coordinator login successful.',
+    'Invalid coordinator email or password.',
+    'COORDINATOR_LOGIN_FAILED',
+  ),
 ];
 
 const registerProfessor = [
@@ -112,4 +131,4 @@ const registerProfessor = [
   },
 ];
 
-module.exports = { adminLogin, registerProfessor };
+module.exports = { adminLogin, coordinatorLogin, registerProfessor };

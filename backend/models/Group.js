@@ -35,6 +35,7 @@ const Group = sequelize.define('Group', {
   advisorId: {
     type: DataTypes.INTEGER,
     allowNull: true,
+    defaultValue: null,
     references: {
       model: User,
       key: 'id',
@@ -44,8 +45,9 @@ const Group = sequelize.define('Group', {
   },
 });
 
+User.hasMany(Group, { as: 'ledGroups', foreignKey: 'leaderId' });
+User.hasMany(Group, { as: 'advisedGroups', foreignKey: 'advisorId' });
 Group.belongsTo(User, { as: 'leader', foreignKey: 'leaderId' });
 Group.belongsTo(User, { as: 'advisor', foreignKey: 'advisorId' });
 
 module.exports = Group;
-
