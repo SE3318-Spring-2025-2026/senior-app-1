@@ -61,6 +61,7 @@ export default function InviteMembersSection({
       // error state managed by hook (keeps textarea); also fire a toast
       const message = err.response?.data?.message || err.message || 'Invitation dispatch failed.';
       notify({ type: 'error', title: 'Invitation failed', message });
+      throw err;
     }
   }
 
