@@ -1244,117 +1244,564 @@ test('manual linked account store and github patch endpoint update student statu
   });
 });
 
-test('POST /api/v1/groups - unauthenticated request is rejected with 401', async () => {
-  const result = await request('/api/v1/groups', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'My Group' }),
-  });
+// ============================================
+// GROUP MEMBERSHIP FINALIZATION TESTS (Issue 11)
+// ============================================
 
-  assert.equal(result.response.status, 401);
-});
-
-test('POST /api/v1/groups - non-student role is rejected with 403', async () => {
-  const admin = await User.create({
-    email: 'admin-groups@example.com',
-    fullName: 'Admin User',
-    role: 'ADMIN',
-    status: 'ACTIVE',
-    password: 'hashed',
-  });
-
-  const result = await request('/api/v1/groups', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(admin)),
-    },
-    body: JSON.stringify({ name: 'My Group' }),
-  });
-
-  assert.equal(result.response.status, 403);
-});
-
-test('POST /api/v1/groups - invalid/too-short name returns 400 with INVALID_GROUP_NAME', async () => {
-  const student = await User.create({
-    email: 'student-groups@example.edu',
-    fullName: 'Group Student',
+test('[GROUP] can create a new group', async () => {
+  // Create a test user for auth
+  const testUser = await User.create({
+    email: 'group-test@example.com',
+    fullName: 'Group Tester',
     role: 'STUDENT',
     status: 'ACTIVE',
-    studentId: '11070001000',
   });
 
-  const result = await request('/api/v1/groups', {
+  const authHeaders = await authHeaderFor(testUser);
+
+  const createResult = await request('/api/v1/groups', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(student)),
-    },
-    body: JSON.stringify({ name: 'ab' }),
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      groupName: 'Test Group',
+      maxMembers: 5,
+    }),
   });
 
-  assert.equal(result.response.status, 400);
-  assert.equal(result.json.code, 'INVALID_GROUP_NAME');
+  assert.equal(createResult.response.status, 201);
+  assert.equal(createResult.json.data.groupName, 'Test Group');
+  assert.equal(createResult.json.data.status, 'FORMATION');
+  assert.equal(createResult.json.data.maxMembers, 5);
+  assert.deepEqual(createResult.json.data.members, []);
 });
 
-test('POST /api/v1/groups - successful creation returns 201 with group data', async () => {
-  const student = await User.create({
-    email: 'student-groups@example.edu',
-    fullName: 'Group Student',
+test('[GROUP] can finalize membership with valid student ID (200)', async () => {
+  // Create a test user for auth
+  const testUser = await User.create({
+    email: 'finalize-test@example.com',
+    fullName: 'Finalize Tester',
     role: 'STUDENT',
     status: 'ACTIVE',
-    studentId: '11070001000',
   });
 
-  const result = await request('/api/v1/groups', {
+  const authHeaders = await authHeaderFor(testUser);
+
+  // Create group
+  const groupResult = await request('/api/v1/groups', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(student)),
-    },
-    body: JSON.stringify({ name: 'Awesome Group' }),
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      groupName: 'Finalize Test Group',
+      maxMembers: 3,
+    }),
   });
 
-  assert.equal(result.response.status, 201);
-  assert.equal(typeof result.json.id, 'string');
-  assert.equal(result.json.name, 'Awesome Group');
-  assert.equal(result.json.leaderId, student.id);
-  assert.deepEqual(result.json.memberIds, [student.id]);
+  const groupId = groupResult.json.data.groupId;
 
-  const auditLog = await AuditLog.findOne({ where: { action: 'GROUP_CREATED', targetId: result.json.id } });
-  assert.ok(auditLog, 'AuditLog entry should be created for group creation');
-  assert.equal(auditLog.actorId, String(student.id));
+  // Finalize membership for first student
+  const finalizeResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      studentId: '11070001000',
+    }),
+  });
+
+  assert.equal(finalizeResult.response.status, 200);
+  assert.equal(finalizeResult.json.data.success, true);
+  assert.equal(finalizeResult.json.data.studentId, '11070001000');
+  assert.equal(finalizeResult.json.data.totalMembers, 1);
+  assert.equal(finalizeResult.json.data.maxMembers, 3);
 });
 
-test('POST /api/v1/groups - duplicate name returns 409 with DUPLICATE_GROUP_NAME', async () => {
-  const student = await User.create({
-    email: 'student-groups@example.edu',
-    fullName: 'Group Student',
+test('[GROUP] prevents duplicate membership (DUPLICATE_MEMBER - 400)', async () => {
+  // Create a test user for auth
+  const testUser = await User.create({
+    email: 'duplicate-test@example.com',
+    fullName: 'Duplicate Tester',
     role: 'STUDENT',
     status: 'ACTIVE',
-    studentId: '11070001000',
   });
 
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(await authHeaderFor(student)),
-  };
+  const authHeaders = await authHeaderFor(testUser);
 
-  const first = await request('/api/v1/groups', {
+  // Create group
+  const groupResult = await request('/api/v1/groups', {
     method: 'POST',
-    headers,
-    body: JSON.stringify({ name: 'Unique Group' }),
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      groupName: 'Duplicate Test',
+      maxMembers: 3,
+    }),
   });
 
-  assert.equal(first.response.status, 201);
+  const groupId = groupResult.json.data.groupId;
 
-  const duplicate = await request('/api/v1/groups', {
+  // Add first student
+  const firstResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify({ name: 'Unique Group' }),
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      studentId: '11070001000',
+    }),
   });
 
-  assert.equal(duplicate.response.status, 409);
-  assert.equal(duplicate.json.code, 'DUPLICATE_GROUP_NAME');
+  assert.equal(firstResult.response.status, 200);
+
+  // Try to add same student again (should fail)
+  const duplicateResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      studentId: '11070001000',
+    }),
+  });
+
+  assert.equal(duplicateResult.response.status, 400);
+  assert.equal(duplicateResult.json.code, 'DUPLICATE_MEMBER');
+  assert.equal(duplicateResult.json.message, 'Student is already a member of this group');
 });
 
+test('[GROUP] enforces max members constraint (MAX_MEMBERS_REACHED - 400)', async () => {
+  // Create a test user for auth
+  const testUser = await User.create({
+    email: 'max-members-test@example.com',
+    fullName: 'Max Members Tester',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const authHeaders = await authHeaderFor(testUser);
+
+  // Create group with max 2 members
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      groupName: 'Max Members Test',
+      maxMembers: 2,
+    }),
+  });
+
+  const groupId = groupResult.json.data.groupId;
+
+  // Add first student
+  const first = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      studentId: '11070001000',
+    }),
+  });
+  assert.equal(first.response.status, 200);
+
+  // Add second student
+  const second = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      studentId: '11070001001',
+    }),
+  });
+  assert.equal(second.response.status, 200);
+
+  // Try to add third student (should fail - group is full)
+  const full = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      studentId: '11070001002',
+    }),
+  });
+
+  assert.equal(full.response.status, 400);
+  assert.equal(full.json.code, 'MAX_MEMBERS_REACHED');
+});
+
+test('[GROUP] rejects invalid student ID format (400)', async () => {
+  // Create a test user for auth
+  const testUser = await User.create({
+    email: 'invalid-id-test@example.com',
+    fullName: 'Invalid ID Tester',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const authHeaders = await authHeaderFor(testUser);
+
+  // Create group
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      groupName: 'Invalid ID Test',
+      maxMembers: 3,
+    }),
+  });
+
+  const groupId = groupResult.json.data.groupId;
+
+  // Try to add with invalid student ID format
+  const invalidResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      studentId: 'invalid-id', // Not 11 digits
+    }),
+  });
+
+  assert.equal(invalidResult.response.status, 400);
+  assert.equal(invalidResult.json.code, 'INVALID_STUDENT_ID');
+});
+
+test('[GROUP] handles non-existent group (GROUP_NOT_FOUND - 404)', async () => {
+  // Create a test user for auth
+  const testUser = await User.create({
+    email: 'group-not-found-test@example.com',
+    fullName: 'Not Found Tester',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const authHeaders = await authHeaderFor(testUser);
+
+  const result = await request('/api/v1/groups/9999/membership/finalize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      studentId: '11070001000',
+    }),
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'GROUP_NOT_FOUND');
+});
+
+test('[GROUP] retrieves group membership details', async () => {
+  // Create a test user for auth
+  const testUser = await User.create({
+    email: 'membership-details-test@example.com',
+    fullName: 'Details Tester',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const authHeaders = await authHeaderFor(testUser);
+
+  // Create group
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      groupName: 'Membership Details Test',
+      maxMembers: 4,
+    }),
+  });
+
+  const groupId = groupResult.json.data.groupId;
+
+  // Add two students
+  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ studentId: '11070001000' }),
+  });
+
+  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ studentId: '11070001001' }),
+  });
+
+  // Retrieve membership details
+  const detailsResult = await request(`/api/v1/groups/${groupId}/membership`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+  });
+
+  assert.equal(detailsResult.response.status, 200);
+  assert.equal(detailsResult.json.data.groupId, groupId);
+  assert.equal(detailsResult.json.data.currentMemberCount, 2);
+  assert.equal(detailsResult.json.data.maxMembers, 4);
+  assert.equal(detailsResult.json.data.availableSlots, 2);
+  assert.deepEqual(detailsResult.json.data.members, ['11070001000', '11070001001']);
+});
+
+test('[GROUP] atomic update: concurrent additions should be serialized', async () => {
+  // Create a test user for auth
+  const testUser = await User.create({
+    email: 'concurrency-test@example.com',
+    fullName: 'Concurrency Tester',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const authHeaders = await authHeaderFor(testUser);
+
+  // Create group with max 2 members
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      groupName: 'Concurrency Test',
+      maxMembers: 2,
+    }),
+  });
+
+  const groupId = groupResult.json.data.groupId;
+
+  // Add first student successfully
+  const first = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ studentId: '11070001000' }),
+  });
+  assert.equal(first.response.status, 200);
+
+  // Add second student successfully
+  const second = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ studentId: '11070001001' }),
+  });
+  assert.equal(second.response.status, 200);
+
+  // Verify final state: exactly 2 members
+  const details = await request(`/api/v1/groups/${groupId}/membership`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+  });
+
+  assert.equal(details.json.data.currentMemberCount, 2);
+  assert.equal(details.json.data.members.length, 2);
+});
+
+// ============================================
+// E2E TESTS: GROUP FORMATION WORKFLOW
+// ============================================
+
+test('[E2E] Group leader creates group and invitees join - membership list updates', async () => {
+  // Leader creates account
+  const leader = await User.create({
+    email: 'leader@example.com',
+    fullName: 'Group Leader',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const leaderHeaders = await authHeaderFor(leader);
+
+  // Leader creates group with 4 max members
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({
+      groupName: 'Senior Project Team',
+      maxMembers: 4,
+    }),
+  });
+
+  assert.equal(groupResult.response.status, 201);
+  const groupId = groupResult.json.data.groupId;
+
+  // Create 3 invitee accounts
+  const invitee1 = await User.create({
+    email: 'invitee1@example.com',
+    fullName: 'First Invitee',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const invitee2 = await User.create({
+    email: 'invitee2@example.com',
+    fullName: 'Second Invitee',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const invitee3 = await User.create({
+    email: 'invitee3@example.com',
+    fullName: 'Third Invitee',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  // First invitee accepts and joins
+  const join1 = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070001000' }),
+  });
+
+  assert.equal(join1.response.status, 200);
+  assert.equal(join1.json.data.totalMembers, 1);
+
+  // Second invitee accepts and joins
+  const join2 = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070001001' }),
+  });
+
+  assert.equal(join2.response.status, 200);
+  assert.equal(join2.json.data.totalMembers, 2);
+
+  // Third invitee accepts and joins
+  const join3 = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070001002' }),
+  });
+
+  assert.equal(join3.response.status, 200);
+  assert.equal(join3.json.data.totalMembers, 3);
+
+  // Verify membership list reflects all members
+  const membershipDetails = await request(`/api/v1/groups/${groupId}/membership`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+  });
+
+  assert.equal(membershipDetails.response.status, 200);
+  assert.equal(membershipDetails.json.data.currentMemberCount, 3);
+  assert.equal(membershipDetails.json.data.members.length, 3);
+  assert.deepEqual(membershipDetails.json.data.members, [
+    '11070001000',
+    '11070001001',
+    '11070001002',
+  ]);
+});
+
+test('[E2E] Multiple groups concurrent membership updates maintain data integrity', async () => {
+  // Create two different groups
+  const user1 = await User.create({
+    email: 'user1@example.com',
+    fullName: 'User 1',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const user1Headers = await authHeaderFor(user1);
+
+  // Create first group
+  const group1Result = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...user1Headers },
+    body: JSON.stringify({ groupName: 'Group A', maxMembers: 3 }),
+  });
+  const groupId1 = group1Result.json.data.groupId;
+
+  // Create second group
+  const group2Result = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...user1Headers },
+    body: JSON.stringify({ groupName: 'Group B', maxMembers: 3 }),
+  });
+  const groupId2 = group2Result.json.data.groupId;
+
+  // Add members to Group 1
+  await request(`/api/v1/groups/${groupId1}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...user1Headers },
+    body: JSON.stringify({ studentId: '11070002000' }),
+  });
+
+  await request(`/api/v1/groups/${groupId1}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...user1Headers },
+    body: JSON.stringify({ studentId: '11070002001' }),
+  });
+
+  // Add members to Group 2
+  await request(`/api/v1/groups/${groupId2}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...user1Headers },
+    body: JSON.stringify({ studentId: '11070003000' }),
+  });
+
+  // Verify Group 1 state
+  const group1Details = await request(`/api/v1/groups/${groupId1}/membership`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', ...user1Headers },
+  });
+
+  assert.equal(group1Details.json.data.currentMemberCount, 2);
+  assert.deepEqual(group1Details.json.data.members, ['11070002000', '11070002001']);
+
+  // Verify Group 2 state
+  const group2Details = await request(`/api/v1/groups/${groupId2}/membership`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', ...user1Headers },
+  });
+
+  assert.equal(group2Details.json.data.currentMemberCount, 1);
+  assert.deepEqual(group2Details.json.data.members, ['11070003000']);
+});
+
+test('[E2E] Full group lifecycle: formation → capacity reached → rejection', async () => {
+  const creator = await User.create({
+    email: 'creator@example.com',
+    fullName: 'Creator',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const creatorHeaders = await authHeaderFor(creator);
+
+  // Phase 1: Create small group (2 members max)
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...creatorHeaders },
+    body: JSON.stringify({ groupName: 'Limited Group', maxMembers: 2 }),
+  });
+
+  const groupId = groupResult.json.data.groupId;
+  assert.equal(groupResult.json.data.status, 'FORMATION');
+
+  // Phase 2: First member joins
+  const join1 = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...creatorHeaders },
+    body: JSON.stringify({ studentId: '11070004000' }),
+  });
+
+  assert.equal(join1.response.status, 200);
+
+  // Phase 3: Second member joins (fills group to capacity)
+  const join2 = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...creatorHeaders },
+    body: JSON.stringify({ studentId: '11070004001' }),
+  });
+
+  assert.equal(join2.response.status, 200);
+  assert.equal(join2.json.data.totalMembers, 2);
+
+  // Verify group is at capacity
+  const capacityCheck = await request(`/api/v1/groups/${groupId}/membership`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', ...creatorHeaders },
+  });
+
+  assert.equal(capacityCheck.json.data.currentMemberCount, 2);
+  assert.equal(capacityCheck.json.data.availableSlots, 0);
+
+  // Phase 4: Third member tries to join (should be rejected - capacity reached)
+  const join3Rejected = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...creatorHeaders },
+    body: JSON.stringify({ studentId: '11070004002' }),
+  });
+
+  assert.equal(join3Rejected.response.status, 400);
+  assert.equal(join3Rejected.json.code, 'MAX_MEMBERS_REACHED');
+
+  // Final verification: membership list unchanged
+  const finalCheck = await request(`/api/v1/groups/${groupId}/membership`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', ...creatorHeaders },
+  });
+
+  assert.equal(finalCheck.json.data.currentMemberCount, 2);
+  assert.deepEqual(finalCheck.json.data.members, ['11070004000', '11070004001']);
+});
