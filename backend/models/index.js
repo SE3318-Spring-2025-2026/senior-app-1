@@ -5,6 +5,7 @@ const OAuthState = require('./OAuthState');
 const LinkedGitHubAccount = require('./LinkedGitHubAccount');
 const Group = require('./Group');
 const Invitation = require('./Invitation');
+const AuditLog = require('./AuditLog');
 
 module.exports = {
   User,
@@ -14,4 +15,5 @@ module.exports = {
   LinkedGitHubAccount,
   Group,
   Invitation,
+  AuditLog,
 };

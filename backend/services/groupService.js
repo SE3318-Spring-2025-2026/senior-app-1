@@ -1,128 +1,154 @@
 const { Op } = require('sequelize');
 const sequelize = require('../db');
-const Group = require('../models/Group');
-const Invitation = require('../models/Invitation');
-const User = require('../models/User');
+const { Group, AuditLog, Invitation, User } = require('../models');
 
-class GroupService {
-  async createShell(name, leaderId) {
-    if (typeof name !== 'string' || name.trim().length === 0) {
-      const err = new Error('Group name must be a non-empty string');
-      err.code = 'INVALID_GROUP_NAME';
-      throw err;
+const GROUP_NAME_MIN_LENGTH = 3;
+const GROUP_NAME_MAX_LENGTH = 80;
+const NORMALIZED_NAME_FIELD = 'normalizedName';
+
+function createServiceError(status, code, message) {
+  const error = new Error(message);
+  error.status = status;
+  error.code = code;
+  return error;
+}
+
+function normalizeGroupName(name) {
+  return name.trim().toLowerCase();
+}
+
+function validateGroupName(name) {
+  if (typeof name !== 'string') {
+    throw createServiceError(400, 'INVALID_GROUP_NAME', 'Group name is required.');
+  }
+
+  const trimmed = name.trim();
+  if (trimmed.length < GROUP_NAME_MIN_LENGTH || trimmed.length > GROUP_NAME_MAX_LENGTH) {
+    throw createServiceError(
+      400,
+      'INVALID_GROUP_NAME',
+      `Group name must be between ${GROUP_NAME_MIN_LENGTH} and ${GROUP_NAME_MAX_LENGTH} characters.`,
+    );
+  }
+
+  return trimmed;
+}
+
+async function createShell(name, leaderId) {
+  if (!leaderId) {
+    throw createServiceError(401, 'AUTH_REQUIRED', 'Authentication is required.');
+  }
+
+  const sanitizedName = validateGroupName(name);
+  const normalizedName = normalizeGroupName(sanitizedName);
+
+  return sequelize.transaction(async (transaction) => {
+    const existing = await Group.findOne({
+      where: { normalizedName },
+      transaction,
+    });
+
+    if (existing) {
+      throw createServiceError(409, 'DUPLICATE_GROUP_NAME', 'Group name already exists.');
     }
 
-    const trimmedName = name.trim();
-    const normalizedName = trimmedName.toLowerCase();
-
-    const transaction = await sequelize.transaction();
-
+    let group;
     try {
-      const group = await Group.create({
-        name: trimmedName,
-        normalizedName,
-        leaderId,
-        memberIds: [leaderId],
-        advisorId: null,
-      }, { transaction });
-
-      await transaction.commit();
-
-      return {
-        id: group.id,
-        name: group.name,
-        leaderId: group.leaderId,
-        memberIds: group.memberIds,
-        advisorId: group.advisorId,
-      };
+      group = await Group.create(
+        {
+          name: sanitizedName,
+          normalizedName,
+          leaderId,
+          memberIds: [leaderId],
+          advisorId: null,
+        },
+        { transaction },
+      );
     } catch (error) {
-      await transaction.rollback();
-
       if (
         error.name === 'SequelizeUniqueConstraintError' &&
         error.errors?.some((entry) =>
-          entry.path === 'name' || entry.path === 'normalizedName'
+          entry.path === 'name' || entry.path === NORMALIZED_NAME_FIELD
         )
       ) {
-        const duplicateError = new Error('Group with this name already exists');
-        duplicateError.code = 'DUPLICATE_GROUP_NAME';
-        throw duplicateError;
+        throw createServiceError(409, 'DUPLICATE_GROUP_NAME', 'Group name already exists.');
       }
 
       if (error.name === 'SequelizeForeignKeyConstraintError') {
-        const fkError = new Error('Leader not found');
-        fkError.code = 'LEADER_NOT_FOUND';
-        throw fkError;
+        throw createServiceError(400, 'LEADER_NOT_FOUND', 'Leader not found.');
       }
 
       throw error;
     }
-  }
 
-  async dispatchInvitations(groupId, rawStudentIds) {
-    // De-duplicate incoming student IDs
-    const studentIds = [...new Set(rawStudentIds)];
-
-    // f2 → validate groupId exists in D2
-    const group = await Group.findByPk(groupId);
-    if (!group) {
-      const err = new Error('Group not found');
-      err.code = 'GROUP_NOT_FOUND';
-      throw err;
-    }
-
-    // f4 → fetch D1 profiles for every requested student ID
-    const users = await User.findAll({
-      where: {
-        studentId: { [Op.in]: studentIds },
-        role: 'STUDENT',
+    await AuditLog.create(
+      {
+        action: 'GROUP_CREATED',
+        actorId: String(leaderId),
+        targetId: group.id,
+        metadata: { groupName: sanitizedName },
       },
-    });
+      { transaction },
+    );
 
-    const foundStudentIds = users.map((u) => u.studentId);
-    const foundSet = new Set(foundStudentIds);
-    const missing = studentIds.filter((sid) => !foundSet.has(sid));
-    if (missing.length > 0) {
-      const err = new Error('One or more students not found');
-      err.code = 'STUDENT_NOT_FOUND';
-      err.missing = missing;
-      throw err;
-    }
-
-    // f5 → persist D8 invitations atomically
-    const transaction = await sequelize.transaction();
-    let invitations;
-    try {
-      invitations = await Promise.all(
-        users.map(async (user) => {
-          const [inv] = await Invitation.findOrCreate({
-            where: { groupId, inviteeId: user.id },
-            defaults: { status: 'PENDING' },
-            transaction,
-          });
-          return inv;
-        })
-      );
-      await transaction.commit();
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
-
-    // f6 → trigger notifications only after successful persistence
-    for (const user of users) {
-      console.log(
-        `[Notification] Invitation dispatched → studentId: ${user.studentId}, groupId: ${groupId}`
-      );
-    }
-
-    return invitations.map((inv, i) => ({
-      id: inv.id,
-      groupId: inv.groupId,
-      studentId: users[i].studentId,
-      status: inv.status,
-    }));
-  }
+    return group;
+  });
 }
 
-module.exports = new GroupService();
+async function dispatchInvitations(groupId, rawStudentIds) {
+  const studentIds = [...new Set(rawStudentIds)];
+
+  const group = await Group.findByPk(groupId);
+  if (!group) {
+    const err = new Error('Group not found');
+    err.code = 'GROUP_NOT_FOUND';
+    throw err;
+  }
+
+  const users = await User.findAll({
+    where: {
+      studentId: { [Op.in]: studentIds },
+      role: 'STUDENT',
+    },
+  });
+
+  const foundSet = new Set(users.map((user) => user.studentId));
+  const missing = studentIds.filter((sid) => !foundSet.has(sid));
+  if (missing.length > 0) {
+    const err = new Error('One or more students not found');
+    err.code = 'STUDENT_NOT_FOUND';
+    err.missing = missing;
+    throw err;
+  }
+
+  const transaction = await sequelize.transaction();
+  let invitations;
+  try {
+    invitations = await Promise.all(
+      users.map(async (user) => {
+        const [inv] = await Invitation.findOrCreate({
+          where: { groupId, inviteeId: user.id },
+          defaults: { status: 'PENDING' },
+          transaction,
+        });
+        return inv;
+      }),
+    );
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+
+  return invitations.map((inv, i) => ({
+    id: inv.id,
+    groupId: inv.groupId,
+    studentId: users[i].studentId,
+    status: inv.status,
+  }));
+}
+
+module.exports = {
+  createShell,
+  dispatchInvitations,
+};
