@@ -36,8 +36,6 @@ export default function App() {
               <Route path="/coordinator/login" element={<CoordinatorLoginPage />} />
               <Route path="/coordinator" element={<CoordinatorHomePage />} />
               <Route path="/coordinator/student-id-registry/import" element={<CoordinatorStudentIdUploadPage />} />
-              <Route path="/students/groups" element={<GroupFormationPage />} />
-              <Route path="/students/invitations" element={<StudentInvitationsPage />} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="*" element={<AuthGatewayPage />} />
             </Route>

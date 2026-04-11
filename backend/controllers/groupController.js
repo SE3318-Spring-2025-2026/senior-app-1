@@ -1,160 +1,189 @@
 const { body, param, validationResult } = require('express-validator');
-const groupService = require('../services/groupService');
+const GroupService = require('../services/groupService');
 
 /**
- * Validation error formatter
+ * Validation middleware for creating a group
  */
-function buildGroupValidationError(field) {
-  switch (field) {
-    case 'groupId':
-      return { code: 'INVALID_GROUP_ID', message: 'Group ID must be a positive integer.' };
-    case 'studentId':
-      return { code: 'INVALID_STUDENT_ID', message: 'Student ID must be an 11-digit number.' };
-    case 'groupName':
-      return { code: 'INVALID_GROUP_NAME', message: 'Group name must be a string.' };
-    case 'maxMembers':
-      return { code: 'INVALID_MAX_MEMBERS', message: 'Max members must be between 1 and 10.' };
-    default:
-      return { code: 'INVALID_INPUT', message: 'Invalid input provided.' };
-  }
-}
-
-function getValidationError(req) {
-  const errors = validationResult(req);
-  if (errors.isEmpty()) {
-    return null;
-  }
-
-  return buildGroupValidationError(errors.array()[0].path);
-}
+exports.createGroupValidation = [
+  body('groupName')
+    .trim()
+    .notEmpty()
+    .withMessage('Group name is required')
+    .isLength({ min: 1, max: 255 })
+    .withMessage('Group name must be between 1 and 255 characters'),
+  body('maxMembers')
+    .isInt({ min: 1, max: 10 })
+    .withMessage('Max members must be between 1 and 10'),
+];
 
 /**
- * POST /groups/:groupId/membership/finalize
- * Finalize membership after acceptance
- * Enforces constraints, atomic update, prevents lost updates
+ * Create a new group
+ * POST /api/v1/groups
  */
-const finalizeMembershipValidation = [
-  param('groupId').isInt({ min: 1 }).toInt(),
-  body('studentId').isString().trim().matches(/^[0-9]{11}$/),
-  async (req, res) => {
-    const validationError = getValidationError(req);
-    if (validationError) {
-      return res.status(400).json(validationError);
+exports.createGroup = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
+    }
+
+    const { groupName, maxMembers } = req.body;
+
+    const group = await GroupService.createGroup(groupName, maxMembers);
+
+    res.status(201).json({
+      code: 'SUCCESS',
+      message: 'Group created successfully',
+      data: {
+        groupId: group.id,
+        groupName: group.groupName,
+        maxMembers: group.maxMembers,
+        status: group.status,
+        members: group.members,
+      },
+    });
+  } catch (error) {
+    console.error('Error in createGroup:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+};
+
+/**
+ * Validation middleware for finalizing membership
+ */
+exports.finalizeMembershipValidation = [
+  param('groupId')
+    .isInt({ min: 1 })
+    .withMessage('Group ID must be a positive integer'),
+  body('studentId')
+    .matches(/^\d{11}$/)
+    .withMessage('Student ID must be an 11-digit number'),
+];
+
+/**
+ * Finalize membership for a student in a group
+ * POST /api/v1/groups/:groupId/membership/finalize
+ */
+exports.finalizeMembership = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        code: 'INVALID_STUDENT_ID',
+        message: 'Invalid student ID format',
+        errors: errors.array(),
+      });
     }
 
     const { groupId } = req.params;
     const { studentId } = req.body;
 
-    try {
-      const result = await groupService.finalizeMembership(parseInt(groupId, 10), studentId);
+    const result = await GroupService.finalizeMembership(parseInt(groupId), studentId);
 
-      // NOTE: Leader notification trigger (f12) is deferred to Issue 12 (Notification System)
-      // Implementation will use NotificationService once available:
-      // const { GroupNotificationService } = require('../services');
-      // await GroupNotificationService.notifyLeaderMemberAdded(groupId, studentId);
-
-      return res.status(200).json({
+    res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Membership finalized successfully',
+      data: {
         success: true,
-        data: result,
-        message: 'Membership finalized successfully',
-      });
-    } catch (error) {
-      if (error.code && error.status) {
-        return res.status(error.status).json({
-          code: error.code,
-          message: error.message,
-        });
-      }
+        studentId: result.studentId,
+        totalMembers: result.totalMembers,
+        maxMembers: result.maxMembers,
+        groupId: result.groupId,
+      },
+    });
+  } catch (error) {
+    console.error('Error in finalizeMembership:', error);
 
-      console.error('Error finalizing membership:', error);
-      return res.status(500).json({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to finalize membership',
+    // Custom error handling
+    if (error.code === 'DUPLICATE_MEMBER') {
+      return res.status(400).json({
+        code: 'DUPLICATE_MEMBER',
+        message: 'Student is already a member of this group',
       });
     }
-  },
+
+    if (error.code === 'MAX_MEMBERS_REACHED') {
+      return res.status(400).json({
+        code: 'MAX_MEMBERS_REACHED',
+        message: 'Group has reached maximum member capacity',
+      });
+    }
+
+    if (error.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({
+        code: 'GROUP_NOT_FOUND',
+        message: 'Group not found',
+      });
+    }
+
+    if (error.code === 'GROUP_FINALIZED') {
+      return res.status(400).json({
+        code: 'GROUP_FINALIZED',
+        message: 'Group has been finalized and no longer accepts members',
+      });
+    }
+
+    res.status(500).json({
+      code: 'INTERNAL_ERROR',
+      message: 'Internal server error',
+    });
+  }
+};
+
+/**
+ * Validation middleware for getting group membership details
+ */
+exports.getGroupMembershipValidation = [
+  param('groupId')
+    .isInt({ min: 1 })
+    .withMessage('Group ID must be a positive integer'),
 ];
 
 /**
- * GET /groups/:groupId/membership
- * Retrieve group membership details
+ * Get group membership details
+ * GET /api/v1/groups/:groupId/membership
  */
-const getGroupMembershipValidation = [
-  param('groupId').isInt({ min: 1 }).toInt(),
-  async (req, res) => {
-    const validationError = getValidationError(req);
-    if (validationError) {
-      return res.status(400).json(validationError);
+exports.getGroupMembership = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid group ID',
+        errors: errors.array(),
+      });
     }
 
     const { groupId } = req.params;
 
-    try {
-      const membershipData = await groupService.getGroupMembership(parseInt(groupId, 10));
+    const groupData = await GroupService.getGroupMembership(parseInt(groupId));
 
-      return res.status(200).json({
-        success: true,
-        data: membershipData,
-      });
-    } catch (error) {
-      if (error.code && error.status) {
-        return res.status(error.status).json({
-          code: error.code,
-          message: error.message,
-        });
-      }
+    res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Group membership retrieved successfully',
+      data: {
+        groupId: groupData.id,
+        groupName: groupData.groupName,
+        status: groupData.status,
+        maxMembers: groupData.maxMembers,
+        members: groupData.members,
+        currentMemberCount: groupData.members.length,
+        availableSlots: groupData.maxMembers - groupData.members.length,
+      },
+    });
+  } catch (error) {
+    console.error('Error in getGroupMembership:', error);
 
-      console.error('Error retrieving group membership:', error);
-      return res.status(500).json({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to retrieve group membership',
-      });
-    }
-  },
-];
-
-/**
- * POST /groups
- * Create a new group
- */
-const createGroupValidation = [
-  body('groupName').optional().isString().trim(),
-  body('maxMembers').optional().isInt({ min: 1, max: 10 }).toInt(),
-  async (req, res) => {
-    const validationError = getValidationError(req);
-    if (validationError) {
-      return res.status(400).json(validationError);
-    }
-
-    const { groupName, maxMembers } = req.body;
-
-    try {
-      const result = await groupService.createGroup(groupName, maxMembers);
-
-      return res.status(201).json({
-        success: true,
-        data: result,
-        message: 'Group created successfully',
-      });
-    } catch (error) {
-      if (error.code && error.status) {
-        return res.status(error.status).json({
-          code: error.code,
-          message: error.message,
-        });
-      }
-
-      console.error('Error creating group:', error);
-      return res.status(500).json({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to create group',
+    if (error.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({
+        code: 'GROUP_NOT_FOUND',
+        message: 'Group not found',
       });
     }
-  },
-];
 
-module.exports = {
-  finalizeMembershipValidation,
-  getGroupMembershipValidation,
-  createGroupValidation,
+    res.status(500).json({
+      code: 'INTERNAL_ERROR',
+      message: 'Internal server error',
+    });
+  }
 };

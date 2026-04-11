@@ -1,33 +1,23 @@
 const express = require('express');
-const { authenticate, authorize } = require('../middleware/auth');
-const {
-  handleCreateGroup,
-  handleDispatchInvites,
-} = require('../controllers/groupFormationController');
-const {
-  finalizeMembershipValidation,
-  getGroupMembershipValidation,
-  createGroupValidation: finalizeMembershipCreateGroupValidation,
-} = require('../controllers/groupController');
-
 const router = express.Router();
+const groupController = require('../controllers/groupController');
 
-// Group Formation routes (Issue 59, 62, 64)
-router.post('/', authenticate, authorize(['STUDENT']), handleCreateGroup);
-router.post('/:groupId/invitations', authenticate, handleDispatchInvites);
+/**
+ * POST /api/v1/groups
+ * Create a new group
+ */
+router.post('/', groupController.createGroupValidation, groupController.createGroup);
 
-// Group Membership routes (Issue 84)
 /**
  * GET /api/v1/groups/:groupId/membership
- * Retrieve group membership details
+ * Get group membership details
  */
-router.get('/:groupId/membership', authenticate, getGroupMembershipValidation);
+router.get('/:groupId/membership', groupController.getGroupMembershipValidation, groupController.getGroupMembership);
 
 /**
  * POST /api/v1/groups/:groupId/membership/finalize
- * Finalize membership after acceptance (Data Flow: f11)
- * Atomically updates D2, enforces constraints, prevents lost updates
+ * Finalize membership for a student (issue 11 - Group Membership Write)
  */
-router.post('/:groupId/membership/finalize', authenticate, finalizeMembershipValidation);
+router.post('/:groupId/membership/finalize', groupController.finalizeMembershipValidation, groupController.finalizeMembership);
 
 module.exports = router;
