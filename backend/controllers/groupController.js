@@ -48,8 +48,10 @@ const finalizeMembershipValidation = [
     try {
       const result = await groupService.finalizeMembership(parseInt(groupId, 10), studentId);
 
-      // TODO: Emit leader notification trigger (f12) on success
-      // await notificationService.emitLeaderNotification(groupId, studentId, 'MEMBER_ADDED');
+      // NOTE: Leader notification trigger (f12) is deferred to Issue 12 (Notification System)
+      // Implementation will use NotificationService once available:
+      // const { GroupNotificationService } = require('../services');
+      // await GroupNotificationService.notifyLeaderMemberAdded(groupId, studentId);
 
       return res.status(200).json({
         success: true,
