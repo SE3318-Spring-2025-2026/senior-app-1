@@ -11,6 +11,10 @@ const Group = sequelize.define('Group', {
   name: {
     type: DataTypes.STRING,
     allowNull: false,
+  },
+  normalizedName: {
+    type: DataTypes.STRING,
+    allowNull: false,
     unique: true,
   },
   leaderId: {
@@ -20,6 +24,8 @@ const Group = sequelize.define('Group', {
       model: User,
       key: 'id',
     },
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE',
   },
   memberIds: {
     type: DataTypes.JSON,
@@ -34,10 +40,14 @@ const Group = sequelize.define('Group', {
       model: User,
       key: 'id',
     },
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
   },
 });
 
-User.hasMany(Group, { foreignKey: 'leaderId' });
-Group.belongsTo(User, { foreignKey: 'leaderId' });
+User.hasMany(Group, { as: 'ledGroups', foreignKey: 'leaderId' });
+User.hasMany(Group, { as: 'advisedGroups', foreignKey: 'advisorId' });
+Group.belongsTo(User, { as: 'leader', foreignKey: 'leaderId' });
+Group.belongsTo(User, { as: 'advisor', foreignKey: 'advisorId' });
 
 module.exports = Group;
