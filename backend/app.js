@@ -1,8 +1,11 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 const { User, Group, AuditLog } = require('./models');
+
 const adminRoutes = require('./routes/admin');
 const coordinatorRoutes = require('./routes/coordinator');
 const professorRoutes = require('./routes/professors');
@@ -16,11 +19,16 @@ const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 
 app.use(express.json());
+
+// Serve frontend if exists
 if (fs.existsSync(frontendDistPath)) {
   app.use(express.static(frontendDistPath));
 }
 
+// Make models globally accessible
 app.locals.models = { User, Group, AuditLog };
+
+// Routes
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/coordinator', coordinatorRoutes);
 app.use('/api/v1/professors', professorRoutes);
@@ -30,6 +38,7 @@ app.use('/api/v1/password-setup-token-store', passwordSetupTokenStoreRoutes);
 app.use('/api/v1/user-database', userDatabaseRoutes);
 app.use('/api/v1/groups', groupRoutes);
 
+// Global error handler
 app.use((err, req, res, _next) => {
   console.error(err.stack);
   res.status(500).json({ message: 'Internal Server Error' });
