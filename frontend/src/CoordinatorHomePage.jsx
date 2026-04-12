@@ -25,6 +25,14 @@ const coordinatorTools = [
     cta: 'Open Import Tool',
     status: 'Ready',
   },
+  {
+    eyebrow: 'Group Formation',
+    title: 'Manual group membership (D2)',
+    description: 'Coordinator override: add or remove a student from a group by id (f15 / f19).',
+    href: '/coordinator/groups/membership',
+    cta: 'Open Membership Tool',
+    status: 'Ready',
+  },
 ];
 
 export default function CoordinatorHomePage() {

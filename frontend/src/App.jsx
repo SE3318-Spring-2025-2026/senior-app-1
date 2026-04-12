@@ -1,12 +1,13 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import AdminHomePage from './AdminHomePage';
-import GroupFormationPage from './GroupFormationPage';
 import AdminLoginPage from './AdminLoginPage';
 import AdminProfessorCreatePage from './AdminProfessorCreatePage';
 import AuthGatewayPage from './AuthGatewayPage';
+import CoordinatorGroupMembershipPage from './CoordinatorGroupMembershipPage';
 import CoordinatorHomePage from './CoordinatorHomePage';
 import CoordinatorLoginPage from './CoordinatorLoginPage';
 import CoordinatorStudentIdUploadPage from './CoordinatorStudentIdUploadPage';
+import GroupFormationPage from './GroupFormationPage';
 import GroupPage from './GroupPage';
 import ProfessorLoginPage from './ProfessorLoginPage';
 import ProfessorPasswordSetupPage from './ProfessorPasswordSetupPage';
@@ -28,6 +29,8 @@ export default function App() {
               <Route path="/" element={<AuthGatewayPage />} />
               <Route path="/students/register" element={<Register />} />
               <Route path="/students/login" element={<StudentLoginPage />} />
+              <Route path="/students/invitations" element={<StudentInvitationsPage />} />
+              <Route path="/students/group-formation" element={<GroupFormationPage />} />
               <Route path="/professors/login" element={<ProfessorLoginPage />} />
               <Route path="/professors/password-setup" element={<ProfessorPasswordSetupPage />} />
               <Route path="/admin/login" element={<AdminLoginPage />} />
@@ -36,6 +39,7 @@ export default function App() {
               <Route path="/coordinator/login" element={<CoordinatorLoginPage />} />
               <Route path="/coordinator" element={<CoordinatorHomePage />} />
               <Route path="/coordinator/student-id-registry/import" element={<CoordinatorStudentIdUploadPage />} />
+              <Route path="/coordinator/groups/membership" element={<CoordinatorGroupMembershipPage />} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="*" element={<AuthGatewayPage />} />
             </Route>
