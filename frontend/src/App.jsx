@@ -28,6 +28,8 @@ export default function App() {
               <Route path="/" element={<AuthGatewayPage />} />
               <Route path="/students/register" element={<Register />} />
               <Route path="/students/login" element={<StudentLoginPage />} />
+              <Route path="/students/group" element={<GroupFormationPage />} />
+              <Route path="/students/invitations" element={<StudentInvitationsPage />} />
               <Route path="/professors/login" element={<ProfessorLoginPage />} />
               <Route path="/professors/password-setup" element={<ProfessorPasswordSetupPage />} />
               <Route path="/admin/login" element={<AdminLoginPage />} />
