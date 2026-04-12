@@ -7,7 +7,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'npm --prefix ../backend start',
+      command: 'JWT_SECRET=playwright-e2e-secret node ../backend/scripts/seedPlaywrightUsers.js && JWT_SECRET=playwright-e2e-secret npm --prefix ../backend start',
       url: 'http://127.0.0.1:3001',
       reuseExistingServer: true,
       timeout: 120000,
