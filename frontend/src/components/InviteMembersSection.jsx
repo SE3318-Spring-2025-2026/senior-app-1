@@ -14,13 +14,6 @@ function parseStudentIds(raw) {
   ];
 }
 
-// InviteMembersSection — rendered once a group shell exists.
-// Props:
-//   group          — the created group object { id, name, ... }
-//   dispatchInvites(groupId, studentIds) — from useGroupFormation
-//   invitesPending — boolean
-//   invitations    — Invitation[] accumulated from successful dispatches
-//   inviteError    — null | { type, message, failures? }
 export default function InviteMembersSection({
   group,
   dispatchInvites,
@@ -38,17 +31,14 @@ export default function InviteMembersSection({
 
     try {
       const dispatched = await dispatchInvites(group.id, ids);
-      setIdsText('');
+      setIdsText(''); // ← temizle sadece başarıda
 
-      // Toast: Team Leader sees confirmation
       notify({
         type: 'success',
         title: 'Invitations sent',
         message: `${dispatched.length} invitation(s) dispatched successfully.`,
       });
 
-      // Mock push: write to localStorage so StudentInvitationsPage can drain it
-      // and fire "New Invitation Received!" toasts on the student side.
       const existing = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
       const newEntries = dispatched.map((inv) => ({
         invitationId: inv.id,
@@ -58,8 +48,22 @@ export default function InviteMembersSection({
       }));
       localStorage.setItem(LS_KEY, JSON.stringify([...existing, ...newEntries]));
     } catch (err) {
-      // error state managed by hook (keeps textarea); also fire a toast
-      const message = err.response?.data?.message || err.message || 'Invitation dispatch failed.';
+      // ── Duplicate-invite: özel mesaj, textarea KALSIN ──────────────────
+      const code = err.response?.data?.code;
+      if (code === 'DUPLICATE_INVITE') {
+        notify({
+          type: 'error',
+          title: 'Already invited',
+          message:
+            err.response?.data?.message ||
+            'One or more students have already been invited to this group.',
+        });
+        // idsText'i temizleme — kullanıcı düzeltip tekrar gönderebilir
+        return;
+      }
+      // ── Diğer hatalar ──────────────────────────────────────────────────
+      const message =
+        err.response?.data?.message || err.message || 'Invitation dispatch failed.';
       notify({ type: 'error', title: 'Invitation failed', message });
       throw err;
     }
@@ -86,8 +90,6 @@ export default function InviteMembersSection({
           />
           <p className="token-note">
             Enter student IDs separated by commas or newlines. Duplicates are ignored.
-            <br />
-            <em>Mock tip: include "error_id" or any ID starting with "invalid" to trigger a 400.</em>
           </p>
         </label>
 
@@ -126,15 +128,32 @@ export default function InviteMembersSection({
         </div>
       </form>
 
+      {/* ── Pending Invitations List ─────────────────────────────────────── */}
       {invitations.length > 0 && (
         <section className="side-column">
           <section className="token-panel">
             <p className="feedback-label">Pending Invitations</p>
             <ul>
               {invitations.map((inv) => (
-                <li key={inv.id}>
+                <li key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.25rem 0' }}>
                   <strong>{inv.studentId}</strong>
-                  <span> — {inv.status}</span>
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      padding: '0.15rem 0.5rem',
+                      borderRadius: '999px',
+                      backgroundColor:
+                        inv.status === 'PENDING'   ? '#fff3cd' :
+                        inv.status === 'ACCEPTED'  ? '#d4edda' :
+                        inv.status === 'REJECTED'  ? '#f8d7da' : '#e9ecef',
+                      color:
+                        inv.status === 'PENDING'   ? '#856404' :
+                        inv.status === 'ACCEPTED'  ? '#155724' :
+                        inv.status === 'REJECTED'  ? '#721c24' : '#495057',
+                    }}
+                  >
+                    {inv.status}
+                  </span>
                 </li>
               ))}
             </ul>
