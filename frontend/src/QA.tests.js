@@ -1,177 +1,185 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Frontend E2E tests: Group invitation flow
+// E2E: invitee accepts and sees status change; non-invitee cannot respond
 // Framework: Playwright  (install: npm install -D @playwright/test)
-// Run:       npx playwright test group-invitations.e2e.js
+// Run:       npx playwright test invitation-response.e2e.js
 // ─────────────────────────────────────────────────────────────────────────────
-// These tests will FAIL until:
-//   1. A student group dashboard page exists at /student/group or similar.
-//   2. The invite form and pending invitations list are rendered.
-//   3. The backend invitation endpoint is wired up.
+// Will FAIL until:
+//   1. Invitation detail page exists with accept/decline buttons.
+//   2. Accepting updates visible status to ACCEPTED.
+//   3. Non-invitee is blocked from seeing or responding to the invitation.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const { test, expect } = require('@playwright/test');
 
-// ── Shared test data ──────────────────────────────────────────────────────────
-const LEADER = {
-  studentId: '11070001000',
-  password: 'StrongPass1!',
-  email: 'leader@example.edu',
-  fullName: 'Team Leader',
-};
+const LEADER   = { studentId: '11070001000', password: 'StrongPass1!' };
+const INVITEE  = { studentId: '11070001001', password: 'StrongPass1!' };
+const STRANGER = { studentId: '11070001002', password: 'StrongPass1!' };
+const GROUP_NAME = 'E2E Response Team';
 
-const MEMBER_A = { studentId: '11070001001' };
-const MEMBER_B = { studentId: '11070001002' };
-const INELIGIBLE = { studentId: '11070001999' };   // valid format, not in registry
-const MALFORMED  = { studentId: 'bad-id' };         // not 11 digits
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-// ── Helper: log in as leader and navigate to invite page ─────────────────────
-async function loginAsLeader(page) {
+async function loginAs(page, studentId, password) {
   await page.goto('/student/login');
-  await page.getByLabel(/student id/i).fill(LEADER.studentId);
-  await page.getByLabel(/password/i).fill(LEADER.password);
+  await page.getByLabel(/student id/i).fill(studentId);
+  await page.getByLabel(/password/i).fill(password);
   await page.getByRole('button', { name: /log in/i }).click();
-  // Wait until redirected to student dashboard.
   await page.waitForURL(/\/student\//);
 }
 
-async function goToInvitePage(page) {
-  // Navigate to the group management / invite section.
-  // Adjust selector to match actual nav label once UI is built.
-  await page.getByRole('link', { name: /my group|group management|invite/i }).click();
+async function logout(page) {
+  await page.getByRole('button', { name: /log out|sign out/i }).click();
+  await page.waitForURL(/\/.*login/);
+}
+
+// Leader creates group and invites INVITEE — returns invitation detail URL.
+async function setupInvitation(page) {
+  await loginAs(page, LEADER.studentId, LEADER.password);
+
+  await page.getByRole('link', { name: /my group|group management|create group/i }).click();
   await page.waitForURL(/\/student\/group/);
+  await page.getByLabel(/group name/i).fill(GROUP_NAME);
+  await page.getByRole('button', { name: /create group/i }).click();
+  await expect(page.getByText(GROUP_NAME)).toBeVisible({ timeout: 5000 });
+
+  await page.getByLabel(/student id/i).fill(INVITEE.studentId);
+  await page.getByRole('button', { name: /invite|send invitation/i }).click();
+  await expect(
+    page.getByText(/invitation sent|invited successfully/i),
+  ).toBeVisible({ timeout: 5000 });
+
+  await logout(page);
+}
+
+// Navigate to the invitation detail page for the invitee.
+async function openInvitationDetail(page) {
+  const notificationStack = page.locator('[aria-live="polite"]');
+  await expect(notificationStack).toBeVisible({ timeout: 8000 });
+
+  const inviteNotification = notificationStack
+    .locator('section.notification')
+    .filter({ hasText: /invitation|group invite|E2E Response Team/i });
+
+  await expect(inviteNotification).not.toHaveCount(0, { timeout: 8000 });
+
+  // Click view/details link or button inside the notification.
+  const detailTrigger = inviteNotification
+    .getByRole('link', { name: /view|details|open/i })
+    .or(inviteNotification.getByRole('button', { name: /view|details|open/i }));
+
+  await detailTrigger.click();
+  await expect(page.getByText(GROUP_NAME)).toBeVisible({ timeout: 5000 });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POSITIVE PATH
-// Leader invites 2 students → sees both appear in pending invitations list.
+// Test 1: Invitee accepts and sees status change to ACCEPTED
 // ─────────────────────────────────────────────────────────────────────────────
 
-test('leader invites 2 students and sees them in pending invitations list', async ({ page }) => {
-  await loginAsLeader(page);
-  await goToInvitePage(page);
+test('invitee accepts invitation and sees status change to ACCEPTED', async ({ page }) => {
+  await setupInvitation(page);
 
-  // ── Invite first student ───────────────────────────────────────────────────
-  const studentIdInput = page.getByLabel(/student id/i);
-  const inviteButton   = page.getByRole('button', { name: /invite|send invitation/i });
+  // Log in as invitee.
+  await loginAs(page, INVITEE.studentId, INVITEE.password);
+  await openInvitationDetail(page);
 
-  await studentIdInput.fill(MEMBER_A.studentId);
-  await inviteButton.click();
+  // Accept button must be present.
+  const acceptButton = page.getByRole('button', { name: /accept/i });
+  await expect(acceptButton).toBeVisible({ timeout: 5000 });
+  await acceptButton.click();
 
-  // Success feedback must appear (no error message).
+  // After accepting, status badge/text must show ACCEPTED.
   await expect(
-    page.getByText(/invitation sent|invited successfully/i),
+    page.getByText(/accepted/i),
   ).toBeVisible({ timeout: 5000 });
 
-  // ── Invite second student ──────────────────────────────────────────────────
-  await studentIdInput.fill(MEMBER_B.studentId);
-  await inviteButton.click();
+  // Accept button must disappear — invitation already responded to.
+  await expect(acceptButton).not.toBeVisible({ timeout: 3000 });
 
+  // Decline button must also disappear.
   await expect(
-    page.getByText(/invitation sent|invited successfully/i),
-  ).toBeVisible({ timeout: 5000 });
-
-  // ── Pending invitations section must show both students ───────────────────
-  const pendingSection = page.getByRole('region', { name: /pending invitations/i });
-  await expect(pendingSection).toBeVisible();
-
-  await expect(
-    pendingSection.getByText(MEMBER_A.studentId),
-  ).toBeVisible({ timeout: 5000 });
-
-  await expect(
-    pendingSection.getByText(MEMBER_B.studentId),
-  ).toBeVisible({ timeout: 5000 });
-
-  // Both entries must show PENDING status badge.
-  const pendingBadges = pendingSection.getByText(/pending/i);
-  await expect(pendingBadges).toHaveCount(2);
+    page.getByRole('button', { name: /decline|reject/i }),
+  ).not.toBeVisible({ timeout: 3000 });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NEGATIVE PATH — malformed student ID
-// Shows validation error; no invitation row created; list unchanged.
+// Test 2: Invitee declines and sees status change to REJECTED
 // ─────────────────────────────────────────────────────────────────────────────
 
-test('inviting a malformed student ID shows an error and creates no invitation', async ({ page }) => {
-  await loginAsLeader(page);
-  await goToInvitePage(page);
+test('invitee declines invitation and sees status change to REJECTED', async ({ page }) => {
+  await setupInvitation(page);
 
-  const studentIdInput = page.getByLabel(/student id/i);
-  const inviteButton   = page.getByRole('button', { name: /invite|send invitation/i });
+  await loginAs(page, INVITEE.studentId, INVITEE.password);
+  await openInvitationDetail(page);
 
-  await studentIdInput.fill(MALFORMED.studentId);
-  await inviteButton.click();
+  const declineButton = page.getByRole('button', { name: /decline|reject/i });
+  await expect(declineButton).toBeVisible({ timeout: 5000 });
+  await declineButton.click();
 
-  // Error message must be visible.
+  // After declining, status badge/text must show REJECTED or DECLINED.
   await expect(
-    page.getByText(/invalid student id/i),
+    page.getByText(/rejected|declined/i),
   ).toBeVisible({ timeout: 5000 });
 
-  // No success message must appear.
+  // Both action buttons must disappear.
   await expect(
-    page.getByText(/invitation sent|invited successfully/i),
-  ).not.toBeVisible();
+    page.getByRole('button', { name: /accept/i }),
+  ).not.toBeVisible({ timeout: 3000 });
 
-  // Pending invitations list must be empty (or unchanged).
-  const pendingSection = page.getByRole('region', { name: /pending invitations/i });
-  await expect(
-    pendingSection.getByText(MALFORMED.studentId),
-  ).not.toBeVisible();
+  await expect(declineButton).not.toBeVisible({ timeout: 3000 });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NEGATIVE PATH — ineligible student ID
-// Valid format but not in registry → shows not-eligible error; no invite created.
+// Test 3: Non-invitee cannot see or respond to the invitation
 // ─────────────────────────────────────────────────────────────────────────────
 
-test('inviting an ineligible student ID shows not-eligible error and creates no invitation', async ({ page }) => {
-  await loginAsLeader(page);
-  await goToInvitePage(page);
+test('non-invitee cannot see or respond to the invitation', async ({ page }) => {
+  await setupInvitation(page);
 
-  const studentIdInput = page.getByLabel(/student id/i);
-  const inviteButton   = page.getByRole('button', { name: /invite|send invitation/i });
+  // Log in as stranger — was never invited.
+  await loginAs(page, STRANGER.studentId, STRANGER.password);
 
-  await studentIdInput.fill(INELIGIBLE.studentId);
-  await inviteButton.click();
+  // Notification stack must have no invitation notification for stranger.
+  const notificationStack = page.locator('[aria-live="polite"]');
+  const inviteNotification = notificationStack
+    .locator('section.notification')
+    .filter({ hasText: /invitation|group invite|E2E Response Team/i });
 
-  // Error message must be visible.
+  await expect(inviteNotification).toHaveCount(0, { timeout: 5000 });
+
+  // If stranger tries to navigate directly to invitation detail, they must see
+  // a forbidden or not-found message — not the invitation content.
+  // We attempt a direct URL guess; the exact path depends on implementation.
+  await page.goto('/student/invitations/1');
+
   await expect(
-    page.getByText(/not eligible|student not eligible/i),
+    page.getByText(/not found|forbidden|access denied|you do not have permission/i),
   ).toBeVisible({ timeout: 5000 });
 
-  // No success message must appear.
+  // Accept and decline buttons must NOT be present.
   await expect(
-    page.getByText(/invitation sent|invited successfully/i),
+    page.getByRole('button', { name: /accept/i }),
   ).not.toBeVisible();
 
-  // Pending list must not contain the ineligible ID.
-  const pendingSection = page.getByRole('region', { name: /pending invitations/i });
   await expect(
-    pendingSection.getByText(INELIGIBLE.studentId),
+    page.getByRole('button', { name: /decline|reject/i }),
   ).not.toBeVisible();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NEGATIVE PATH — empty student ID field
-// Submit with no input → shows required-field error; no invite created.
+// Test 4: Already-responded invitation shows correct final status, no actions
 // ─────────────────────────────────────────────────────────────────────────────
 
-test('submitting invite form with empty student ID shows required-field error', async ({ page }) => {
-  await loginAsLeader(page);
-  await goToInvitePage(page);
+test('already-accepted invitation shows ACCEPTED and hides action buttons', async ({ page }) => {
+  await setupInvitation(page);
 
-  const inviteButton = page.getByRole('button', { name: /invite|send invitation/i });
+  // Invitee accepts.
+  await loginAs(page, INVITEE.studentId, INVITEE.password);
+  await openInvitationDetail(page);
+  await page.getByRole('button', { name: /accept/i }).click();
+  await expect(page.getByText(/accepted/i)).toBeVisible({ timeout: 5000 });
 
-  // Click without filling the input.
-  await inviteButton.click();
-
-  // Some form-level or API-level error must appear.
-  await expect(
-    page.getByText(/required|please enter|student id is required/i),
-  ).toBeVisible({ timeout: 5000 });
-
-  // No success message.
-  await expect(
-    page.getByText(/invitation sent|invited successfully/i),
-  ).not.toBeVisible();
+  // Reload page — status must persist, buttons must stay hidden.
+  await page.reload();
+  await expect(page.getByText(/accepted/i)).toBeVisible({ timeout: 5000 });
+  await expect(page.getByRole('button', { name: /accept/i })).not.toBeVisible();
+  await expect(page.getByRole('button', { name: /decline|reject/i })).not.toBeVisible();
 });
