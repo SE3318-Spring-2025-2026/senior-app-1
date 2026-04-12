@@ -24,29 +24,16 @@ const processResponse = async (invitationId, newStatus) => {
     throw err;
   }
 
-  // 3. Update invitation status
+  // 3. Update status
   invitation.status = newStatus;
   await invitation.save();
 
-  // 4. Trigger P24 — only on ACCEPT
-  // GroupService.finalizeMembership is already idempotent via pessimistic locking:
-  // DUPLICATE_MEMBER error is caught and suppressed (safe retry behaviour)
+  // 4. Trigger membership finalization ONLY on ACCEPT (idempotent guard included)
   if (newStatus === 'ACCEPTED') {
-    try {
-      await GroupService.finalizeMembership(
-        invitation.groupId,
-        invitation.studentId
-      );
-    } catch (err) {
-      if (err.code === 'DUPLICATE_MEMBER') {
-        // Already finalized — idempotent no-op, safe to ignore
-        console.info(
-          `[InvitationService] Student ${invitation.studentId} already member of group ${invitation.groupId}. Skipping.`
-        );
-      } else {
-        throw err; // GROUP_NOT_FOUND, MAX_MEMBERS_REACHED, vb. → yukarı taşı
-      }
-    }
+    await GroupService.finalizeMembership(
+      invitation.groupId,
+      invitation.studentId
+    );
   }
 
   return invitation;
