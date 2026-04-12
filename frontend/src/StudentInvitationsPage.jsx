@@ -56,15 +56,11 @@ export default function StudentInvitationsPage() {
 
   const { notify } = useNotification();
 
-  // Transient success banner shown after each resolved invitation.
   const [lastResolved, setLastResolved] = useState(null);
 
   useEffect(() => {
     fetchInvitations();
 
-    // Mock push: drain localStorage entries written by InviteMembersSection.
-    // Each entry represents one invitation dispatched by a Team Leader.
-    // Fire one toast per entry so the student sees "New Invitation Received!" for each group.
     try {
       const raw = localStorage.getItem(LS_KEY);
       if (raw) {
@@ -89,9 +85,38 @@ export default function StudentInvitationsPage() {
 
     try {
       await respondToInvitation(invitationId, response);
+
       setLastResolved({ groupName: invitation?.groupName, response });
+
+      // ─── Notify Team Leader (fire-and-forget, confirmed backend success) ───
+      if (response === 'ACCEPT') {
+        // Backend already triggers NotificationService.notifyMembershipAccepted.
+        // Here we show a UI confirmation to the student with a link to the group.
+        notify({
+          type: 'success',
+          title: 'Team Leader Notified',
+          message: (
+            <span>
+              The Team Leader of{' '}
+              <Link to={`/groups/${invitation?.groupId}`}>
+                {invitation?.groupName}
+              </Link>{' '}
+              has been notified of your membership.
+            </span>
+          ),
+        });
+      } else {
+        // REJECT — notify student that leader was informed of the decline
+        notify({
+          type: 'info',
+          title: 'Team Leader Notified',
+          message: `The Team Leader of ${invitation?.groupName} has been informed that you declined the invitation.`,
+        });
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
     } catch {
-      // error already in responseErrors; keep the banner clear
+      // Backend failed — do NOT notify. Error already in responseErrors.
       setLastResolved(null);
     }
   }
