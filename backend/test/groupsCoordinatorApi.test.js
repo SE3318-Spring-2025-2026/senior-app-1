@@ -1,16 +1,12 @@
 /**
  * Issue #90 — PATCH /api/v1/groups/:groupId/membership/coordinator (add to npm test in same PR).
  */
+require('./setupTestEnv');
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
-process.env.JWT_SECRET = 'test-secret';
-process.env.SQLITE_STORAGE = ':memory:';
-process.env.FRONTEND_URL = 'http://localhost:5173';
-process.env.GITHUB_CLIENT_ID = '';
-process.env.GITHUB_CLIENT_SECRET = '';
 
 const sequelize = require('../db');
 const app = require('../app');
@@ -77,14 +73,14 @@ test('PATCH coordinator membership API: 200 ADD/REMOVE, 409 leader, 403 non-coor
     password: 'StrongPass1!',
   });
 
-  await Group.create({
-    id: 'grp-api-90',
+  const groupRow = await Group.create({
     name: 'API Test',
     leaderId: '11070001000',
     memberIds: ['11070001000'],
   });
+  const gid = groupRow.id;
 
-  const addFirst = await request('/api/v1/groups/grp-api-90/membership/coordinator', {
+  const addFirst = await request(`/api/v1/groups/${gid}/membership/coordinator`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -94,7 +90,7 @@ test('PATCH coordinator membership API: 200 ADD/REMOVE, 409 leader, 403 non-coor
   });
   assert.equal(addFirst.response.status, 200);
 
-  const removeLeader = await request('/api/v1/groups/grp-api-90/membership/coordinator', {
+  const removeLeader = await request(`/api/v1/groups/${gid}/membership/coordinator`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -112,7 +108,7 @@ test('PATCH coordinator membership API: 200 ADD/REMOVE, 409 leader, 403 non-coor
     password: 'StrongPass1!',
   });
   const studentToken = jwt.sign({ id: other.id, role: other.role }, process.env.JWT_SECRET);
-  const forbidden = await request('/api/v1/groups/grp-api-90/membership/coordinator', {
+  const forbidden = await request(`/api/v1/groups/${gid}/membership/coordinator`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',

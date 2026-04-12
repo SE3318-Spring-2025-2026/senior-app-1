@@ -1,18 +1,22 @@
+require('./setupTestEnv');
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-process.env.JWT_SECRET = 'test-secret';
-process.env.SQLITE_STORAGE = ':memory:';
-process.env.FRONTEND_URL = 'http://localhost:5173';
-process.env.GITHUB_CLIENT_ID = '';
-process.env.GITHUB_CLIENT_SECRET = '';
-
 const sequelize = require('../db');
 const app = require('../app');
 require('../models');
-const { User, Professor, ValidStudentId, LinkedGitHubAccount, OAuthState } = require('../models');
+const {
+  User,
+  Professor,
+  ValidStudentId,
+  LinkedGitHubAccount,
+  OAuthState,
+  Group,
+  AuditLog,
+} = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
 const { createStudent, ensureValidStudentRegistry } = require('../services/studentService');
@@ -51,6 +55,8 @@ test.after(async () => {
 });
 
 test.beforeEach(async () => {
+  await AuditLog.destroy({ where: {} });
+  await Group.destroy({ where: {} });
   await LinkedGitHubAccount.destroy({ where: {} });
   await OAuthState.destroy({ where: {} });
   await User.destroy({ where: {} });
@@ -1232,4 +1238,219 @@ test('manual linked account store and github patch endpoint update student statu
     githubLinked: true,
     message: 'Student GitHub link updated successfully',
   });
+});
+
+// ============================================
+// NOTIFICATION TESTS (Issue 12)
+// ============================================
+
+test('[NOTIFICATIONS] backend emits notification after successful finalize only', async () => {
+  const leader = await User.create({
+    email: 'notif-leader@example.com',
+    fullName: 'Notification Leader',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const leaderHeaders = await authHeaderFor(leader);
+
+  // Create group with leader
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({
+      groupName: 'Notification Test Group',
+      maxMembers: 2,
+    }),
+  });
+
+  const groupId = groupResult.json.data.groupId;
+
+  // Capture console output BEFORE making requests
+  const originalLog = console.log;
+  const capturedLogs = [];
+  console.log = (...args) => {
+    capturedLogs.push(args.join(' '));
+    originalLog(...args);
+  };
+
+  // Successful finalize - SHOULD emit notification
+  const successResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070010000' }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+
+  // Give time for async notification to be logged
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Verify notification was emitted (check logs contain NotificationService event)
+  const notificationLogged = capturedLogs.some((log) => log.includes('[NotificationService] Event emitted'));
+  assert.equal(notificationLogged, true, 'Notification should be emitted on successful finalize');
+
+  // Reset logs
+  capturedLogs.length = 0;
+
+  // Failed finalize (duplicate member) - should NOT emit notification
+  const failureResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070010000' }), // Same student, should fail
+  });
+
+  assert.equal(failureResult.response.status, 400);
+  assert.equal(failureResult.json.code, 'DUPLICATE_MEMBER');
+
+  // Give time in case error still triggers notification
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Verify notification was NOT emitted for failed request
+  const failureNotificationLogged = capturedLogs.some((log) =>
+    log.includes('[NotificationService] Event emitted')
+  );
+  assert.equal(failureNotificationLogged, false, 'Notification should NOT be emitted on failed finalize');
+
+  // Restore console.log
+  console.log = originalLog;
+});
+
+test('[E2E NOTIFICATIONS] leader receives notification after invitee accepts', async () => {
+  const leader = await User.create({
+    email: 'e2e-notif-leader@example.com',
+    fullName: 'E2E Notification Leader',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const leaderHeaders = await authHeaderFor(leader);
+
+  // Create group with explicit leader
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({
+      groupName: 'E2E Notification Test',
+      maxMembers: 3,
+    }),
+  });
+
+  const groupId = groupResult.json.data.groupId;
+
+  // Capture logs for notification verification
+  const originalLog = console.log;
+  const allNotifications = [];
+  console.log = (...args) => {
+    const logEntry = args.join(' ');
+    allNotifications.push(logEntry);
+    originalLog(...args);
+  };
+
+  // Invitee 1 accepts (first member)
+  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070020000' }),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  // Invitee 2 accepts (second member)
+  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070020001' }),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  // Verify leader received 2 notifications by checking all logs
+  const emittedEventLines = allNotifications.filter((log) =>
+    log.includes('[NotificationService] Event emitted')
+  );
+  
+  assert.equal(emittedEventLines.length, 2, `Leader should receive 2 acceptance notifications. Got ${emittedEventLines.length} Event emitted logs`);
+
+  // Restore console.log
+  console.log = originalLog;
+});
+
+test('[E2E NOTIFICATIONS] no notification emitted when finalize returns 400', async () => {
+  const leader = await User.create({
+    email: 'no-notif-leader@example.com',
+    fullName: 'No Notification Leader',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const leaderHeaders = await authHeaderFor(leader);
+
+  // Create group with small capacity
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({
+      groupName: 'No Notification Test',
+      maxMembers: 1, // Only 1 slot
+    }),
+  });
+
+  const groupId = groupResult.json.data.groupId;
+
+  // Capture logs
+  const originalLog = console.log;
+  const allNotifications = [];
+  console.log = (...args) => {
+    const logEntry = args.join(' ');
+    if (logEntry.includes('[NotificationService]')) {
+      allNotifications.push(logEntry);
+    }
+    originalLog(...args);
+  };
+
+  // Fill the group
+  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070030000' }),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const beforeCount = allNotifications.length;
+
+  // Try to exceed capacity - should return 400, NO notification
+  const capacityExceededResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070030001' }),
+  });
+
+  assert.equal(capacityExceededResult.response.status, 400);
+  assert.equal(capacityExceededResult.json.code, 'MAX_MEMBERS_REACHED');
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Verify no new notifications were emitted for the 400 response
+  const afterCount = allNotifications.length;
+  assert.equal(beforeCount, afterCount, 'No notification should be emitted for failed finalize (400)');
+
+  // Try invalid student ID - should return 400, NO notification
+  const invalidIdResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: 'invalid-id' }),
+  });
+
+  assert.equal(invalidIdResult.response.status, 400);
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Verify no new notifications for validation error
+  const finalCount = allNotifications.length;
+  assert.equal(afterCount, finalCount, 'No notification should be emitted for validation errors');
+
+  // Restore console.log
+  console.log = originalLog;
 });
