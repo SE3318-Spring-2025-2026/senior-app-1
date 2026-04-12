@@ -1,13 +1,9 @@
+require('./setupTestEnv');
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
-process.env.JWT_SECRET = 'test-secret';
-process.env.SQLITE_STORAGE = ':memory:';
-process.env.FRONTEND_URL = 'http://localhost:5173';
-process.env.GITHUB_CLIENT_ID = '';
-process.env.GITHUB_CLIENT_SECRET = '';
 
 const sequelize = require('../db');
 const app = require('../app');

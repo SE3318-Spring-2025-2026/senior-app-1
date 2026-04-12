@@ -1,12 +1,10 @@
 /**
  * Issue #93 — D2 repository only (no HTTP). Run with: npm test (see package.json).
  */
+require('./setupTestEnv');
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
-
-process.env.JWT_SECRET = 'test-secret';
-process.env.SQLITE_STORAGE = ':memory:';
-process.env.FRONTEND_URL = 'http://localhost:5173';
 
 const sequelize = require('../db');
 require('../models');
