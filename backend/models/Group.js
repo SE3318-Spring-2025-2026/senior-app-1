@@ -1,36 +1,48 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
 
-const Group = sequelize.define('Group', {
-  id: {
-    type: DataTypes.STRING,
-    primaryKey: true,
+/**
+ * D2 Group — supports coordinator overrides (memberIds) and formation flow (maxMembers, status).
+ */
+const Group = sequelize.define(
+  'Group',
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    leaderId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    memberIds: {
+      type: DataTypes.JSON,
+      allowNull: false,
+      defaultValue: [],
+    },
+    maxMembers: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    status: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'FORMATION',
+    },
+    advisorId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
   },
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false,
+  {
+    tableName: 'Groups',
+    timestamps: true,
   },
-  leaderId: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-  memberIds: {
-    type: DataTypes.JSON,
-    allowNull: false,
-    defaultValue: [],
-  },
-  advisorId: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-  createdAt: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-  },
-  updatedAt: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-  },
-});
+);
 
 module.exports = Group;
