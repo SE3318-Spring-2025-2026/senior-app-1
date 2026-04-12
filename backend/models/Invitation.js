@@ -33,16 +33,10 @@ const Invitation = sequelize.define(
       defaultValue: 'PENDING',
     },
   },
-  status: {
-    type: DataTypes.ENUM('PENDING', 'ACCEPTED', 'REJECTED'),
-    allowNull: false,
-    defaultValue: 'PENDING',
+  {
+    indexes: [{ unique: true, fields: ['groupId', 'inviteeId'] }],
   },
-}, {
-  indexes: [
-    { unique: true, fields: ['groupId', 'inviteeId'] },
-  ],
-});
+);
 
 Group.hasMany(Invitation, { foreignKey: 'groupId' });
 Invitation.belongsTo(Group, { foreignKey: 'groupId' });
