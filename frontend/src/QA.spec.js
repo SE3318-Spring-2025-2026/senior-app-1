@@ -9,7 +9,7 @@
 //   3. Non-invitee is blocked from seeing or responding to the invitation.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 const LEADER   = { studentId: '11070001000', password: 'StrongPass1!' };
 const INVITEE  = { studentId: '11070001001', password: 'StrongPass1!' };
