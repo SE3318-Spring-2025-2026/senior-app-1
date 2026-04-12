@@ -23,7 +23,7 @@ async function loginAs(page, studentId, password) {
   await page.getByLabel(/student number|student id/i).fill(studentId);
   await page.getByLabel(/password/i).fill(password);
   await page.getByRole('button', { name: /log in|sign in/i }).click();
-  await expect(page.getByRole('heading', { name: /signed in successfully/i })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText(/signed in successfully|student login successful/i)).toBeVisible({ timeout: 10000 });
 }
 
 async function logout(page) {
