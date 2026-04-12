@@ -1,57 +1,85 @@
+/**
+ * models/AuditLog.js
+ *
+ * Unified Audit Log Model
+ * - Append-only (immutable)
+ * - Supports all domain events
+ * - Flexible metadata storage
+ */
+
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
 const User = require('./User');
 
-/**
- * AuditLog — D6 (Audit Logs)
- *
- * One row per auditable action. Schema is intentionally generic so every
- * future event (GROUP_CREATED, INVITATION_ACCEPTED, MEMBERSHIP_UPDATED, …)
- * fits without migration.
- *
- * Action vocabulary (append-only):
- *   GROUP_CREATED       — group shell written to D2 (P21)
- *   INVITATION_ACCEPTED — invitee accepts a pending invitation (P23)
- *   MEMBERSHIP_UPDATED  — coordinator manually edits membership (P25)
- */
-const AuditLog = sequelize.define('AuditLog', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true,
-  },
-  action: {
-    // Machine-readable verb from the action vocabulary above.
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  actorId: {
-    // User who triggered the action.
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: User,
-      key: 'id',
+const AuditLog = sequelize.define(
+  'AuditLog',
+  {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+
+    /**
+     * Action key (extendable vocabulary)
+     * Examples:
+     *  - GROUP_CREATED
+     *  - INVITATION_ACCEPTED
+     *  - INVITATION_REJECTED
+     *  - MEMBERSHIP_UPDATED
+     */
+    action: {
+      type: DataTypes.STRING(64),
+      allowNull: false,
+    },
+
+    /**
+     * User who triggered the action
+     */
+    actorId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: User,
+        key: 'id',
+      },
+    },
+
+    /**
+     * Entity type (GROUP, INVITATION, MEMBERSHIP, etc.)
+     */
+    targetType: {
+      type: DataTypes.STRING(64),
+      allowNull: false,
+    },
+
+    /**
+     * Primary key of the affected entity
+     */
+    targetId: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+
+    /**
+     * Flexible JSON metadata
+     * Example:
+     * { groupId, groupName, invitedUserId }
+     */
+    metadata: {
+      type: DataTypes.JSON,
+      allowNull: false,
+      defaultValue: {},
     },
   },
-  targetId: {
-    // PK of the primary entity affected (e.g. group UUID).
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  targetType: {
-    // Entity type string (e.g. 'GROUP', 'INVITATION').
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  metadata: {
-    // Free-form JSON for action-specific context (e.g. { groupName }).
-    type: DataTypes.JSON,
-    allowNull: false,
-    defaultValue: {},
-  },
-});
+  {
+    tableName: 'AuditLogs',
+    timestamps: true,
+    updatedAt: false, // immutable log
+  }
+);
 
+// Associations
 User.hasMany(AuditLog, { foreignKey: 'actorId' });
 AuditLog.belongsTo(User, { foreignKey: 'actorId' });
 

@@ -11,7 +11,10 @@ const Professor = require('./Professor');
 const ValidStudentId = require('./ValidStudentId');
 const OAuthState = require('./OAuthState');
 const LinkedGitHubAccount = require('./LinkedGitHubAccount');
-const Notification = require('./Notification');           // ← NEW (D9)
+const Group = require('./Group');
+const Invitation = require('./Invitation');
+const AuditLog = require('./AuditLog');
+const Notification = require('./Notification');
 
 module.exports = {
   User,
@@ -19,5 +22,8 @@ module.exports = {
   ValidStudentId,
   OAuthState,
   LinkedGitHubAccount,
-  Notification,                                          // ← NEW (D9)
+  Group,
+  Invitation,
+  AuditLog,
+  Notification,
 };

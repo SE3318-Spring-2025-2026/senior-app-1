@@ -1,4 +1,5 @@
 const Group = require('../models/Group');
+const { Invitation, AuditLog } = require('../models');
 const sequelize = require('../db');
 const NotificationService = require('./notificationService');
 
@@ -42,55 +43,41 @@ class GroupService {
     const transaction = await sequelize.transaction();
 
     try {
-      // Pessimistic locking: lock the group row for update
       const group = await Group.findByPk(groupId, {
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
 
-      // Check if group exists
       if (!group) {
         const error = new Error('Group not found');
         error.code = 'GROUP_NOT_FOUND';
         throw error;
       }
 
-      // Check if group is already finalized
       if (group.status === 'FINALIZED' || group.status === 'DISBANDED') {
         const error = new Error('Group has been finalized');
         error.code = 'GROUP_FINALIZED';
         throw error;
       }
 
-      // Ensure members is an array
       const currentMembers = group.members || [];
 
-      // Check if student is already a member
       if (currentMembers.includes(studentId)) {
         const error = new Error('Student is already a member of this group');
         error.code = 'DUPLICATE_MEMBER';
         throw error;
       }
 
-      // Check if group has reached max members
       if (currentMembers.length >= group.maxMembers) {
         const error = new Error('Group has reached maximum member capacity');
         error.code = 'MAX_MEMBERS_REACHED';
         throw error;
       }
 
-      // Add member atomically
       const updatedMembers = [...currentMembers, studentId];
-      await group.update(
-        { members: updatedMembers },
-        { transaction }
-      );
-
-      // Commit transaction
+      await group.update({ members: updatedMembers }, { transaction });
       await transaction.commit();
 
-      // Emit notification AFTER successful transaction commit
-      // Fire-and-forget: failures here do not affect the main operation
       if (group.leaderId) {
         NotificationService.notifyMembershipAccepted({
           groupId: group.id,
@@ -109,7 +96,6 @@ class GroupService {
         success: true,
       };
     } catch (error) {
-      // Only rollback if transaction is still active
       if (!transaction.finished) {
         await transaction.rollback();
       }
@@ -128,6 +114,133 @@ class GroupService {
     }
 
     return (group.members || []).includes(studentId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // P22 — Dispatch Invitations (f5, f6)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Persists invitations to D8 then triggers one notification per invitation.
+   * Fire-and-forget notifications — never blocks the API response.
+   *
+   * @param {string}   groupId
+   * @param {number[]} inviteeIds
+   * @returns {Promise<{ created: object[], skipped: number[] }>}
+   */
+  static async dispatchInvites(groupId, inviteeIds) {
+    const uniqueInviteeIds = [...new Set(inviteeIds)];
+
+    const existing = await Invitation.findAll({
+      where: { groupId, inviteeId: uniqueInviteeIds },
+      attributes: ['inviteeId'],
+    });
+
+    const alreadyInvited = new Set(existing.map((inv) => inv.inviteeId));
+    const toInsert = uniqueInviteeIds.filter((id) => !alreadyInvited.has(id));
+    const skipped = uniqueInviteeIds.filter((id) => alreadyInvited.has(id));
+
+    let created = [];
+    if (toInsert.length > 0) {
+      created = await Invitation.bulkCreate(
+        toInsert.map((inviteeId) => ({ groupId, inviteeId, status: 'PENDING' })),
+        { returning: true },
+      );
+    }
+
+    for (const invitation of created) {
+      NotificationService.queueInviteAlert(
+        invitation.inviteeId,
+        invitation.groupId,
+        invitation.id,
+      );
+    }
+
+    return { created, skipped };
+  }
+
+  // ---------------------------------------------------------------------------
+  // P23 — Process Invitee Response (f7, f9, f10, f14)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Validates and applies an ACCEPT / REJECT decision to a PENDING invitation.
+   *
+   * Authorization : only Invitation.inviteeId may respond → 403
+   * State guard   : only PENDING may be updated → 400
+   * On ACCEPT     : triggers finalizeMembership (f10) fire-and-forget
+   * Always        : writes audit log entry (f14) fire-and-forget
+   *
+   * @param {object} params
+   * @param {string} params.invitationId
+   * @param {number} params.callerId      - req.user.id from JWT
+   * @param {string} params.response      - "ACCEPT" | "REJECT"
+   *
+   * @returns {Promise<
+   *   | { invitation: object }
+   *   | { error: 'NOT_FOUND' }
+   *   | { error: 'FORBIDDEN' }
+   *   | { error: 'ALREADY_RESOLVED' }
+   * >}
+   */
+  static async processResponse({ invitationId, callerId, response }) {
+    // f8: fetch invite details from D8
+    const invitation = await Invitation.findByPk(invitationId);
+
+    if (!invitation) return { error: 'NOT_FOUND' };
+
+    // Authorization: only the invited student may respond
+    if (invitation.inviteeId !== callerId) return { error: 'FORBIDDEN' };
+
+    // State-transition guard: only PENDING → ACCEPTED / REJECTED
+    if (invitation.status !== 'PENDING') return { error: 'ALREADY_RESOLVED' };
+
+    // f9: update invitation status in D8
+    const newStatus = response === 'ACCEPT' ? 'ACCEPTED' : 'REJECTED';
+    await invitation.update({ status: newStatus });
+
+    // f14: audit log — fire-and-forget, never rolls back D8
+    GroupService._writeAuditLog({
+      invitationId: invitation.id,
+      groupId: invitation.groupId,
+      actorId: callerId,
+      action: response === 'ACCEPT' ? 'INVITATION_ACCEPTED' : 'INVITATION_REJECTED',
+    });
+
+    // f10: membership finalization on ACCEPT — fire-and-forget
+    if (response === 'ACCEPT') {
+      GroupService.finalizeMembership(invitation.groupId, callerId).catch((err) => {
+        console.error('[GroupService] finalizeMembership failed after ACCEPT', err);
+      });
+    }
+
+    return {
+      invitation: {
+        id: invitation.id,
+        groupId: invitation.groupId,
+        inviteeId: invitation.inviteeId,
+        status: invitation.status,
+        updatedAt: invitation.updatedAt,
+      },
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal helpers
+  // ---------------------------------------------------------------------------
+
+  static async _writeAuditLog({ invitationId, groupId, actorId, action }) {
+    try {
+      await AuditLog.create({
+        entityType: 'INVITATION',
+        entityId: invitationId,
+        actorId,
+        action,
+        metadata: JSON.stringify({ groupId }),
+      });
+    } catch (err) {
+      console.error('[GroupService] _writeAuditLog failed', { invitationId, action }, err);
+    }
   }
 }
 

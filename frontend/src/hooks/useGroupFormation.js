@@ -6,6 +6,21 @@ import { useState } from 'react';
 function mockPostInvitations(groupId, studentIds) {
   return new Promise((resolve, reject) => {
     setTimeout(() => {
+            // ── DUPLICATE_INVITE simulasyonu ──────────────────────────────────
+      const duplicates = studentIds.filter((id) => id.toLowerCase().startsWith('dup'));
+      if (duplicates.length > 0) {
+        const err = new Error('One or more students have already been invited.');
+        err.response = {
+          status: 409,
+          data: {
+            message: err.message,
+            code: 'DUPLICATE_INVITE',          // ← backend'in döndüğü kod
+            duplicates,
+          },
+        };
+        return reject(err);
+      }
+
       const failures = studentIds
         .filter((id) => id === 'error_id' || id.toLowerCase().startsWith('invalid'))
         .map((id) => ({ studentId: id, reason: 'Student not found or is ineligible.' }));
