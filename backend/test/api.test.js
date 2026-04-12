@@ -687,7 +687,6 @@ test('internal professor password update requires admin auth and activates the p
   });
 });
 
-<<<<<<< HEAD
 test('admin can bulk store valid student IDs and receives inserted, duplicate, and invalid counts', async () => {
   const admin = await User.create({
     email: 'valid-id-admin@example.edu',
@@ -735,34 +734,17 @@ test('coordinator import endpoint requires coordinator role and stores valid stu
   const coordinator = await User.create({
     email: 'coordinator@example.edu',
     fullName: 'Coordinator User',
-=======
-test('coordinator can update group membership and creates audit log entries', async () => {
-  const coordinator = await User.create({
-    email: 'coord-edit@example.edu',
-    fullName: 'Coordinator Editor',
->>>>>>> pr-153
     role: 'COORDINATOR',
     status: 'ACTIVE',
   });
 
-<<<<<<< HEAD
   const coordinatorResponse = await request('/api/v1/coordinator/student-id-registry/import', {
     method: 'POST',
-=======
-  const group = await Group.create({
-    name: 'Audit Group',
-    memberIds: ['11070001000'],
-  });
-
-  const addResult = await request(`/api/v1/coordinator/groups/${group.id}/members`, {
-    method: 'PATCH',
->>>>>>> pr-153
     headers: {
       'Content-Type': 'application/json',
       ...(await authHeaderFor(coordinator)),
     },
     body: JSON.stringify({
-<<<<<<< HEAD
       studentIds: ['33070001000', 'bad-value'],
     }),
   });
@@ -781,136 +763,22 @@ test('coordinator can update group membership and creates audit log entries', as
   const admin = await User.create({
     email: 'not-coordinator@example.edu',
     fullName: 'Not Coordinator',
-=======
-      action: 'ADD',
-      studentId: '11070001001',
-    }),
-  });
-
-  assert.equal(addResult.response.status, 200);
-  assert.deepEqual(addResult.json.memberIds, ['11070001000', '11070001001']);
-
-  const addAudit = await AuditLog.findOne({ where: { targetId: group.id, action: 'COORDINATOR_MEMBER_ADDED' } });
-  assert.ok(addAudit);
-  assert.equal(addAudit.actorId, String(coordinator.id));
-  assert.equal(addAudit.metadata.studentId, '11070001001');
-  assert.deepEqual(addAudit.metadata.previousMemberIds, ['11070001000']);
-  assert.deepEqual(addAudit.metadata.updatedMemberIds, ['11070001000', '11070001001']);
-
-  const removeResult = await request(`/api/v1/coordinator/groups/${group.id}/members`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(coordinator)),
-    },
-    body: JSON.stringify({
-      action: 'REMOVE',
-      studentId: '11070001000',
-    }),
-  });
-
-  assert.equal(removeResult.response.status, 200);
-  assert.deepEqual(removeResult.json.memberIds, ['11070001001']);
-
-  const removeAudit = await AuditLog.findOne({ where: { targetId: group.id, action: 'COORDINATOR_MEMBER_REMOVED' } });
-  assert.ok(removeAudit);
-  assert.equal(removeAudit.actorId, String(coordinator.id));
-  assert.equal(removeAudit.metadata.studentId, '11070001000');
-  assert.deepEqual(removeAudit.metadata.previousMemberIds, ['11070001000', '11070001001']);
-  assert.deepEqual(removeAudit.metadata.updatedMemberIds, ['11070001001']);
-});
-
-test('coordinator membership edit enforces auth and surfaces audit failures without silent drops', async (t) => {
-  const coordinator = await User.create({
-    email: 'coord-guard@example.edu',
-    fullName: 'Coordinator Guard',
-    role: 'COORDINATOR',
-    status: 'ACTIVE',
-  });
-  const admin = await User.create({
-    email: 'coord-admin@example.edu',
-    fullName: 'Admin Guard',
->>>>>>> pr-153
     role: 'ADMIN',
     status: 'ACTIVE',
   });
 
-<<<<<<< HEAD
   const forbidden = await request('/api/v1/coordinator/student-id-registry/import', {
     method: 'POST',
-=======
-  const group = await Group.create({
-    name: 'Guard Group',
-    memberIds: ['11070001000'],
-  });
-
-  const unauthenticated = await request(`/api/v1/coordinator/groups/${group.id}/members`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'ADD', studentId: '11070001001' }),
-  });
-  assert.equal(unauthenticated.response.status, 401);
-
-  const forbidden = await request(`/api/v1/coordinator/groups/${group.id}/members`, {
-    method: 'PATCH',
->>>>>>> pr-153
     headers: {
       'Content-Type': 'application/json',
       ...(await authHeaderFor(admin)),
     },
-<<<<<<< HEAD
     body: JSON.stringify({
       studentIds: ['33070001001'],
     }),
   });
 
   assert.equal(forbidden.response.status, 403);
-=======
-    body: JSON.stringify({ action: 'ADD', studentId: '11070001001' }),
-  });
-  assert.equal(forbidden.response.status, 403);
-
-  const invalidInput = await request(`/api/v1/coordinator/groups/${group.id}/members`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(coordinator)),
-    },
-    body: JSON.stringify({ action: 'MAYBE', studentId: 'abc' }),
-  });
-  assert.equal(invalidInput.response.status, 400);
-  assert.equal(invalidInput.json.code, 'INVALID_MEMBERSHIP_EDIT_INPUT');
-
-  const notFound = await request('/api/v1/coordinator/groups/aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa/members', {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(coordinator)),
-    },
-    body: JSON.stringify({ action: 'ADD', studentId: '11070001001' }),
-  });
-  assert.equal(notFound.response.status, 404);
-  assert.equal(notFound.json.code, 'GROUP_NOT_FOUND');
-
-  t.mock.method(AuditLog, 'create', async () => {
-    throw new Error('forced audit failure');
-  });
-
-  const auditFailure = await request(`/api/v1/coordinator/groups/${group.id}/members`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(coordinator)),
-    },
-    body: JSON.stringify({ action: 'ADD', studentId: '11070001001' }),
-  });
-
-  assert.equal(auditFailure.response.status, 500);
-  assert.equal(auditFailure.json.code, 'AUDIT_LOG_WRITE_FAILED');
-
-  const reloadedGroup = await Group.findByPk(group.id);
-  assert.deepEqual(reloadedGroup.memberIds, ['11070001000']);
->>>>>>> pr-153
 });
 
 test('student registration validates eligibility, password strength, duplication, and success', async () => {
