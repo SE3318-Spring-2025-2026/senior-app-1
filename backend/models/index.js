@@ -4,6 +4,9 @@ const ValidStudentId = require('./ValidStudentId');
 const OAuthState = require('./OAuthState');
 const LinkedGitHubAccount = require('./LinkedGitHubAccount');
 const Group = require('./Group');
+const Notification = require('./Notification');
+const Invitation = require('./Invitation');
+const AuditLog = require('./AuditLog');
 
 module.exports = {
   User,
@@ -12,4 +15,7 @@ module.exports = {
   OAuthState,
   LinkedGitHubAccount,
   Group,
+  Notification,
+  Invitation,
+  AuditLog,
 };
