@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '.env') }); // Load environment variables from .env file
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const { User } = require('./models');
 const adminRoutes = require('./routes/admin');
 const coordinatorRoutes = require('./routes/coordinator');
@@ -13,10 +13,10 @@ const userDatabaseRoutes = require('./routes/userDatabase');
 const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 
-app.use(express.json()); // ← buraya taşı
+app.use(express.json());
 
 const invitationRoutes = require('./routes/invitationRoutes');
-app.use('/api/invitations', invitationRoutes);
+app.use('/api/v1/invitations', invitationRoutes);  // ← sadece bu satır değişti
 
 if (fs.existsSync(frontendDistPath)) {
   app.use(express.static(frontendDistPath));
