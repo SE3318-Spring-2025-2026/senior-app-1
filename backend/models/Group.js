@@ -1,12 +1,16 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
 
+/**
+ * D2 Group — supports coordinator overrides (memberIds) and formation flow (maxMembers, status).
+ */
 const Group = sequelize.define(
   'Group',
   {
     id: {
-      type: DataTypes.STRING,
+      type: DataTypes.INTEGER,
       primaryKey: true,
+      autoIncrement: true,
     },
     name: {
       type: DataTypes.STRING,
@@ -20,6 +24,15 @@ const Group = sequelize.define(
       type: DataTypes.JSON,
       allowNull: false,
       defaultValue: [],
+    },
+    maxMembers: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    status: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'FORMATION',
     },
     advisorId: {
       type: DataTypes.STRING,

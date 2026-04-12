@@ -1,5 +1,59 @@
 const { body, param, validationResult } = require('express-validator');
 const GroupService = require('../services/groupService');
+const groupsRepository = require('../repositories/groupsRepository');
+
+/**
+ * PATCH /api/v1/groups/:groupId/membership/coordinator — P25 / f19 (coordinator override)
+ */
+exports.patchCoordinatorMembership = async (req, res) => {
+  const { groupId } = req.params;
+  if (!groupId || String(groupId).trim() === '') {
+    return res.status(404).json({
+      message: 'Group not found',
+      code: groupsRepository.CODES.GROUP_NOT_FOUND,
+    });
+  }
+
+  const { action, studentId } = req.body || {};
+  if (action !== 'ADD' && action !== 'REMOVE') {
+    return res.status(400).json({
+      message: 'Invalid action',
+      code: groupsRepository.CODES.INVALID_ACTION,
+    });
+  }
+
+  if (typeof studentId !== 'string' || !/^[0-9]{11}$/.test(studentId.trim())) {
+    return res.status(400).json({
+      message: 'Invalid studentId',
+      code: 'INVALID_PAYLOAD',
+    });
+  }
+
+  try {
+    const group = await groupsRepository.applyCoordinatorChange(
+      groupId,
+      action,
+      studentId.trim(),
+    );
+    return res.status(200).json(group);
+  } catch (err) {
+    if (!err.code) {
+      throw err;
+    }
+    switch (err.code) {
+      case groupsRepository.CODES.GROUP_NOT_FOUND:
+        return res.status(404).json({ message: err.message, code: err.code });
+      case groupsRepository.CODES.STUDENT_NOT_FOUND:
+        return res.status(400).json({ message: err.message, code: err.code });
+      case groupsRepository.CODES.INVALID_ACTION:
+        return res.status(400).json({ message: err.message, code: err.code });
+      case groupsRepository.CODES.LEADER_REMOVAL_REQUIRES_REASSIGNMENT:
+        return res.status(409).json({ message: err.message, code: err.code });
+      default:
+        throw err;
+    }
+  }
+};
 
 /**
  * Validation middleware for creating a group
@@ -28,7 +82,6 @@ exports.createGroup = async (req, res) => {
     }
 
     const { groupName, maxMembers } = req.body;
-    // Get authenticated user as the leader (if available from auth middleware)
     const leaderId = req.user?.id || null;
 
     const group = await GroupService.createGroup(groupName, maxMembers, leaderId);
@@ -38,11 +91,11 @@ exports.createGroup = async (req, res) => {
       message: 'Group created successfully',
       data: {
         groupId: group.id,
-        groupName: group.groupName,
+        groupName: group.name,
         leaderId: group.leaderId,
         maxMembers: group.maxMembers,
         status: group.status,
-        members: group.members,
+        members: group.memberIds || [],
       },
     });
   } catch (error) {
@@ -81,7 +134,7 @@ exports.finalizeMembership = async (req, res) => {
     const { groupId } = req.params;
     const { studentId } = req.body;
 
-    const result = await GroupService.finalizeMembership(parseInt(groupId), studentId);
+    const result = await GroupService.finalizeMembership(parseInt(groupId, 10), studentId);
 
     res.status(200).json({
       code: 'SUCCESS',
@@ -97,7 +150,6 @@ exports.finalizeMembership = async (req, res) => {
   } catch (error) {
     console.error('Error in finalizeMembership:', error);
 
-    // Custom error handling
     if (error.code === 'DUPLICATE_MEMBER') {
       return res.status(400).json({
         code: 'DUPLICATE_MEMBER',
@@ -159,19 +211,20 @@ exports.getGroupMembership = async (req, res) => {
 
     const { groupId } = req.params;
 
-    const groupData = await GroupService.getGroupMembership(parseInt(groupId));
+    const groupData = await GroupService.getGroupMembership(parseInt(groupId, 10));
 
+    const members = groupData.memberIds || [];
     res.status(200).json({
       code: 'SUCCESS',
       message: 'Group membership retrieved successfully',
       data: {
         groupId: groupData.id,
-        groupName: groupData.groupName,
+        groupName: groupData.name,
         status: groupData.status,
         maxMembers: groupData.maxMembers,
-        members: groupData.members,
-        currentMemberCount: groupData.members.length,
-        availableSlots: groupData.maxMembers - groupData.members.length,
+        members,
+        currentMemberCount: members.length,
+        availableSlots: (groupData.maxMembers ?? 0) - members.length,
       },
     });
   } catch (error) {

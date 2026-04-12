@@ -8,11 +8,11 @@ class GroupService {
    */
   static async createGroup(groupName, maxMembers, leaderId = null) {
     const group = await Group.create({
-      groupName,
+      name: groupName,
       maxMembers,
-      leaderId,
+      leaderId: leaderId != null ? String(leaderId) : null,
+      memberIds: [],
       status: 'FORMATION',
-      members: [],
     });
 
     return group;
@@ -35,62 +35,48 @@ class GroupService {
 
   /**
    * Finalize membership - add a student to group with atomic transactions
-   * Uses pessimistic locking to prevent race conditions
-   * Emits notification to Team Leader after successful update (fire-and-forget)
    */
   static async finalizeMembership(groupId, studentId) {
     const transaction = await sequelize.transaction();
 
     try {
-      // Pessimistic locking: lock the group row for update
       const group = await Group.findByPk(groupId, {
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
 
-      // Check if group exists
       if (!group) {
         const error = new Error('Group not found');
         error.code = 'GROUP_NOT_FOUND';
         throw error;
       }
 
-      // Check if group is already finalized
       if (group.status === 'FINALIZED' || group.status === 'DISBANDED') {
         const error = new Error('Group has been finalized');
         error.code = 'GROUP_FINALIZED';
         throw error;
       }
 
-      // Ensure members is an array
-      const currentMembers = group.members || [];
+      const currentMembers = group.memberIds || [];
 
-      // Check if student is already a member
       if (currentMembers.includes(studentId)) {
         const error = new Error('Student is already a member of this group');
         error.code = 'DUPLICATE_MEMBER';
         throw error;
       }
 
-      // Check if group has reached max members
-      if (currentMembers.length >= group.maxMembers) {
+      const max = group.maxMembers ?? 10;
+      if (currentMembers.length >= max) {
         const error = new Error('Group has reached maximum member capacity');
         error.code = 'MAX_MEMBERS_REACHED';
         throw error;
       }
 
-      // Add member atomically
       const updatedMembers = [...currentMembers, studentId];
-      await group.update(
-        { members: updatedMembers },
-        { transaction }
-      );
+      await group.update({ memberIds: updatedMembers }, { transaction });
 
-      // Commit transaction
       await transaction.commit();
 
-      // Emit notification AFTER successful transaction commit
-      // Fire-and-forget: failures here do not affect the main operation
       if (group.leaderId) {
         NotificationService.notifyMembershipAccepted({
           groupId: group.id,
@@ -109,7 +95,6 @@ class GroupService {
         success: true,
       };
     } catch (error) {
-      // Only rollback if transaction is still active
       if (!transaction.finished) {
         await transaction.rollback();
       }
@@ -127,7 +112,7 @@ class GroupService {
       return false;
     }
 
-    return (group.members || []).includes(studentId);
+    return (group.memberIds || []).includes(studentId);
   }
 }
 

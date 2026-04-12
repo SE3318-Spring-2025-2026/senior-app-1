@@ -40,27 +40,27 @@ test('GroupsRepository: idempotent ADD, REMOVE member, leader REMOVE blocked, ru
     password: 'StrongPass1!',
   });
 
-  await Group.create({
-    id: 'grp-issue-93',
+  const created = await Group.create({
     name: 'D2 Test',
     leaderId: '11070001000',
     memberIds: ['11070001000'],
   });
+  const gid = String(created.id);
 
-  let g = await groupsRepository.applyCoordinatorChange('grp-issue-93', 'ADD', '11070001001');
+  let g = await groupsRepository.applyCoordinatorChange(gid, 'ADD', '11070001001');
   assert.ok(g.memberIds.includes('11070001001'));
 
-  g = await groupsRepository.applyCoordinatorChange('grp-issue-93', 'ADD', '11070001001');
+  g = await groupsRepository.applyCoordinatorChange(gid, 'ADD', '11070001001');
   assert.equal(g.memberIds.filter((id) => id === '11070001001').length, 1);
 
-  g = await groupsRepository.applyCoordinatorChange('grp-issue-93', 'REMOVE', '11070001001');
+  g = await groupsRepository.applyCoordinatorChange(gid, 'REMOVE', '11070001001');
   assert.ok(!g.memberIds.includes('11070001001'));
 
   await assert.rejects(
-    () => groupsRepository.applyCoordinatorChange('grp-issue-93', 'REMOVE', '11070001000'),
+    () => groupsRepository.applyCoordinatorChange(gid, 'REMOVE', '11070001000'),
     (err) => err.code === groupsRepository.CODES.LEADER_REMOVAL_REQUIRES_REASSIGNMENT,
   );
 
-  const locked = await groupsRepository.runWithGroupRowLocked('grp-issue-93', async (group) => group.id);
-  assert.equal(locked, 'grp-issue-93');
+  const locked = await groupsRepository.runWithGroupRowLocked(gid, async (group) => group.id);
+  assert.equal(locked, created.id);
 });
