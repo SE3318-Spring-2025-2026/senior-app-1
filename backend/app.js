@@ -20,7 +20,6 @@ if (fs.existsSync(frontendDistPath)) {
 }
 
 app.locals.models = { User, Group, AuditLog };
-
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/coordinator', coordinatorRoutes);
 app.use('/api/v1/professors', professorRoutes);
