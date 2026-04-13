@@ -5,17 +5,14 @@ import { useNotification } from './contexts/NotificationContext';
 const initialForm = {
   email: '',
   fullName: '',
-  department: '',
+  password: '',
 };
 
 const initialFeedback = {
   type: 'idle',
-  title: 'Professor Registration',
-  message: 'Create a professor account from the admin workspace.',
+  title: 'Coordinator Registration',
+  message: 'Create a coordinator account from the admin workspace.',
   result: '',
-  setupToken: '',
-  setupUrl: '',
-  expiresAt: '',
 };
 
 function mapRegisterError(payload, status) {
@@ -31,7 +28,7 @@ function mapRegisterError(payload, status) {
   if (status === 409) {
     return {
       type: 'warning',
-      title: 'Professor already exists',
+      title: 'Coordinator already exists',
       message: payload.message || 'A user with this email already exists.',
       result: 'Duplicate email',
     };
@@ -41,20 +38,20 @@ function mapRegisterError(payload, status) {
     return {
       type: 'warning',
       title: 'Missing information',
-      message: 'Professor email, full name, and department are required.',
+      message: payload.message || 'Coordinator email, full name, and password are required.',
       result: 'Validation failed',
     };
   }
 
   return {
     type: 'error',
-    title: 'Professor creation failed',
-    message: payload.message || 'The professor account could not be created.',
+    title: 'Coordinator creation failed',
+    message: payload.message || 'The coordinator account could not be created.',
     result: 'Failed',
   };
 }
 
-export default function AdminProfessorCreatePage() {
+export default function AdminCoordinatorCreatePage() {
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
   const [submitting, setSubmitting] = useState(false);
@@ -66,17 +63,14 @@ export default function AdminProfessorCreatePage() {
     setSubmitting(true);
     setFeedback({
       type: 'loading',
-      title: 'Creating professor',
-      message: 'Saving the professor account and preparing first-time password setup.',
+      title: 'Creating coordinator',
+      message: 'Saving the coordinator account.',
       result: '',
-      setupToken: '',
-      setupUrl: '',
-      expiresAt: '',
     });
 
     try {
       const token = window.localStorage.getItem('adminToken') || window.localStorage.getItem('authToken');
-      const response = await fetch('/api/v1/admin/professors', {
+      const response = await fetch('/api/v1/admin/coordinators', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -93,33 +87,27 @@ export default function AdminProfessorCreatePage() {
 
       setFeedback({
         type: 'success',
-        title: 'Professor created',
-        message: result.message || 'Professor account created. Share the generated setup token with the professor.',
-        result: 'Ready for password setup',
-        setupToken: result.setupToken || '',
-        setupUrl: result.setupToken ? `/professors/password-setup?token=${encodeURIComponent(result.setupToken)}` : '',
-        expiresAt: result.passwordSetupTokenExpiresAt || '',
+        title: 'Coordinator created',
+        message: result.message || 'Coordinator account created successfully.',
+        result: result.email || form.email,
       });
       notify({
         type: 'success',
-        title: 'Professor created',
-        message: result.message || 'Professor account created successfully.',
+        title: 'Coordinator created',
+        message: result.message || 'Coordinator account created successfully.',
       });
       setForm(initialForm);
     } catch {
       setFeedback({
         type: 'error',
         title: 'Request failed',
-        message: 'The professor creation request could not reach the backend. Check whether the backend server is running.',
+        message: 'The coordinator creation request could not reach the backend.',
         result: 'Network error',
-        setupToken: '',
-        setupUrl: '',
-        expiresAt: '',
       });
       notify({
         type: 'error',
-        title: 'Professor creation failed',
-        message: 'The professor creation request could not reach the backend.',
+        title: 'Coordinator creation failed',
+        message: 'The coordinator creation request could not reach the backend.',
       });
     } finally {
       setSubmitting(false);
@@ -138,10 +126,9 @@ export default function AdminProfessorCreatePage() {
     <main className="page">
       <section className="hero">
         <p className="eyebrow">Admin Workspace</p>
-        <h1>Add Professor</h1>
+        <h1>Add Coordinator</h1>
         <p className="subtitle">
-          Create a professor account. The system generates the setup state internally and the professor chooses their
-          own password later.
+          Create a coordinator account to manage valid student IDs and manual group membership overrides.
         </p>
       </section>
 
@@ -154,13 +141,13 @@ export default function AdminProfessorCreatePage() {
       <section className="panel">
         <form className="form" onSubmit={handleSubmit}>
           <label className="field">
-            <span>Professor Email</span>
+            <span>Coordinator Email</span>
             <input
               id="email"
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="prof@example.edu"
+              placeholder="coordinator@example.edu"
               value={form.email}
               onChange={handleChange}
               required
@@ -174,7 +161,7 @@ export default function AdminProfessorCreatePage() {
               name="fullName"
               type="text"
               autoComplete="name"
-              placeholder="Prof. Jane Doe"
+              placeholder="Coordinator Jane Doe"
               value={form.fullName}
               onChange={handleChange}
               required
@@ -182,30 +169,30 @@ export default function AdminProfessorCreatePage() {
           </label>
 
           <label className="field">
-            <span>Department</span>
+            <span>Temporary Password</span>
             <input
-              id="department"
-              name="department"
-              type="text"
-              placeholder="Software Engineering"
-              value={form.department}
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="At least 8 characters"
+              value={form.password}
               onChange={handleChange}
               required
             />
           </label>
 
           <button type="submit" disabled={submitting}>
-            {submitting ? 'Creating professor...' : 'Add Professor'}
+            {submitting ? 'Creating coordinator...' : 'Add Coordinator'}
           </button>
         </form>
 
         <div className="side-column">
           <section className="token-panel">
-            <p className="feedback-label">How It Works</p>
-            <h2>Password is chosen by professor</h2>
+            <p className="feedback-label">Coordinator Jobs</p>
+            <h2>What this role can do</h2>
             <p className="token-copy">
-              The admin only creates the professor account here. A random setup token is handled by the system, and
-              the professor sets their own password during the password setup step.
+              Coordinators can import valid student IDs and manually add/remove student memberships in groups.
             </p>
           </section>
 
@@ -219,26 +206,6 @@ export default function AdminProfessorCreatePage() {
                   <dt>Result</dt>
                   <dd>{feedback.result}</dd>
                 </div>
-                {feedback.setupToken && (
-                  <div>
-                    <dt>Setup Token</dt>
-                    <dd>{feedback.setupToken}</dd>
-                  </div>
-                )}
-                {feedback.setupUrl && (
-                  <div>
-                    <dt>Setup Page</dt>
-                    <dd>
-                      <Link to={feedback.setupUrl}>Open professor setup link</Link>
-                    </dd>
-                  </div>
-                )}
-                {feedback.expiresAt && (
-                  <div>
-                    <dt>Token Expires</dt>
-                    <dd>{new Date(feedback.expiresAt).toLocaleString()}</dd>
-                  </div>
-                )}
               </dl>
             )}
           </section>

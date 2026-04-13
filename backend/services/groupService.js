@@ -4,16 +4,58 @@ const sequelize = require('../db');
 const NotificationService = require('./notificationService');
 
 class GroupService {
+  static async findAnyGroupForUser(userId, options = {}) {
+    const normalizedUserId = String(userId);
+    const excludedGroupId = options.excludeGroupId ? String(options.excludeGroupId) : null;
+
+    const groups = await Group.findAll({
+      attributes: ['id', 'name', 'leaderId', 'memberIds'],
+      transaction: options.transaction,
+    });
+
+    return groups.find((group) => {
+      if (excludedGroupId && String(group.id) === excludedGroupId) {
+        return false;
+      }
+
+      const leaderMatches = String(group.leaderId || '') === normalizedUserId;
+      const memberMatches = Array.isArray(group.memberIds)
+        && group.memberIds.map((id) => String(id)).includes(normalizedUserId);
+
+      return leaderMatches || memberMatches;
+    }) || null;
+  }
+
   /**
    * Create a new group
    */
   static async createGroup(groupName, maxMembers, leaderId = null) {
+    if (leaderId !== null && leaderId !== undefined) {
+      const groups = await Group.findAll({ attributes: ['leaderId', 'memberIds'] });
+      const userId = String(leaderId);
+      const isMemberInAnotherGroup = groups.some((group) => {
+        const isLeader = String(group.leaderId || '') === userId;
+        if (isLeader) {
+          return false;
+        }
+
+        return Array.isArray(group.memberIds)
+          && group.memberIds.map((id) => String(id)).includes(userId);
+      });
+
+      if (isMemberInAnotherGroup) {
+        const error = new Error('Student already belongs to a group');
+        error.code = 'ALREADY_IN_GROUP';
+        throw error;
+      }
+    }
+
     const group = await Group.create({
-      groupName,
+      name: groupName,
       maxMembers,
       leaderId,
       status: 'FORMATION',
-      members: [],
+      memberIds: [],
     });
 
     return group;
@@ -60,7 +102,17 @@ class GroupService {
         throw error;
       }
 
-      const currentMembers = group.members || [];
+      const currentMembers = group.memberIds || [];
+
+      const existingGroup = await GroupService.findAnyGroupForUser(studentId, {
+        excludeGroupId: group.id,
+        transaction,
+      });
+      if (existingGroup) {
+        const error = new Error('Student already belongs to another group');
+        error.code = 'ALREADY_IN_OTHER_GROUP';
+        throw error;
+      }
 
       if (currentMembers.includes(studentId)) {
         const error = new Error('Student is already a member of this group');
@@ -75,7 +127,7 @@ class GroupService {
       }
 
       const updatedMembers = [...currentMembers, studentId];
-      await group.update({ members: updatedMembers }, { transaction });
+      await group.update({ memberIds: updatedMembers }, { transaction });
       await transaction.commit();
 
       if (group.leaderId) {
@@ -113,7 +165,7 @@ class GroupService {
       return false;
     }
 
-    return (group.members || []).includes(studentId);
+    return (group.memberIds || []).includes(studentId);
   }
 
   // ---------------------------------------------------------------------------
@@ -195,6 +247,23 @@ class GroupService {
     // State-transition guard: only PENDING → ACCEPTED / REJECTED
     if (invitation.status !== 'PENDING') return { error: 'ALREADY_RESOLVED' };
 
+    if (response === 'ACCEPT') {
+      try {
+        await GroupService.finalizeMembership(invitation.groupId, callerId);
+      } catch (error) {
+        if (error.code === 'ALREADY_IN_OTHER_GROUP' || error.code === 'DUPLICATE_MEMBER') {
+          return { error: 'ALREADY_IN_GROUP' };
+        }
+        if (error.code === 'MAX_MEMBERS_REACHED') {
+          return { error: 'GROUP_FULL' };
+        }
+        if (error.code === 'GROUP_FINALIZED') {
+          return { error: 'GROUP_CLOSED' };
+        }
+        throw error;
+      }
+    }
+
     // f9: update invitation status in D8
     const newStatus = response === 'ACCEPT' ? 'ACCEPTED' : 'REJECTED';
     await invitation.update({ status: newStatus });
@@ -206,13 +275,6 @@ class GroupService {
       actorId: callerId,
       action: response === 'ACCEPT' ? 'INVITATION_ACCEPTED' : 'INVITATION_REJECTED',
     });
-
-    // f10: membership finalization on ACCEPT — fire-and-forget
-    if (response === 'ACCEPT') {
-      GroupService.finalizeMembership(invitation.groupId, callerId).catch((err) => {
-        console.error('[GroupService] finalizeMembership failed after ACCEPT', err);
-      });
-    }
 
     return {
       invitation: {

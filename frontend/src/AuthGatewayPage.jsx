@@ -1,82 +1,95 @@
 import { Link } from 'react-router-dom';
 
-const entryPoints = [
+const workspaceCards = [
   {
-    eyebrow: 'Student',
-    title: 'Student Login',
-    description: 'Returning students sign in here before continuing with team, GitHub, and sprint workflows.',
-    href: '/students/login',
-    cta: 'Open Student Login',
-    status: 'Planned',
+    role: 'Student',
+    title: 'Student Workspace',
+    description: 'Sign in to manage invitations, join groups, and continue project collaboration.',
+    loginHref: '/students/login',
+    registerHref: '/students/register',
+    accent: 'student',
   },
   {
-    eyebrow: 'Student',
-    title: 'Student Register',
-    description: 'New students validate their uploaded student ID and create their base account here.',
-    href: '/students/register',
-    cta: 'Open Student Register',
-    status: 'Ready',
+    role: 'Professor',
+    title: 'Professor Workspace',
+    description: 'Log in to review teams and complete advisor-side workflows and evaluations.',
+    loginHref: '/professors/login',
+    registerHref: '/professors/password-setup',
+    accent: 'professor',
   },
   {
-    eyebrow: 'Professor',
-    title: 'Professor Login',
-    description: 'Professors authenticate here after completing their initial password setup flow.',
-    href: '/professors/login',
-    cta: 'Open Professor Login',
-    status: 'Planned',
+    role: 'Coordinator',
+    title: 'Coordinator Workspace',
+    description: 'Sign in to manage student ID registry imports and coordinator control tools.',
+    loginHref: '/coordinator/login',
+    registerHref: '/coordinator/student-id-registry/import',
+    accent: 'coordinator',
   },
   {
-    eyebrow: 'Professor',
-    title: 'Professor Initial Password',
-    description: 'A newly created professor account completes its first-time password setup here.',
-    href: '/professors/password-setup',
-    cta: 'Open Password Setup',
-    status: 'Ready',
-  },
-  {
-    eyebrow: 'Coordinator',
-    title: 'Coordinator Login',
-    description: 'Coordinators sign in here before accessing coordinator workspace tools such as student ID import.',
-    href: '/coordinator/login',
-    cta: 'Open Coordinator Login',
-    status: 'Ready',
-  },
-  {
-    eyebrow: 'Admin',
-    title: 'Admin Login',
-    description: 'Admins sign in here before accessing admin-only tools such as professor account registration.',
-    href: '/admin/login',
-    cta: 'Open Admin Login',
-    status: 'Ready',
+    role: 'Admin',
+    title: 'Admin Workspace',
+    description: 'Sign in to control account setup and administrative operations.',
+    loginHref: '/admin/login',
+    registerHref: '/admin/professors/new',
+    accent: 'admin',
   },
 ];
 
 export default function AuthGatewayPage() {
   return (
-    <main className="page">
-      <section className="hero">
-        <p className="eyebrow">Senior App Access</p>
-        <h1>Welcome to Senior App</h1>
-        <p className="subtitle">
-          The system has separate student, professor, and admin-facing auth flows. This landing page keeps those
-          routes visible and easy to demo without mixing the screens together.
-        </p>
+    <main className="page gateway-home">
+      <section className="home-hero">
+        <div>
+          <p className="eyebrow">Senior App Workspace</p>
+          <h1>Run Everything From One Clean Home</h1>
+          <p className="subtitle">
+            Choose your role and jump straight into the right workflow. This home page is designed as a command center,
+            not just a list of random login links.
+          </p>
+
+          <div className="hero-actions">
+            <Link className="cta-primary" to="/students/login">
+              Enter as Student
+            </Link>
+            <Link className="cta-secondary" to="/admin/login">
+              Open Admin Panel
+            </Link>
+          </div>
+        </div>
+
+        <aside className="hero-rail" aria-label="Quick map">
+          <h2>Quick Route Map</h2>
+          <ul>
+            <li>Student: Login or Register</li>
+            <li>Professor: Password setup then login</li>
+            <li>Coordinator: Login then import student IDs</li>
+            <li>Admin: Login then create professor accounts</li>
+          </ul>
+        </aside>
       </section>
 
-      <section className="gateway-grid">
-        {entryPoints.map((item) => (
-          <article key={item.href} className="gateway-card">
-            <p className="gateway-eyebrow">{item.eyebrow}</p>
-            <div className="gateway-header">
-              <h2>{item.title}</h2>
-              <span className={`gateway-status gateway-status-${item.status.toLowerCase()}`}>{item.status}</span>
+      <section className="workspace-grid" aria-label="Role workspaces">
+        {workspaceCards.map((item) => (
+          <article key={item.role} className={`workspace-card workspace-card-${item.accent}`}>
+            <p className="workspace-eyebrow">{item.role}</p>
+            <h2>{item.title}</h2>
+            <p>{item.description}</p>
+            <div className="workspace-actions">
+              <Link className="workspace-button workspace-button-primary" to={item.loginHref}>
+                Open Login
+              </Link>
+              <Link className="workspace-button workspace-button-secondary" to={item.registerHref}>
+                Open Next Step
+              </Link>
             </div>
-            <p className="gateway-copy">{item.description}</p>
-            <Link className="gateway-link" to={item.href}>
-              {item.cta}
-            </Link>
           </article>
         ))}
+      </section>
+
+      <section className="home-footer-note">
+        <p>
+          Tip: if login succeeds but you stay on the page, refresh once and re-open your role workspace from the top nav.
+        </p>
       </section>
     </main>
   );

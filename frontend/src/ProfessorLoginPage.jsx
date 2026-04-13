@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
 
 const initialForm = {
@@ -40,6 +41,7 @@ export default function ProfessorLoginPage() {
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
   const [submitting, setSubmitting] = useState(false);
+  const navigate = useNavigate();
   const { notify } = useNotification();
 
   async function handleSubmit(event) {
@@ -73,13 +75,17 @@ export default function ProfessorLoginPage() {
       setFeedback({
         type: 'success',
         title: 'Signed in successfully',
-        message: result.message || 'Professor login successful.',
+        message: result.message || 'Professor login successful. Redirecting to home.',
       });
       notify({
         type: 'success',
         title: 'Professor signed in',
         message: result.message || 'Professor login successful.',
       });
+
+      window.setTimeout(() => {
+        navigate('/home');
+      }, 500);
     } catch {
       setFeedback({
         type: 'error',

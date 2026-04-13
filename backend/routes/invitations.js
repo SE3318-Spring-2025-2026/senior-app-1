@@ -1,8 +1,10 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
-const { respondToInvitation } = require('../controllers/groupFormationController');
+const { respondToInvitation, getMyInvitations } = require('../controllers/invitationController');
 
 const router = express.Router();
+
+router.get('/invitations/me', authenticate, getMyInvitations);
 
 // Keep both spellings for compatibility with existing docs while backend converges.
 router.patch('/invitations/:invitationId/respond', authenticate, respondToInvitation);

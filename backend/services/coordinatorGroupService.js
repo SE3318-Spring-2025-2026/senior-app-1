@@ -1,5 +1,5 @@
 const sequelize = require('../db');
-const { Group, AuditLog } = require('../models');
+const { Group, AuditLog, User } = require('../models');
 
 function createServiceError(status, code, message) {
   const error = new Error(message);
@@ -22,22 +22,23 @@ function assertCoordinatorActor(actor) {
   }
 }
 
-function computeMemberUpdate(memberIds, action, studentId) {
+function computeMemberUpdate(memberIds, action, userId) {
   const current = Array.isArray(memberIds) ? [...memberIds] : [];
-  const hasStudent = current.includes(studentId);
+  const normalizedUserId = String(userId);
+  const hasStudent = current.map((memberId) => String(memberId)).includes(normalizedUserId);
 
   if (action === 'ADD') {
     if (hasStudent) {
       throw createServiceError(400, 'MEMBERSHIP_NO_CHANGE', 'Student is already a member of this group.');
     }
-    return [...current, studentId];
+    return [...current, normalizedUserId];
   }
 
   if (!hasStudent) {
     throw createServiceError(400, 'MEMBERSHIP_NO_CHANGE', 'Student is not a member of this group.');
   }
 
-  return current.filter((memberId) => memberId !== studentId);
+  return current.filter((memberId) => String(memberId) !== normalizedUserId);
 }
 
 function getAuditAction(action) {
@@ -53,13 +54,52 @@ async function updateGroupMembershipByCoordinator({ groupId, action, studentId, 
   }
 
   return sequelize.transaction(async (transaction) => {
+    const student = await User.findOne({
+      where: {
+        studentId,
+        role: 'STUDENT',
+      },
+      transaction,
+    });
+
+    if (!student) {
+      throw createServiceError(404, 'STUDENT_NOT_FOUND', 'Student not found.');
+    }
+
     const group = await Group.findByPk(groupId, { transaction });
     if (!group) {
       throw createServiceError(404, 'GROUP_NOT_FOUND', 'Group not found.');
     }
 
+    if (normalizedAction === 'REMOVE' && String(group.leaderId || '') === String(student.id)) {
+      throw createServiceError(400, 'LEADER_REMOVE_BLOCKED', 'Coordinator cannot remove group leader via membership edit.');
+    }
+
+    if (normalizedAction === 'ADD') {
+      const allGroups = await Group.findAll({
+        attributes: ['id', 'leaderId', 'memberIds'],
+        transaction,
+      });
+
+      const alreadyInOtherGroup = allGroups.some((candidate) => {
+        if (String(candidate.id) === String(group.id)) {
+          return false;
+        }
+
+        const isLeader = String(candidate.leaderId || '') === String(student.id);
+        const isMember = Array.isArray(candidate.memberIds)
+          && candidate.memberIds.map((memberId) => String(memberId)).includes(String(student.id));
+
+        return isLeader || isMember;
+      });
+
+      if (alreadyInOtherGroup) {
+        throw createServiceError(409, 'STUDENT_ALREADY_IN_OTHER_GROUP', 'Student already belongs to another group.');
+      }
+    }
+
     const previousMemberIds = Array.isArray(group.memberIds) ? [...group.memberIds] : [];
-    const updatedMemberIds = computeMemberUpdate(group.memberIds, normalizedAction, studentId);
+    const updatedMemberIds = computeMemberUpdate(group.memberIds, normalizedAction, student.id);
 
     group.memberIds = updatedMemberIds;
     await group.save({ transaction });
@@ -71,6 +111,7 @@ async function updateGroupMembershipByCoordinator({ groupId, action, studentId, 
       timestamp: new Date(),
       metadata: {
         groupId: group.id,
+        targetUserId: student.id,
         studentId,
         membershipAction: normalizedAction,
         previousMemberIds,

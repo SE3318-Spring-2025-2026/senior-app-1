@@ -1,17 +1,8 @@
 import { useState } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
 
-const LS_KEY = 'invite_notifications';
-
-function parseStudentIds(raw) {
-  return [
-    ...new Set(
-      raw
-        .split(/[\s,]+/)
-        .map((s) => s.trim())
-        .filter(Boolean),
-    ),
-  ];
+function normalizeStudentId(raw) {
+  return String(raw || '').trim();
 }
 
 export default function InviteMembersSection({
@@ -21,32 +12,62 @@ export default function InviteMembersSection({
   invitations,
   inviteError,
 }) {
-  const [idsText, setIdsText] = useState('');
+  const [studentIdInput, setStudentIdInput] = useState('');
+  const [studentIds, setStudentIds] = useState([]);
+  const [inputError, setInputError] = useState('');
   const { notify } = useNotification();
+
+  function handleAddStudentId() {
+    const normalized = normalizeStudentId(studentIdInput);
+    if (!normalized) {
+      setInputError('Enter an 11-digit student ID.');
+      return;
+    }
+
+    if (!/^\d{11}$/.test(normalized)) {
+      setInputError('Student ID must be exactly 11 digits.');
+      return;
+    }
+
+    if (studentIds.includes(normalized)) {
+      setInputError('This student ID is already in the invite list.');
+      return;
+    }
+
+    setStudentIds((prev) => [...prev, normalized]);
+    setStudentIdInput('');
+    setInputError('');
+  }
+
+  function handleRemoveStudentId(id) {
+    setStudentIds((prev) => prev.filter((item) => item !== id));
+  }
+
+  function handleInputKeyDown(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleAddStudentId();
+    }
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
-    const ids = parseStudentIds(idsText);
-    if (ids.length === 0) return;
+    if (studentIds.length === 0) {
+      setInputError('Add at least one student ID before sending invitations.');
+      return;
+    }
 
     try {
-      const dispatched = await dispatchInvites(group.id, ids);
-      setIdsText(''); // ← temizle sadece başarıda
+      const dispatched = await dispatchInvites(group.id, studentIds);
+      setStudentIds([]);
+      setStudentIdInput('');
+      setInputError('');
 
       notify({
         type: 'success',
         title: 'Invitations sent',
         message: `${dispatched.length} invitation(s) dispatched successfully.`,
       });
-
-      const existing = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
-      const newEntries = dispatched.map((inv) => ({
-        invitationId: inv.id,
-        groupId: inv.groupId,
-        groupName: group.name,
-        timestamp: new Date().toISOString(),
-      }));
-      localStorage.setItem(LS_KEY, JSON.stringify([...existing, ...newEntries]));
     } catch (err) {
       // ── Duplicate-invite: özel mesaj, textarea KALSIN ──────────────────
       const code = err.response?.data?.code;
@@ -70,28 +91,76 @@ export default function InviteMembersSection({
   }
 
   function handleClear() {
-    setIdsText('');
+    setStudentIdInput('');
+    setStudentIds([]);
+    setInputError('');
   }
 
   return (
     <section className="panel">
       <form className="form" onSubmit={handleSubmit} noValidate>
+        <p className="invite-target-group">
+          Sending invites to <strong>{group.name}</strong>
+        </p>
+
         <label className="field">
-          <span>Invite Student IDs</span>
-          <textarea
-            id="invite-ids"
-            name="studentIds"
-            placeholder={'e.g. 11070001001, 11070001002\nor one per line'}
-            value={idsText}
-            onChange={(e) => setIdsText(e.target.value)}
-            rows={4}
-            disabled={invitesPending}
-            aria-describedby={inviteError ? 'invite-error-summary' : undefined}
-          />
+          <span>Invite Student ID</span>
+          <div className="invite-input-row">
+            <input
+              id="invite-student-id"
+              name="studentId"
+              placeholder="11-digit student ID to invite"
+              value={studentIdInput}
+              onChange={(e) => {
+                setStudentIdInput(e.target.value);
+                if (inputError) {
+                  setInputError('');
+                }
+              }}
+              onKeyDown={handleInputKeyDown}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={11}
+              disabled={invitesPending}
+              aria-describedby={inviteError ? 'invite-error-summary' : undefined}
+            />
+            <button
+              type="button"
+              className="invite-add-button"
+              onClick={handleAddStudentId}
+              disabled={invitesPending}
+            >
+              Add ID
+            </button>
+          </div>
           <p className="token-note">
-            Enter student IDs separated by commas or newlines. Duplicates are ignored.
+            Queue exact 11-digit IDs, then send invitations.
           </p>
         </label>
+
+        {inputError && (
+          <p className="field-error" role="alert" aria-live="polite">
+            {inputError}
+          </p>
+        )}
+
+        {studentIds.length > 0 && (
+          <section className="invite-list" aria-label="Invited student IDs">
+            {studentIds.map((id) => (
+              <article key={id} className="invite-list-item">
+                <span>{id}</span>
+                <button
+                  type="button"
+                  className="invite-remove-button"
+                  onClick={() => handleRemoveStudentId(id)}
+                  disabled={invitesPending}
+                >
+                  Remove
+                </button>
+              </article>
+            ))}
+          </section>
+        )}
 
         {inviteError?.type === 'validation' && inviteError.failures?.length > 0 && (
           <section
@@ -118,8 +187,8 @@ export default function InviteMembersSection({
           </section>
         )}
 
-        <div className="form-actions">
-          <button type="submit" disabled={invitesPending || !idsText.trim()}>
+        <div className="form-actions invite-form-actions">
+          <button type="submit" disabled={invitesPending || studentIds.length === 0}>
             {invitesPending ? 'Sending invitations...' : 'Send Invitations'}
           </button>
           <button type="button" onClick={handleClear} disabled={invitesPending}>
@@ -132,7 +201,7 @@ export default function InviteMembersSection({
       {invitations.length > 0 && (
         <section className="side-column">
           <section className="token-panel">
-            <p className="feedback-label">Pending Invitations</p>
+            <p className="feedback-label">Sent Invitations</p>
             <ul>
               {invitations.map((inv) => (
                 <li key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.25rem 0' }}>
