@@ -2,7 +2,7 @@ const { body, param, validationResult } = require('express-validator');
 const coordinatorGroupService = require('../services/coordinatorGroupService');
 
 const updateGroupMembership = [
-  param('groupId').isUUID(),
+  param('groupId').isString().trim().notEmpty(),
   body('action').isString().trim().custom((value) => ['ADD', 'REMOVE'].includes(String(value).toUpperCase())),
   body('studentId').isString().trim().matches(/^[0-9]{11}$/),
   async (req, res, next) => {
@@ -25,6 +25,7 @@ const updateGroupMembership = [
       return res.status(200).json({
         id: group.id,
         name: group.name,
+        leaderId: group.leaderId,
         memberIds: group.memberIds,
       });
     } catch (error) {

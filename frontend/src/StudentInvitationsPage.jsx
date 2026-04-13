@@ -1,46 +1,69 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
 import { useStudentInvitations } from './hooks/useStudentInvitations';
 
-const LS_KEY = 'invite_notifications';
+function getGroupLabel(entry) {
+  const raw = entry.groupName || entry.payload?.groupName || '';
+  if (!raw) {
+    return '';
+  }
 
-function InvitationCard({ invitation, respondingId, responseErrors, onRespond }) {
-  const isResponding = respondingId === invitation.id;
-  const error = responseErrors[invitation.id];
+  // Hide UUID-like values from UI and keep labels readable.
+  const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (uuidLike.test(raw)) {
+    return '';
+  }
 
-  return (
-    <article className="stat-card">
-      <h3>{invitation.groupName}</h3>
-      <p>
-        <span>Status: </span>
-        <strong>{invitation.status}</strong>
-      </p>
+  return raw;
+}
 
-      <div className="form-actions">
-        <button
-          type="button"
-          disabled={isResponding}
-          onClick={() => onRespond(invitation.id, 'ACCEPT')}
-        >
-          {isResponding ? 'Accepting...' : 'Accept'}
-        </button>
-        <button
-          type="button"
-          disabled={isResponding}
-          onClick={() => onRespond(invitation.id, 'REJECT')}
-        >
-          {isResponding ? 'Declining...' : 'Decline'}
-        </button>
-      </div>
+function formatSubject(entry) {
+  const groupLabel = getGroupLabel(entry);
 
-      {error && (
-        <p className="field-error" role="alert" aria-live="polite">
-          {error}
-        </p>
-      )}
-    </article>
-  );
+  if (entry.type === 'PENDING_INVITE') {
+    return groupLabel ? `Invitation to join ${groupLabel}` : 'Invitation to join a team';
+  }
+  if (entry.type === 'GROUP_INVITE') {
+    return groupLabel ? `Team invitation: ${groupLabel}` : 'Team invitation received';
+  }
+  if (entry.type === 'GROUP_MEMBERSHIP_ACCEPTED') {
+    return groupLabel ? `Membership update: ${groupLabel}` : 'Membership update';
+  }
+  return 'New notification';
+}
+
+function formatPreview(entry) {
+  const groupLabel = getGroupLabel(entry);
+
+  if (entry.type === 'PENDING_INVITE') {
+    return groupLabel
+      ? `You were invited to join ${groupLabel}. Accept or decline from your inbox.`
+      : 'You can accept or decline this invitation from your inbox.';
+  }
+  if (entry.type === 'GROUP_INVITE') {
+    return groupLabel
+      ? `A team leader sent you an invitation for ${groupLabel}.`
+      : 'A team leader sent you an invitation.';
+  }
+  if (entry.type === 'GROUP_MEMBERSHIP_ACCEPTED') {
+    return groupLabel
+      ? `Your membership update for ${groupLabel} has been delivered.`
+      : 'A membership acceptance update was delivered.';
+  }
+  return 'Notification received from local mailbox.';
+}
+
+function formatDate(value) {
+  if (!value) {
+    return 'Now';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return 'Now';
+  }
+
+  return date.toLocaleString();
 }
 
 export default function StudentInvitationsPage() {
@@ -56,27 +79,31 @@ export default function StudentInvitationsPage() {
 
   const { notify } = useNotification();
 
-  const [lastResolved, setLastResolved] = useState(null);
+  const [mailbox, setMailbox] = useState([]);
+  const [selectedMailId, setSelectedMailId] = useState(null);
 
   useEffect(() => {
     fetchInvitations();
 
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) {
-        const entries = JSON.parse(raw);
-        entries.forEach((entry) => {
-          notify({
-            type: 'info',
-            title: 'New Invitation Received!',
-            message: `You have been invited to join ${entry.groupName}. See your pending invitations below.`,
-          });
-        });
-        localStorage.removeItem(LS_KEY);
-      }
-    } catch {
-      // Ignore malformed localStorage data
-    }
+    const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
+    fetch('/api/v1/notifications/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          return;
+        }
+
+        const rows = payload.notifications || [];
+        setMailbox(rows);
+      })
+      .catch(() => {
+        setMailbox([]);
+      });
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -86,8 +113,6 @@ export default function StudentInvitationsPage() {
     try {
       await respondToInvitation(invitationId, response);
 
-      setLastResolved({ groupName: invitation?.groupName, response });
-
       // ─── Notify Team Leader (fire-and-forget, confirmed backend success) ───
       if (response === 'ACCEPT') {
         // Backend already triggers NotificationService.notifyMembershipAccepted.
@@ -95,15 +120,7 @@ export default function StudentInvitationsPage() {
         notify({
           type: 'success',
           title: 'Team Leader Notified',
-          message: (
-            <span>
-              The Team Leader of{' '}
-              <Link to={`/groups/${invitation?.groupId}`}>
-                {invitation?.groupName}
-              </Link>{' '}
-              has been notified of your membership.
-            </span>
-          ),
+          message: `The Team Leader of ${invitation?.groupName || 'the group'} has been notified of your membership.`,
         });
       } else {
         // REJECT — notify student that leader was informed of the decline
@@ -117,77 +134,132 @@ export default function StudentInvitationsPage() {
 
     } catch {
       // Backend failed — do NOT notify. Error already in responseErrors.
-      setLastResolved(null);
     }
   }
 
+  const pendingInviteMails = invitations.map((invitation) => ({
+    ...invitation,
+    type: 'PENDING_INVITE',
+    createdAt: new Date().toISOString(),
+  }));
+
+  const allMail = [...pendingInviteMails, ...mailbox].sort((a, b) => {
+    const da = new Date(a.createdAt || 0).getTime();
+    const db = new Date(b.createdAt || 0).getTime();
+    return db - da;
+  });
+
+  const selectedMail = allMail.find((entry) => `${entry.type}-${entry.id}` === selectedMailId) || null;
+  const selectedError = selectedMail ? responseErrors[selectedMail.id] : null;
+  const selectedIsPendingInvite = selectedMail?.type === 'PENDING_INVITE';
+  const selectedIsResponding = selectedIsPendingInvite && respondingId === selectedMail.id;
+
   return (
-    <main className="page">
-      <section className="hero">
-        <p className="eyebrow">Student Workspace</p>
-        <h1>My Invitations</h1>
-        <p className="subtitle">
-          Review your pending group invitations below. Accept to join a group or decline to pass.
-        </p>
-      </section>
-
-      <p className="back-link-wrap">
-        <Link className="back-link" to="/">
-          Back to Home
-        </Link>
-      </p>
-
-      {lastResolved && (
-        <section className="panel">
-          <section className="feedback feedback-success" aria-live="polite">
-            <p className="feedback-label">
-              {lastResolved.response === 'ACCEPT' ? 'Invitation Accepted' : 'Invitation Declined'}
-            </p>
-            <p>
-              {lastResolved.response === 'ACCEPT'
-                ? `You have joined ${lastResolved.groupName}.`
-                : `You have declined the invitation from ${lastResolved.groupName}.`}
-            </p>
-          </section>
-        </section>
-      )}
-
-      <section className="panel">
+    <main className="page page-mailbox">
+      <section className="single-panel">
         {loading && (
-          <section className="feedback feedback-loading" aria-live="polite">
-            <p className="feedback-label">Loading</p>
-            <p>Loading invitations...</p>
-          </section>
+          <p className="mail-state" aria-live="polite">Loading mail...</p>
         )}
 
         {!loading && loadError && (
-          <section className="feedback feedback-error" aria-live="polite">
-            <p className="feedback-label">Error</p>
-            <p>{loadError}</p>
-          </section>
+          <p className="mail-state" aria-live="polite">{loadError}</p>
         )}
 
-        {!loading && !loadError && invitations.length === 0 && (
-          <section className="feedback feedback-idle" aria-live="polite">
-            <p className="feedback-label">No Invitations</p>
-            <p>You have no pending invitations.</p>
-          </section>
+        {!loading && !loadError && allMail.length === 0 && (
+          <p className="mail-state" aria-live="polite">No mail yet.</p>
         )}
 
-        {!loading && invitations.length > 0 && (
-          <div className="stats-grid">
-            {invitations.map((inv) => (
-              <InvitationCard
-                key={inv.id}
-                invitation={inv}
-                respondingId={respondingId}
-                responseErrors={responseErrors}
-                onRespond={handleRespond}
-              />
-            ))}
+        {!loading && allMail.length > 0 && (
+          <div className="mail-layout">
+            <aside className="mail-sidebar" aria-label="Mailbox items">
+              <div className="mail-sidebar-header">
+                <p className="mailbox-title">Inbox</p>
+                <p className="mailbox-count">{allMail.length} messages</p>
+              </div>
+
+              <section className="mail-nav">
+                {allMail.map((entry) => {
+                  const key = `${entry.type}-${entry.id}`;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className="mail-nav-item"
+                      onClick={() => setSelectedMailId(key)}
+                    >
+                      <span className="mail-nav-time">{formatDate(entry.createdAt)}</span>
+                      <span className="mail-nav-subject">{formatSubject(entry)}</span>
+                      <span className="mail-nav-preview">{formatPreview(entry)}</span>
+                    </button>
+                  );
+                })}
+              </section>
+            </aside>
           </div>
         )}
       </section>
+
+      {selectedMail && (
+        <div className="mail-overlay" role="dialog" aria-modal="true" aria-label="Mail details">
+          <button
+            type="button"
+            className="mail-overlay-backdrop"
+            aria-label="Close mail details"
+            onClick={() => setSelectedMailId(null)}
+          />
+
+          <section className="mail-drawer">
+            <div className="mail-overlay-header">
+              <h2>{formatSubject(selectedMail)}</h2>
+              <button type="button" className="mail-overlay-close" onClick={() => setSelectedMailId(null)}>
+                Close
+              </button>
+            </div>
+
+            <p className="mail-preview">{formatPreview(selectedMail)}</p>
+
+            <dl className="mail-detail-grid">
+              <div>
+                <dt>Time</dt>
+                <dd>{formatDate(selectedMail.createdAt)}</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>{selectedMail.status || 'PENDING'}</dd>
+              </div>
+              <div>
+                <dt>Group</dt>
+                <dd>{getGroupLabel(selectedMail) || 'Not specified'}</dd>
+              </div>
+            </dl>
+
+            {selectedIsPendingInvite && (
+              <div className="mail-actions">
+                <button
+                  type="button"
+                  disabled={selectedIsResponding}
+                  onClick={() => handleRespond(selectedMail.id, 'ACCEPT')}
+                >
+                  {selectedIsResponding ? 'Accepting...' : 'Accept'}
+                </button>
+                <button
+                  type="button"
+                  disabled={selectedIsResponding}
+                  onClick={() => handleRespond(selectedMail.id, 'REJECT')}
+                >
+                  {selectedIsResponding ? 'Declining...' : 'Decline'}
+                </button>
+              </div>
+            )}
+
+            {selectedError && (
+              <p className="field-error" role="alert" aria-live="polite">
+                {selectedError}
+              </p>
+            )}
+          </section>
+        </div>
+      )}
     </main>
   );
 }

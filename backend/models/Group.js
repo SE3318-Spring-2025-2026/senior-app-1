@@ -7,6 +7,7 @@ const Group = sequelize.define(
     id: {
       type: DataTypes.STRING,
       primaryKey: true,
+      defaultValue: DataTypes.UUIDV4,
     },
     name: {
       type: DataTypes.STRING,
@@ -15,6 +16,20 @@ const Group = sequelize.define(
     leaderId: {
       type: DataTypes.STRING,
       allowNull: true,
+    },
+    maxMembers: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 4,
+      validate: {
+        min: 1,
+        max: 10,
+      },
+    },
+    status: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'FORMATION',
     },
     memberIds: {
       type: DataTypes.JSON,
