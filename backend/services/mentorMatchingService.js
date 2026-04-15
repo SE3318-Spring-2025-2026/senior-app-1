@@ -68,7 +68,6 @@ async function ensureGroupHasValidCurrentAdvisor(group) {
 
   return currentAdvisorUserId;
 }
-
 function serializeAdvisorAssignment(group) {
   return {
     groupId: group.id,
