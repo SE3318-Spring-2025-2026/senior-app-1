@@ -12,6 +12,7 @@ const ValidStudentId = require('./ValidStudentId');
 const OAuthState = require('./OAuthState');
 const LinkedGitHubAccount = require('./LinkedGitHubAccount');
 const Group = require('./Group');
+const AdvisorRequest = require('./AdvisorRequest');
 const Invitation = require('./Invitation');
 const AuditLog = require('./AuditLog');
 const Notification = require('./Notification');
@@ -23,6 +24,7 @@ module.exports = {
   OAuthState,
   LinkedGitHubAccount,
   Group,
+  AdvisorRequest,
   Invitation,
   AuditLog,
   Notification,

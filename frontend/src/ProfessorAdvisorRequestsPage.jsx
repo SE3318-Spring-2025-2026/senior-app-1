@@ -40,6 +40,8 @@ export default function ProfessorAdvisorRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectedRequestId, setSelectedRequestId] = useState(null);
+  const [submittingDecision, setSubmittingDecision] = useState('');
+  const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -86,6 +88,53 @@ export default function ProfessorAdvisorRequestsPage() {
   }, []);
 
   const selectedRequest = requests.find((entry) => entry.id === selectedRequestId) || null;
+  const selectedRequestBusy = selectedRequest && submittingDecision === selectedRequest.requestId;
+  const canDecide = selectedRequest?.requestId && selectedRequest?.requestStatus === 'PENDING';
+
+  async function handleDecision(decision) {
+    if (!selectedRequest?.requestId) {
+      setFeedback('This advisor request cannot be decided because its request id is missing.');
+      return;
+    }
+
+    setSubmittingDecision(selectedRequest.requestId);
+    setFeedback('');
+
+    try {
+      const token = window.localStorage.getItem('professorToken') || window.localStorage.getItem('authToken');
+      const response = await fetch(`/api/v1/advisor-requests/${selectedRequest.requestId}/decision`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ decision }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setFeedback(payload.message || 'Advisor request decision could not be saved.');
+        return;
+      }
+
+      const nextStatus = payload.status || (decision === 'APPROVE' ? 'APPROVED' : 'REJECTED');
+      setRequests((current) => current.map((entry) => (
+        entry.requestId === selectedRequest.requestId
+          ? {
+            ...entry,
+            requestStatus: nextStatus,
+            note: payload.note ?? entry.note ?? null,
+            decidedAt: payload.decidedAt ?? new Date().toISOString(),
+          }
+          : entry
+      )));
+      setFeedback(`Request ${nextStatus.toLowerCase()} successfully.`);
+    } catch {
+      setFeedback('Advisor request decision could not be saved.');
+    } finally {
+      setSubmittingDecision('');
+    }
+  }
 
   return (
     <main className="page page-mailbox">
@@ -168,6 +217,35 @@ export default function ProfessorAdvisorRequestsPage() {
                       <dd>{formatStatus(selectedRequest.status)}</dd>
                     </div>
                   </dl>
+
+                  {canDecide && (
+                    <div className="mail-actions">
+                      <button
+                        type="button"
+                        disabled={Boolean(selectedRequestBusy)}
+                        onClick={() => handleDecision('APPROVE')}
+                      >
+                        {selectedRequestBusy ? 'Saving...' : 'Approve'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={Boolean(selectedRequestBusy)}
+                        onClick={() => handleDecision('REJECT')}
+                      >
+                        {selectedRequestBusy ? 'Saving...' : 'Reject'}
+                      </button>
+                    </div>
+                  )}
+
+                  {!canDecide && selectedRequest?.requestStatus !== 'PENDING' && (
+                    <p className="mail-state" aria-live="polite">
+                      This request has already been {formatStatus(selectedRequest.requestStatus).toLowerCase()}.
+                    </p>
+                  )}
+
+                  {feedback && (
+                    <p className="mail-state" aria-live="polite">{feedback}</p>
+                  )}
                 </>
               ) : (
                 <p className="mail-detail-empty">Select a request to review its details.</p>

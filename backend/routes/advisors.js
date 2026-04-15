@@ -1,7 +1,7 @@
 const express = require('express');
 const { Op } = require('sequelize');
 const { authenticate, authorize } = require('../middleware/auth');
-const { Notification } = require('../models');
+const { AdvisorRequest, Notification } = require('../models');
 
 const router = express.Router();
 
@@ -30,21 +30,42 @@ router.get(
         limit: 50,
       });
 
+      const requestIds = rows
+        .map((row) => parsePayload(row.payload).requestId)
+        .filter(Boolean);
+
+      const advisorRequests = requestIds.length > 0
+        ? await AdvisorRequest.findAll({
+          where: {
+            id: {
+              [Op.in]: requestIds,
+            },
+          },
+        })
+        : [];
+
+      const advisorRequestMap = new Map(
+        advisorRequests.map((request) => [String(request.id), request]),
+      );
+
       const notifications = rows.map((row) => {
         const payload = parsePayload(row.payload);
+        const request = payload.requestId ? advisorRequestMap.get(String(payload.requestId)) : null;
 
         return {
           id: row.id,
           type: 'ADVISEE_REQUEST',
           recipientId: req.user.id,
           requestId: payload.requestId ?? null,
-          groupId: payload.groupId ?? null,
+          groupId: request?.groupId ?? payload.groupId ?? null,
           groupName: payload.groupName ?? null,
-          requestStatus: payload.requestStatus || payload.status || 'PENDING',
+          requestStatus: request?.status || payload.requestStatus || payload.status || 'PENDING',
           message: payload.message || 'A team leader submitted an advisor request.',
           read: false,
           createdAt: row.createdAt,
           status: row.status,
+          note: request?.note ?? null,
+          decidedAt: request?.decidedAt ?? null,
         };
       });
 
