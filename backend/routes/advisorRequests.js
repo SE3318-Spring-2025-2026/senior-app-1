@@ -88,6 +88,9 @@ router.patch(
         status: request.status,
         note: request.note,
         decidedAt: request.decidedAt,
+        message: nextStatus === 'APPROVED'
+          ? 'Advisor request approved successfully.'
+          : 'Advisor request rejected successfully.',
       });
     } catch (error) {
       console.error('Error in advisor request decision route:', error);
