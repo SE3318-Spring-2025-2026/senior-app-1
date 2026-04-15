@@ -63,6 +63,9 @@ const apiClient = {
   post(path, body) {
     return request('POST', path, body);
   },
+  patch(path, body) {
+    return request('PATCH', path, body);
+  },
 };
 
 export default apiClient;

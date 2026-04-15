@@ -16,6 +16,8 @@ const Invitation = require('./Invitation');
 const AuditLog = require('./AuditLog');
 const Notification = require('./Notification');
 
+const AdvisorRequest = require('./AdvisorRequest');
+
 module.exports = {
   User,
   Professor,
@@ -26,4 +28,5 @@ module.exports = {
   Invitation,
   AuditLog,
   Notification,
+  AdvisorRequest,
 };

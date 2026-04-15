@@ -21,6 +21,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import './styles.css';
 
+import AdvisorRequestsPage from './AdvisorRequestsPage';
+
 export default function App() {
   return (
     <AuthProvider>
@@ -46,6 +48,7 @@ export default function App() {
               <Route path="/coordinator/student-id-registry/import" element={<CoordinatorStudentIdUploadPage />} />
               <Route path="/coordinator/groups/manage" element={<CoordinatorGroupMembershipPage />} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
+              <Route path="/advisor/requests" element={<AdvisorRequestsPage />} />
               <Route path="*" element={<HomePage />} />
             </Route>
           </Routes>
