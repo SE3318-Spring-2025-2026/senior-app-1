@@ -8,6 +8,7 @@ const { User, Group, AuditLog } = require('./models');
 
 const adminRoutes = require('./routes/admin');
 const coordinatorRoutes = require('./routes/coordinator');
+const advisorRoutes = require('./routes/advisors');
 const professorRoutes = require('./routes/professors');
 const studentRoutes = require('./routes/students');
 const authRoutes = require('./routes/auth');
@@ -33,6 +34,7 @@ app.locals.models = { User, Group, AuditLog };
 // Routes
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/coordinator', coordinatorRoutes);
+app.use('/api/v1/advisors', advisorRoutes);
 app.use('/api/v1/professors', professorRoutes);
 app.use('/api/v1', studentRoutes);
 app.use('/api/v1/auth', authRoutes);

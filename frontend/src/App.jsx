@@ -10,6 +10,7 @@ import CoordinatorLoginPage from './CoordinatorLoginPage';
 import CoordinatorStudentIdUploadPage from './CoordinatorStudentIdUploadPage';
 import GroupPage from './GroupPage';
 import HomePage from './HomePage';
+import ProfessorAdvisorRequestsPage from './ProfessorAdvisorRequestsPage';
 import ProfessorLoginPage from './ProfessorLoginPage';
 import ProfessorPasswordSetupPage from './ProfessorPasswordSetupPage';
 import Register from './Register';
@@ -36,6 +37,7 @@ export default function App() {
               <Route path="/students/groups/new" element={<StudentGroupShellPage />} />
               <Route path="/students/notifications" element={<StudentInvitationsPage />} />
               <Route path="/professors/login" element={<AuthPage />} />
+              <Route path="/professors/notifications" element={<ProfessorAdvisorRequestsPage />} />
               <Route path="/professors/password-setup" element={<ProfessorPasswordSetupPage />} />
               <Route path="/admin/login" element={<AuthPage />} />
               <Route path="/admin" element={<AdminHomePage />} />
