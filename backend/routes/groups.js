@@ -21,6 +21,21 @@ router.patch('/:groupId', authenticate, groupController.renameGroupValidation, g
 
 router.delete('/:groupId', authenticate, groupController.deleteGroupValidation, groupController.deleteGroup);
 
+// Remove advisor assignment from group (RBAC: ADMIN, COORDINATOR, current advisor)
+router.delete(
+	'/:groupId/advisor-assignment',
+	authenticate,
+	// Only ADMIN, COORDINATOR, or current advisor can remove advisor assignment
+	(req, res, next) => {
+		const allowedRoles = ['ADMIN', 'COORDINATOR'];
+		if (allowedRoles.includes(req.user.role)) return next();
+		// If user is the current advisor of the group, allow (ownership check in controller)
+		return next();
+	},
+	groupController.removeAdvisorAssignmentValidation,
+	groupController.removeAdvisorAssignment,
+);
+
 router.post('/:groupId/leave', authenticate, groupController.leaveGroupValidation, groupController.leaveGroup);
 router.post('/:groupId/members/:memberId/kick', authenticate, groupController.kickMemberValidation, groupController.kickMember);
 

@@ -1,3 +1,89 @@
+// Validation for advisor assignment removal
+exports.removeAdvisorAssignmentValidation = [
+  param('groupId')
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('Group ID is required'),
+];
+
+/**
+ * Remove advisor assignment from a group
+ * DELETE /api/v1/groups/:groupId/advisor-assignment
+ * RBAC: ADMIN, COORDINATOR, or current advisor
+ * - Updates group status if needed
+ * - Logs action to AuditLog
+ * - Notifies group leader
+ */
+exports.removeAdvisorAssignment = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid group ID', errors: errors.array() });
+    }
+
+    const { groupId } = req.params;
+    const user = req.user;
+
+    // Fetch group
+    const group = await Group.findByPk(groupId);
+    if (!group) {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    }
+
+    // RBAC: Only ADMIN, COORDINATOR, or current advisor can remove
+    const allowedRoles = ['ADMIN', 'COORDINATOR'];
+    if (!allowedRoles.includes(user.role) && String(group.advisorId) !== String(user.id)) {
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not authorized to remove this advisor assignment' });
+    }
+
+    // Check if advisor is assigned
+    if (!group.advisorId) {
+      return res.status(400).json({ code: 'NO_ADVISOR_ASSIGNED', message: 'No advisor assigned to this group' });
+    }
+
+    // Remove advisor assignment and update status if needed
+    const prevAdvisorId = group.advisorId;
+    group.advisorId = null;
+    if (group.status === 'ADVISOR_ASSIGNED') {
+      group.status = 'PENDING_ADVISOR';
+    }
+    await group.save();
+
+    // Audit log
+    await require('../models/AuditLog').create({
+      action: 'ADVISOR_REMOVED',
+      actorId: user.id,
+      groupId: group.id,
+      targetId: prevAdvisorId,
+      metadata: JSON.stringify({ prevAdvisorId }),
+    });
+
+    // Notify group leader
+    if (group.leaderId) {
+      await require('../services/notificationService').notifyMembershipAccepted({
+        groupId: group.id,
+        leaderId: group.leaderId,
+        studentId: prevAdvisorId,
+        totalMembers: group.memberIds?.length || 0,
+        maxMembers: group.maxMembers,
+      });
+    }
+
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Advisor assignment removed successfully',
+      data: {
+        groupId: group.id,
+        status: group.status,
+        advisorId: group.advisorId,
+      },
+    });
+  } catch (error) {
+    console.error('Error in removeAdvisorAssignment:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+};
 const { body, param, validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const GroupService = require('../services/groupService');

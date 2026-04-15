@@ -13,6 +13,7 @@ export default function GroupPage() {
   const [joining, setJoining] = useState(false);
   const [userStudentId, setUserStudentId] = useState(null);
   const [error, setError] = useState(null);
+  const [removingAdvisor, setRemovingAdvisor] = useState(false);
 
   // Get current user's student ID from auth token or localStorage
   useEffect(() => {
@@ -110,6 +111,29 @@ export default function GroupPage() {
     }
   };
 
+  // Remove advisor assignment (admin, coordinator, or advisor only)
+  const handleRemoveAdvisor = async () => {
+    if (!groupId || !group?.advisorId) return;
+    setRemovingAdvisor(true);
+    try {
+      const response = await apiClient.delete(`/v1/groups/${groupId}/advisor-assignment`);
+      setGroup((prev) => ({ ...prev, advisorId: null, status: response.data.data.status }));
+      notify({
+        type: 'success',
+        title: 'Advisor removed',
+        message: 'Advisor assignment has been removed from this group.',
+      });
+    } catch (err) {
+      notify({
+        type: 'error',
+        title: 'Failed to remove advisor',
+        message: err.response?.data?.message || 'Could not remove advisor',
+      });
+    } finally {
+      setRemovingAdvisor(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -153,6 +177,25 @@ export default function GroupPage() {
           <p><strong>Status:</strong> {group.status}</p>
           <p><strong>Members:</strong> {group.currentMemberCount} / {group.maxMembers}</p>
           <p><strong>Available Slots:</strong> {group.availableSlots}</p>
+          <p><strong>Advisor:</strong> {group.advisorId ? group.advisorId : <span style={{color:'#999'}}>None assigned</span>}</p>
+          {group.advisorId && (
+            <button
+              onClick={handleRemoveAdvisor}
+              disabled={removingAdvisor}
+              style={{
+                marginTop: '0.5rem',
+                padding: '0.5rem 1rem',
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: removingAdvisor ? 'not-allowed' : 'pointer',
+                opacity: removingAdvisor ? 0.6 : 1,
+              }}
+            >
+              {removingAdvisor ? 'Removing Advisor...' : 'Remove Advisor'}
+            </button>
+          )}
         </div>
 
         {/* Member List */}

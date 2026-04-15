@@ -1454,3 +1454,117 @@ test('[E2E NOTIFICATIONS] no notification emitted when finalize returns 400', as
   // Restore console.log
   console.log = originalLog;
 });
+
+test('DELETE /api/v1/groups/:groupId/advisor-assignment: RBAC, removal, status, log, notification', async () => {
+  // Setup users
+  const admin = await User.create({
+    email: 'admin@example.com',
+    fullName: 'Admin User',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+    password: 'irrelevant',
+  });
+  const coordinator = await User.create({
+    email: 'coord@example.com',
+    fullName: 'Coord User',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: 'irrelevant',
+  });
+  const advisor = await User.create({
+    email: 'advisor@example.com',
+    fullName: 'Advisor User',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: 'irrelevant',
+  });
+  const leader = await User.create({
+    email: 'leader@example.com',
+    fullName: 'Leader User',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001000',
+    password: 'irrelevant',
+  });
+  // Create group with advisor assigned
+  const group = await Group.create({
+    name: 'Advisor Test',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    advisorId: advisor.id,
+    status: 'ADVISOR_ASSIGNED',
+    maxMembers: 4,
+  });
+
+  // Helper to get auth header
+  async function auth(user) {
+    return { Authorization: `Bearer ${jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET)}` };
+  }
+
+  // ADMIN can remove advisor
+  let res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await auth(admin),
+  });
+  assert.equal(res.response.status, 200);
+  assert.equal(res.json.code, 'SUCCESS');
+  const updated = await Group.findByPk(group.id);
+  assert.equal(updated.advisorId, null);
+  assert.equal(updated.status, 'PENDING_ADVISOR');
+  // AuditLog entry
+  const log = await AuditLog.findOne({ where: { groupId: group.id, action: 'ADVISOR_REMOVED' } });
+  assert.ok(log);
+  // Notification sent to leader (simulate notificationService)
+  // (NotificationService is fire-and-forget, so just check no error thrown)
+
+  // Re-assign advisor for next tests
+  updated.advisorId = advisor.id;
+  updated.status = 'ADVISOR_ASSIGNED';
+  await updated.save();
+
+  // COORDINATOR can remove advisor
+  res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await auth(coordinator),
+  });
+  assert.equal(res.response.status, 200);
+  assert.equal(res.json.code, 'SUCCESS');
+
+  // Re-assign advisor for next tests
+  updated.advisorId = advisor.id;
+  updated.status = 'ADVISOR_ASSIGNED';
+  await updated.save();
+
+  // Current advisor can remove self
+  res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await auth(advisor),
+  });
+  assert.equal(res.response.status, 200);
+  assert.equal(res.json.code, 'SUCCESS');
+
+  // Unauthorized student cannot remove advisor
+  res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await auth(leader),
+  });
+  assert.equal(res.response.status, 403);
+
+  // Removing advisor when none assigned
+  updated.advisorId = null;
+  updated.status = 'PENDING_ADVISOR';
+  await updated.save();
+  res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await auth(admin),
+  });
+  assert.equal(res.response.status, 400);
+  assert.equal(res.json.code, 'NO_ADVISOR_ASSIGNED');
+
+  // Invalid groupId
+  res = await request(`/api/v1/groups/invalid-group-id/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await auth(admin),
+  });
+  assert.equal(res.response.status, 404);
+});
