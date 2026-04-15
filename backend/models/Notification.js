@@ -26,7 +26,7 @@ const Notification = sequelize.define(
 
     /**
      * Notification type key.
-     * Known values: 'GROUP_INVITE'
+     * Known values: 'GROUP_INVITE', 'ADVISOR_RELEASED'
      * Kept as a plain string so new types require no migration.
      */
     type: {

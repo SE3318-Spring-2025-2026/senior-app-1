@@ -27,6 +27,7 @@ const AuditLog = sequelize.define(
      *  - INVITATION_ACCEPTED
      *  - INVITATION_REJECTED
      *  - MEMBERSHIP_UPDATED
+     *  - ADVISOR_RELEASE
      */
     action: {
       type: DataTypes.STRING(64),

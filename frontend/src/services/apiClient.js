@@ -56,12 +56,16 @@ async function request(method, path, body) {
   };
 }
 
+
 const apiClient = {
   get(path) {
     return request('GET', path);
   },
   post(path, body) {
     return request('POST', path, body);
+  },
+  patch(path, body) {
+    return request('PATCH', path, body);
   },
 };
 

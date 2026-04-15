@@ -27,7 +27,7 @@ const Group = sequelize.define(
       },
     },
     status: {
-      type: DataTypes.STRING,
+      type: DataTypes.ENUM('FORMATION', 'HAS_ADVISOR', 'LOOKING_FOR_ADVISOR', 'FINALIZED', 'DISBANDED'),
       allowNull: false,
       defaultValue: 'FORMATION',
     },

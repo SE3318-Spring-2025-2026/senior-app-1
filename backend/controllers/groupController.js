@@ -3,6 +3,29 @@ const { Op } = require('sequelize');
 const GroupService = require('../services/groupService');
 const { Group, User, Invitation } = require('../models');
 
+const GroupService = require('../services/groupService');
+// PATCH /api/v1/groups/:groupId/advisor-release
+exports.releaseAdvisorFromGroup = async (req, res) => {
+  try {
+    const groupId = req.params.groupId;
+    const userId = req.user.id;
+    const group = await Group.findByPk(groupId);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+    if (!group.advisorId) {
+      return res.status(400).json({ error: 'No advisor assigned to this group' });
+    }
+    if (group.advisorId !== userId) {
+      return res.status(403).json({ error: 'Only the assigned advisor can release this group' });
+    }
+    await GroupService.releaseAdvisor(groupId, userId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
 /**
  * Validation middleware for creating a group
  */
