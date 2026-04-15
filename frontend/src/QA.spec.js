@@ -183,3 +183,60 @@ test('already-accepted invitation shows ACCEPTED and hides action buttons', asyn
   await expect(page.getByRole('button', { name: /accept/i })).not.toBeVisible();
   await expect(page.getByRole('button', { name: /decline|reject/i })).not.toBeVisible();
 });
+
+test('github callback toast is deduplicated and can be dismissed', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('authToken', 'qa-student-token');
+    window.localStorage.setItem('studentToken', 'qa-student-token');
+    window.localStorage.setItem('studentUser', JSON.stringify({
+      id: 501,
+      studentId: '11070001000',
+      fullName: 'QA Student',
+      email: 'qa-student@example.edu',
+      role: 'STUDENT',
+      githubLinked: false,
+      githubUsername: '',
+    }));
+    window.sessionStorage.clear();
+  });
+
+  await page.route('**/api/v1/students/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        user: {
+          id: 501,
+          studentId: '11070001000',
+          fullName: 'QA Student',
+          email: 'qa-student@example.edu',
+          role: 'STUDENT',
+          githubLinked: true,
+          githubUsername: 'qa-student-gh',
+        },
+      }),
+    });
+  });
+
+  await page.route('**/api/v1/groups', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [] }),
+    });
+  });
+
+  await page.goto('/home?githubLink=success&githubUsername=qa-student-gh');
+
+  const notifications = page.locator('.notification-stack section.notification');
+  await expect(notifications).toHaveCount(1);
+  await expect(notifications.first()).toContainText('GitHub linked successfully');
+
+  await expect(page.getByText('Linked as qa-student-gh.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Dismiss notification' }).click();
+  await expect(notifications).toHaveCount(0);
+
+  await page.waitForTimeout(300);
+  await expect(notifications).toHaveCount(0);
+});
