@@ -16,8 +16,10 @@ function normalizeAdvisorUserId(value) {
   return parsed;
 }
 
-async function loadGroupForTransfer(groupId) {
-  const group = await Group.findByPk(String(groupId).trim());
+async function loadGroupForTransfer(groupId, options = {}) {
+  const group = await Group.findByPk(String(groupId).trim(), {
+    transaction: options.transaction,
+  });
   if (!group) {
     throw createServiceError(404, 'GROUP_NOT_FOUND', 'Group not found.');
   }
@@ -77,8 +79,8 @@ function serializeAdvisorAssignment(group) {
   };
 }
 
-async function transferAdvisorInGroupDatabase({ groupId, newAdvisorId }) {
-  const group = await loadGroupForTransfer(groupId);
+async function transferAdvisorInGroupDatabase({ groupId, newAdvisorId, transaction }) {
+  const group = await loadGroupForTransfer(groupId, { transaction });
   const advisorUserId = normalizeAdvisorUserId(newAdvisorId);
   await findActiveProfessorUser(advisorUserId);
   const currentAdvisorUserId = await ensureGroupHasValidCurrentAdvisor(group);
@@ -88,13 +90,13 @@ async function transferAdvisorInGroupDatabase({ groupId, newAdvisorId }) {
   }
 
   group.advisorId = String(advisorUserId);
-  await group.save();
+  await group.save({ transaction });
 
   return serializeAdvisorAssignment(group);
 }
 
-async function syncAdvisorAssignmentsForGroup({ groupId, advisorId }) {
-  const group = await loadGroupForTransfer(groupId);
+async function syncAdvisorAssignmentsForGroup({ groupId, advisorId, transaction }) {
+  const group = await loadGroupForTransfer(groupId, { transaction });
   const advisorUserId = normalizeAdvisorUserId(advisorId);
   await findActiveProfessorUser(advisorUserId);
 
@@ -122,14 +124,22 @@ async function syncAdvisorAssignmentsForGroup({ groupId, advisorId }) {
     advisorUserId,
   }));
 
-  await sequelize.transaction(async (transaction) => {
+  const applySync = async (activeTransaction) => {
     await GroupAdvisorAssignment.destroy({
       where: { groupId: group.id },
-      transaction,
+      transaction: activeTransaction,
     });
 
-    await GroupAdvisorAssignment.bulkCreate(rows, { transaction });
-  });
+    await GroupAdvisorAssignment.bulkCreate(rows, { transaction: activeTransaction });
+  };
+
+  if (transaction) {
+    await applySync(transaction);
+  } else {
+    await sequelize.transaction(async (managedTransaction) => {
+      await applySync(managedTransaction);
+    });
+  }
 
   return {
     groupId: group.id,
@@ -139,11 +149,60 @@ async function syncAdvisorAssignmentsForGroup({ groupId, advisorId }) {
   };
 }
 
+async function transferAdvisorByCoordinator({ groupId, newAdvisorId }) {
+  return sequelize.transaction(async (transaction) => {
+    const assignment = await transferAdvisorInGroupDatabase({
+      groupId,
+      newAdvisorId,
+      transaction,
+    });
+    const syncResult = await syncAdvisorAssignmentsForGroup({
+      groupId,
+      advisorId: newAdvisorId,
+      transaction,
+    });
+
+    return {
+      groupId: assignment.groupId,
+      advisorId: assignment.advisorId,
+      updatedAt: assignment.updatedAt,
+      updatedCount: syncResult.updatedCount,
+    };
+  });
+}
+
+async function listActiveAdvisors() {
+  const professors = await Professor.findAll({
+    include: [
+      {
+        model: User,
+        where: {
+          role: 'PROFESSOR',
+          status: 'ACTIVE',
+        },
+        attributes: ['id', 'fullName', 'email'],
+      },
+    ],
+    order: [['fullName', 'ASC']],
+  });
+
+  return professors
+    .filter((professor) => professor.User)
+    .map((professor) => ({
+      id: professor.User.id,
+      fullName: professor.fullName || professor.User.fullName,
+      email: professor.User.email,
+      department: professor.department || null,
+    }));
+}
+
 module.exports = {
   createServiceError,
   ensureGroupHasValidCurrentAdvisor,
   findActiveProfessorUser,
+  listActiveAdvisors,
   serializeAdvisorAssignment,
   syncAdvisorAssignmentsForGroup,
+  transferAdvisorByCoordinator,
   transferAdvisorInGroupDatabase,
 };
