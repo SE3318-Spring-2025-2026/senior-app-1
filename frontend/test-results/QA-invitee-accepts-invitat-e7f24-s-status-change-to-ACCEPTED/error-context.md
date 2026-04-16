@@ -12,91 +12,10 @@
 # Error details
 
 ```
-Test timeout of 30000ms exceeded.
-```
-
-```
-Error: locator.fill: Test timeout of 30000ms exceeded.
+Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/student/login
 Call log:
-  - waiting for getByLabel(/student id/i)
+  - navigating to "http://localhost:5173/student/login", waiting until "load"
 
-```
-
-# Page snapshot
-
-```yaml
-- generic [ref=e2]:
-  - banner [ref=e3]:
-    - generic [ref=e4]:
-      - link "Senior App" [ref=e5] [cursor=pointer]:
-        - /url: /
-      - navigation "Primary" [ref=e6]:
-        - link "Entry" [ref=e7] [cursor=pointer]:
-          - /url: /
-        - link "Student Login" [ref=e8] [cursor=pointer]:
-          - /url: /students/login
-        - link "Student Register" [ref=e9] [cursor=pointer]:
-          - /url: /students/register
-        - link "Professor Login" [ref=e10] [cursor=pointer]:
-          - /url: /professors/login
-        - link "Coordinator Login" [ref=e11] [cursor=pointer]:
-          - /url: /coordinator/login
-        - link "Admin Login" [ref=e12] [cursor=pointer]:
-          - /url: /admin/login
-  - main [ref=e13]:
-    - generic [ref=e14]:
-      - paragraph [ref=e15]: Senior App Access
-      - heading "Welcome to Senior App" [level=1] [ref=e16]
-      - paragraph [ref=e17]: The system has separate student, professor, and admin-facing auth flows. This landing page keeps those routes visible and easy to demo without mixing the screens together.
-    - generic [ref=e18]:
-      - article [ref=e19]:
-        - paragraph [ref=e20]: Student
-        - generic [ref=e21]:
-          - heading "Student Login" [level=2] [ref=e22]
-          - generic [ref=e23]: Planned
-        - paragraph [ref=e24]: Returning students sign in here before continuing with team, GitHub, and sprint workflows.
-        - link "Open Student Login" [ref=e25] [cursor=pointer]:
-          - /url: /students/login
-      - article [ref=e26]:
-        - paragraph [ref=e27]: Student
-        - generic [ref=e28]:
-          - heading "Student Register" [level=2] [ref=e29]
-          - generic [ref=e30]: Ready
-        - paragraph [ref=e31]: New students validate their uploaded student ID and create their base account here.
-        - link "Open Student Register" [ref=e32] [cursor=pointer]:
-          - /url: /students/register
-      - article [ref=e33]:
-        - paragraph [ref=e34]: Professor
-        - generic [ref=e35]:
-          - heading "Professor Login" [level=2] [ref=e36]
-          - generic [ref=e37]: Planned
-        - paragraph [ref=e38]: Professors authenticate here after completing their initial password setup flow.
-        - link "Open Professor Login" [ref=e39] [cursor=pointer]:
-          - /url: /professors/login
-      - article [ref=e40]:
-        - paragraph [ref=e41]: Professor
-        - generic [ref=e42]:
-          - heading "Professor Initial Password" [level=2] [ref=e43]
-          - generic [ref=e44]: Ready
-        - paragraph [ref=e45]: A newly created professor account completes its first-time password setup here.
-        - link "Open Password Setup" [ref=e46] [cursor=pointer]:
-          - /url: /professors/password-setup
-      - article [ref=e47]:
-        - paragraph [ref=e48]: Coordinator
-        - generic [ref=e49]:
-          - heading "Coordinator Login" [level=2] [ref=e50]
-          - generic [ref=e51]: Ready
-        - paragraph [ref=e52]: Coordinators sign in here before accessing coordinator workspace tools such as student ID import.
-        - link "Open Coordinator Login" [ref=e53] [cursor=pointer]:
-          - /url: /coordinator/login
-      - article [ref=e54]:
-        - paragraph [ref=e55]: Admin
-        - generic [ref=e56]:
-          - heading "Admin Login" [level=2] [ref=e57]
-          - generic [ref=e58]: Ready
-        - paragraph [ref=e59]: Admins sign in here before accessing admin-only tools such as professor account registration.
-        - link "Open Admin Login" [ref=e60] [cursor=pointer]:
-          - /url: /admin/login
 ```
 
 # Test source
@@ -123,9 +42,9 @@ Call log:
   19  | // ── Helpers ───────────────────────────────────────────────────────────────────
   20  | 
   21  | async function loginAs(page, studentId, password) {
-  22  |   await page.goto('/student/login');
-> 23  |   await page.getByLabel(/student id/i).fill(studentId);
-      |                                        ^ Error: locator.fill: Test timeout of 30000ms exceeded.
+> 22  |   await page.goto('/student/login');
+      |              ^ Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/student/login
+  23  |   await page.getByLabel(/student id/i).fill(studentId);
   24  |   await page.getByLabel(/password/i).fill(password);
   25  |   await page.getByRole('button', { name: /log in/i }).click();
   26  |   await page.waitForURL(/\/student\//);
@@ -225,5 +144,4 @@ Call log:
   120 |   ).toBeVisible({ timeout: 5000 });
   121 | 
   122 |   // Both action buttons must disappear.
-  123 |   await expect(
 ```
