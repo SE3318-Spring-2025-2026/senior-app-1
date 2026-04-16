@@ -41,7 +41,7 @@ export default function ProfessorAdvisorRequestsPage() {
   const [loadError, setLoadError] = useState('');
   const [selectedRequestId, setSelectedRequestId] = useState(null);
   const [submittingDecision, setSubmittingDecision] = useState('');
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState({ type: '', message: '' });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -93,12 +93,15 @@ export default function ProfessorAdvisorRequestsPage() {
 
   async function handleDecision(decision) {
     if (!selectedRequest?.requestId) {
-      setFeedback('This advisor request cannot be decided because its request id is missing.');
+      setFeedback({
+        type: 'error',
+        message: 'This advisor request cannot be decided because its request id is missing.',
+      });
       return;
     }
 
     setSubmittingDecision(selectedRequest.requestId);
-    setFeedback('');
+    setFeedback({ type: '', message: '' });
 
     try {
       const token = window.localStorage.getItem('professorToken') || window.localStorage.getItem('authToken');
@@ -113,7 +116,10 @@ export default function ProfessorAdvisorRequestsPage() {
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setFeedback(payload.message || 'Advisor request decision could not be saved.');
+        setFeedback({
+          type: 'error',
+          message: payload.message || 'Advisor request decision could not be saved.',
+        });
         return;
       }
 
@@ -128,9 +134,15 @@ export default function ProfessorAdvisorRequestsPage() {
           }
           : entry
       )));
-      setFeedback(`Request ${nextStatus.toLowerCase()} successfully.`);
+      setFeedback({
+        type: 'success',
+        message: payload.message || `Request ${nextStatus.toLowerCase()} successfully.`,
+      });
     } catch {
-      setFeedback('Advisor request decision could not be saved.');
+      setFeedback({
+        type: 'error',
+        message: 'Advisor request decision could not be saved.',
+      });
     } finally {
       setSubmittingDecision('');
     }
@@ -243,8 +255,10 @@ export default function ProfessorAdvisorRequestsPage() {
                     </p>
                   )}
 
-                  {feedback && (
-                    <p className="mail-state" aria-live="polite">{feedback}</p>
+                  {feedback.message && (
+                    <p className={`mail-state mail-state-${feedback.type || 'info'}`} aria-live="polite">
+                      {feedback.message}
+                    </p>
                   )}
                 </>
               ) : (

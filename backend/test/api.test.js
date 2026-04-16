@@ -348,6 +348,7 @@ test('assigned advisor can approve a pending advisor request', async () => {
   assert.equal(result.response.status, 200);
   assert.equal(result.json.status, 'APPROVED');
   assert.equal(result.json.note, 'I can supervise this team.');
+  assert.equal(result.json.message, 'Advisor request approved successfully.');
 
   const updatedRequest = await AdvisorRequest.findByPk('advisor-request-1');
   const updatedGroup = await Group.findByPk(group.id);
@@ -384,6 +385,7 @@ test('advisor request cannot be decided twice', async () => {
 
   assert.equal(result.response.status, 400);
   assert.equal(result.json.code, 'REQUEST_ALREADY_RESOLVED');
+  assert.equal(result.json.message, 'Advisor request has already been decided.');
 });
 
 test('only the assigned advisor can decide an advisor request', async () => {
