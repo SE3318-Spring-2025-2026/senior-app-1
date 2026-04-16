@@ -15,6 +15,7 @@ const {
   LinkedGitHubAccount,
   OAuthState,
   Group,
+  AdvisorRequest,
   AuditLog,
   Notification,
 } = require('../models');
@@ -56,6 +57,7 @@ test.after(async () => {
 });
 
 test.beforeEach(async () => {
+  await AdvisorRequest.destroy({ where: {} });
   await Notification.destroy({ where: {} });
   await AuditLog.destroy({ where: {} });
   await Group.destroy({ where: {} });
@@ -296,6 +298,131 @@ test('advisor notifications endpoint returns only advisee requests for the authe
   assert.equal(result.json[0].requestId, 'req-1');
   assert.equal(result.json[0].groupName, 'Team Atlas');
   assert.equal(result.json[0].requestStatus, 'PENDING');
+});
+
+test('assigned advisor can approve a pending advisor request', async () => {
+  const professor = await User.create({
+    email: 'approve-advisor@example.edu',
+    fullName: 'Approve Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const leader = await User.create({
+    email: 'leader@example.edu',
+    fullName: 'Team Leader',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001235',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const group = await Group.create({
+    id: 'group-approve-1',
+    name: 'Team Atlas',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-1',
+    groupId: group.id,
+    advisorId: professor.id,
+    teamLeaderId: leader.id,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/advisor-requests/advisor-request-1/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      decision: 'APPROVE',
+      note: 'I can supervise this team.',
+    }),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.status, 'APPROVED');
+  assert.equal(result.json.note, 'I can supervise this team.');
+
+  const updatedRequest = await AdvisorRequest.findByPk('advisor-request-1');
+  const updatedGroup = await Group.findByPk(group.id);
+  assert.equal(updatedRequest.status, 'APPROVED');
+  assert.equal(updatedGroup.advisorId, String(professor.id));
+});
+
+test('advisor request cannot be decided twice', async () => {
+  const professor = await User.create({
+    email: 'resolved-advisor@example.edu',
+    fullName: 'Resolved Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-2',
+    groupId: 'group-resolved-1',
+    advisorId: professor.id,
+    status: 'APPROVED',
+  });
+
+  const result = await request('/api/v1/advisor-requests/advisor-request-2/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      decision: 'REJECT',
+    }),
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'REQUEST_ALREADY_RESOLVED');
+});
+
+test('only the assigned advisor can decide an advisor request', async () => {
+  const professor = await User.create({
+    email: 'owner-advisor@example.edu',
+    fullName: 'Owner Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherProfessor = await User.create({
+    email: 'other-owner-advisor@example.edu',
+    fullName: 'Other Owner Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-3',
+    groupId: 'group-owner-1',
+    advisorId: professor.id,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/advisor-requests/advisor-request-3/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(otherProfessor)),
+    },
+    body: JSON.stringify({
+      decision: 'APPROVE',
+    }),
+  });
+
+  assert.equal(result.response.status, 403);
+  assert.equal(result.json.code, 'FORBIDDEN');
 });
 
 test('advisor notifications endpoint rejects non-professor users', async () => {
