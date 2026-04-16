@@ -13,6 +13,7 @@ const OAuthState = require('./OAuthState');
 const LinkedGitHubAccount = require('./LinkedGitHubAccount');
 const Group = require('./Group');
 const AdvisorRequest = require('./AdvisorRequest');
+const GroupAdvisorAssignment = require('./GroupAdvisorAssignment');
 const Invitation = require('./Invitation');
 const AuditLog = require('./AuditLog');
 const Notification = require('./Notification');
@@ -24,6 +25,7 @@ module.exports = {
   OAuthState,
   LinkedGitHubAccount,
   Group,
+  GroupAdvisorAssignment,
   AdvisorRequest,
   Invitation,
   AuditLog,
