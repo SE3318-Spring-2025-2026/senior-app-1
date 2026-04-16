@@ -16,6 +16,7 @@ const {
   OAuthState,
   Group,
   AuditLog,
+  Notification,
 } = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
@@ -55,6 +56,7 @@ test.after(async () => {
 });
 
 test.beforeEach(async () => {
+  await Notification.destroy({ where: {} });
   await AuditLog.destroy({ where: {} });
   await Group.destroy({ where: {} });
   await LinkedGitHubAccount.destroy({ where: {} });
@@ -229,6 +231,89 @@ test('professor can log in with email and chosen password after setup', async ()
 
   assert.equal(invalidResult.response.status, 401);
   assert.equal(invalidResult.json.errorCode, 'INVALID_CREDENTIALS');
+});
+
+test('advisor notifications endpoint returns only advisee requests for the authenticated professor', async () => {
+  const professor = await User.create({
+    email: 'advisor@example.edu',
+    fullName: 'Advisor Inbox',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherProfessor = await User.create({
+    email: 'other-advisor@example.edu',
+    fullName: 'Other Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await Notification.create({
+    userId: professor.id,
+    type: 'ADVISEE_REQUEST',
+    payload: JSON.stringify({
+      requestId: 'req-1',
+      groupId: 'group-1',
+      groupName: 'Team Atlas',
+      requestStatus: 'PENDING',
+      message: 'Team Atlas requested you as advisor.',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: professor.id,
+    type: 'GROUP_INVITE',
+    payload: JSON.stringify({
+      groupId: 'group-ignore',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: otherProfessor.id,
+    type: 'ADVISEE_REQUEST',
+    payload: JSON.stringify({
+      requestId: 'req-2',
+      groupId: 'group-2',
+      groupName: 'Team Nova',
+      requestStatus: 'PENDING',
+      message: 'Team Nova requested you as advisor.',
+    }),
+    status: 'SENT',
+  });
+
+  const result = await request('/api/v1/advisors/notifications/advisee-requests', {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(Array.isArray(result.json), true);
+  assert.equal(result.json.length, 1);
+  assert.equal(result.json[0].type, 'ADVISEE_REQUEST');
+  assert.equal(result.json[0].requestId, 'req-1');
+  assert.equal(result.json[0].groupName, 'Team Atlas');
+  assert.equal(result.json[0].requestStatus, 'PENDING');
+});
+
+test('advisor notifications endpoint rejects non-professor users', async () => {
+  const student = await User.create({
+    email: 'student-not-allowed@example.edu',
+    fullName: 'Student Viewer',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001234',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/advisors/notifications/advisee-requests', {
+    headers: await authHeaderFor(student),
+  });
+
+  assert.equal(result.response.status, 403);
+  assert.equal(result.json.message, 'Forbidden');
 });
 
 test('admin can register professor and duplicate email returns 409', async () => {
