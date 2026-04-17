@@ -1,4 +1,5 @@
-const { Group, Professor, User } = require('../models');
+const sequelize = require('../db');
+const { Group, GroupAdvisorAssignment, Professor, User } = require('../models');
 
 function createServiceError(status, code, message) {
   const error = new Error(message);
@@ -68,7 +69,6 @@ async function ensureGroupHasValidCurrentAdvisor(group) {
 
   return currentAdvisorUserId;
 }
-
 function serializeAdvisorAssignment(group) {
   return {
     groupId: group.id,
@@ -93,10 +93,57 @@ async function transferAdvisorInGroupDatabase({ groupId, newAdvisorId }) {
   return serializeAdvisorAssignment(group);
 }
 
+async function syncAdvisorAssignmentsForGroup({ groupId, advisorId }) {
+  const group = await loadGroupForTransfer(groupId);
+  const advisorUserId = normalizeAdvisorUserId(advisorId);
+  await findActiveProfessorUser(advisorUserId);
+
+  const memberIds = Array.isArray(group.memberIds) ? group.memberIds.map((id) => String(id)) : [];
+  const userIds = [...new Set([String(group.leaderId || ''), ...memberIds].filter(Boolean))];
+
+  if (userIds.length === 0) {
+    throw createServiceError(400, 'GROUP_HAS_NO_MEMBERS', 'Group has no members to synchronize.');
+  }
+
+  const students = await User.findAll({
+    where: {
+      id: userIds.map((id) => Number(id)),
+      role: 'STUDENT',
+    },
+  });
+
+  if (students.length !== userIds.length) {
+    throw createServiceError(400, 'GROUP_MEMBER_RESOLUTION_FAILED', 'One or more group members could not be resolved.');
+  }
+
+  const rows = students.map((student) => ({
+    groupId: group.id,
+    studentUserId: student.id,
+    advisorUserId,
+  }));
+
+  await sequelize.transaction(async (transaction) => {
+    await GroupAdvisorAssignment.destroy({
+      where: { groupId: group.id },
+      transaction,
+    });
+
+    await GroupAdvisorAssignment.bulkCreate(rows, { transaction });
+  });
+
+  return {
+    groupId: group.id,
+    advisorId: String(advisorUserId),
+    updatedCount: rows.length,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 module.exports = {
   createServiceError,
   ensureGroupHasValidCurrentAdvisor,
   findActiveProfessorUser,
   serializeAdvisorAssignment,
+  syncAdvisorAssignmentsForGroup,
   transferAdvisorInGroupDatabase,
 };
