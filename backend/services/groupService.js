@@ -1,3 +1,113 @@
+    /**
+     * Advisor releases themselves from group
+     * Only assigned advisor can release
+     */
+    static async releaseAdvisor(groupId, user) {
+      const group = await Group.findByPk(groupId);
+      if (!group) {
+        const error = new Error('Group not found');
+        error.code = 'GROUP_NOT_FOUND';
+        throw error;
+      }
+      if (!group.advisorId) {
+        const error = new Error('No advisor assigned');
+        error.code = 'NO_ADVISOR_ASSIGNED';
+        throw error;
+      }
+      if (String(group.advisorId) !== String(user.id)) {
+        const error = new Error('Not assigned advisor');
+        error.code = 'NOT_ASSIGNED_ADVISOR';
+        throw error;
+      }
+      group.advisorId = null;
+      await group.save();
+      // Optionally log
+      if (AuditLog) {
+        await AuditLog.create({
+          entityType: 'GROUP',
+          entityId: group.id,
+          actorId: user.id,
+          action: 'ADVISOR_RELEASE',
+          metadata: JSON.stringify({ reason: 'Advisor self-release' }),
+        });
+      }
+      return { groupId: group.id };
+    }
+
+    /**
+     * Remove advisor assignment (admin/coordinator/system)
+     */
+    static async removeAdvisorAssignment(groupId, actor) {
+      const group = await Group.findByPk(groupId);
+      if (!group) {
+        const error = new Error('Group not found');
+        error.code = 'GROUP_NOT_FOUND';
+        throw error;
+      }
+      if (!group.advisorId) {
+        const error = new Error('No advisor assigned');
+        error.code = 'NO_ADVISOR_ASSIGNED';
+        throw error;
+      }
+      group.advisorId = null;
+      await group.save();
+      if (AuditLog) {
+        await AuditLog.create({
+          entityType: 'GROUP',
+          entityId: group.id,
+          actorId: actor?.id || null,
+          action: 'ADVISOR_ASSIGNMENT_REMOVED',
+          metadata: JSON.stringify({ reason: 'Assignment removed by admin/coordinator' }),
+        });
+      }
+      return { groupId: group.id };
+    }
+  /**
+   * Delete orphan group (no advisor assigned)
+   * Throws:
+   *   - GROUP_NOT_FOUND
+   *   - GROUP_HAS_ADVISOR
+   *   - DATA_INTEGRITY_ERROR
+   */
+  static async deleteOrphanGroup(groupId, actor) {
+    // Validate group existence
+    const group = await Group.findByPk(groupId);
+    if (!group) {
+      const error = new Error('Group not found');
+      error.code = 'GROUP_NOT_FOUND';
+      throw error;
+    }
+    // Advisor check
+    if (group.advisorId) {
+      const error = new Error('Group has an assigned advisor');
+      error.code = 'GROUP_HAS_ADVISOR';
+      throw error;
+    }
+
+    // Data integrity: check for related entities (students, projects, etc.)
+    // Example: Invitations (delete), TODO: Add more if needed
+    try {
+      await Invitation.destroy({ where: { groupId: group.id } });
+      // TODO: Add cascade deletes for other related tables if required
+      await group.destroy();
+      // Audit log (optional)
+      if (AuditLog) {
+        await AuditLog.create({
+          entityType: 'GROUP',
+          entityId: group.id,
+          actorId: actor?.id || null,
+          action: 'DELETE_ORPHAN_GROUP',
+          metadata: JSON.stringify({ reason: 'No advisor assigned' }),
+        });
+      }
+      return true;
+    } catch (err) {
+      const error = new Error('Data integrity error during group deletion');
+      error.code = 'DATA_INTEGRITY_ERROR';
+      error.message = err.message;
+      throw error;
+    }
+  }
 const Group = require('../models/Group');
 const { Invitation, AuditLog } = require('../models');
 const sequelize = require('../db');

@@ -1,3 +1,107 @@
+// Validation for advisor release (PATCH)
+exports.advisorReleaseValidation = [
+  param('groupId').isUUID().withMessage('Group ID must be a valid UUID'),
+];
+
+// Validation for advisor assignment removal (DELETE)
+exports.removeAdvisorAssignmentValidation = [
+  param('groupId').isUUID().withMessage('Group ID must be a valid UUID'),
+];
+
+/**
+ * Advisor releases themselves from group
+ * PATCH /api/v1/groups/:groupId/advisor-release
+ * Auth: Only assigned advisor
+ */
+exports.advisorRelease = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
+    }
+    const { groupId } = req.params;
+    const user = req.user;
+    const result = await GroupService.releaseAdvisor(groupId, user);
+    return res.status(200).json({ code: 'SUCCESS', message: 'Advisor released from group', data: result });
+  } catch (error) {
+    if (error.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    }
+    if (error.code === 'NOT_ASSIGNED_ADVISOR') {
+      return res.status(403).json({ code: 'NOT_ASSIGNED_ADVISOR', message: 'You are not the assigned advisor for this group' });
+    }
+    if (error.code === 'NO_ADVISOR_ASSIGNED') {
+      return res.status(400).json({ code: 'NO_ADVISOR_ASSIGNED', message: 'No advisor assigned to this group' });
+    }
+    console.error('Error in advisorRelease:', error);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+};
+
+/**
+ * Remove advisor assignment from group (admin/coordinator)
+ * DELETE /api/v1/group-database/groups/:groupId/advisor-assignment
+ */
+exports.removeAdvisorAssignment = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
+    }
+    const { groupId } = req.params;
+    const user = req.user;
+    const result = await GroupService.removeAdvisorAssignment(groupId, user);
+    return res.status(200).json({ code: 'SUCCESS', message: 'Advisor assignment removed', data: result });
+  } catch (error) {
+    if (error.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    }
+    if (error.code === 'NO_ADVISOR_ASSIGNED') {
+      return res.status(400).json({ code: 'NO_ADVISOR_ASSIGNED', message: 'No advisor assigned to this group' });
+    }
+    console.error('Error in removeAdvisorAssignment:', error);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+};
+// Validation for orphan group deletion (admin/coordinator only)
+exports.deleteOrphanGroupValidation = [
+  param('groupId')
+    .isUUID()
+    .withMessage('Group ID must be a valid UUID'),
+];
+
+/**
+ * Delete orphan group (no advisor assigned)
+ * DELETE /api/v1/group-database/groups/:groupId
+ * Auth: ADMIN or COORDINATOR
+ */
+exports.deleteOrphanGroup = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
+    }
+
+    const { groupId } = req.params;
+    // Delegate to service
+    const result = await GroupService.deleteOrphanGroup(groupId, req.user);
+
+    return res.status(200).json({ code: 'SUCCESS', message: 'Group deleted successfully', data: { groupId } });
+  } catch (error) {
+    if (error.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    }
+    if (error.code === 'GROUP_HAS_ADVISOR') {
+      return res.status(403).json({ code: 'GROUP_HAS_ADVISOR', message: 'Group has an assigned advisor and cannot be deleted' });
+    }
+    // Data integrity error
+    if (error.code === 'DATA_INTEGRITY_ERROR') {
+      return res.status(409).json({ code: 'DATA_INTEGRITY_ERROR', message: error.message });
+    }
+    console.error('Error in deleteOrphanGroup:', error);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+};
 const { body, param, validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const GroupService = require('../services/groupService');
