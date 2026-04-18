@@ -823,6 +823,91 @@ test('team leader advisor transfer notifications endpoint returns an empty list 
   assert.deepEqual(result.json, []);
 });
 
+test('team leader can view advisor decision notifications relevant only to the authenticated student', async () => {
+  const leader = await User.create({
+    email: 'team-leader-decision@example.edu',
+    fullName: 'Team Leader Decision',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001780',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherLeader = await User.create({
+    email: 'other-team-leader-decision@example.edu',
+    fullName: 'Other Team Leader Decision',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001781',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await Group.create({
+    id: 'team-leader-group-decision-1',
+    name: 'Team Hermes',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+  });
+
+  await Notification.create({
+    userId: leader.id,
+    type: 'ADVISOR_DECISION',
+    payload: JSON.stringify({
+      requestId: 'advisor-request-decision-1',
+      groupId: 'team-leader-group-decision-1',
+      groupName: 'Team Hermes',
+      advisorDecision: 'APPROVED',
+      advisorName: 'Decision Advisor',
+      message: 'Advisor request for Team Hermes was approved.',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: otherLeader.id,
+    type: 'ADVISOR_DECISION',
+    payload: JSON.stringify({
+      requestId: 'advisor-request-decision-2',
+      groupId: 'team-leader-group-decision-2',
+      groupName: 'Team Iris',
+      advisorDecision: 'REJECTED',
+      message: 'Advisor request for Team Iris was rejected.',
+    }),
+    status: 'SENT',
+  });
+
+  const result = await request('/api/v1/team-leader/notifications/advisor-decisions', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(Array.isArray(result.json), true);
+  assert.equal(result.json.length, 1);
+  assert.equal(result.json[0].type, 'ADVISOR_DECISION');
+  assert.equal(result.json[0].requestId, 'advisor-request-decision-1');
+  assert.equal(result.json[0].groupId, 'team-leader-group-decision-1');
+  assert.equal(result.json[0].groupName, 'Team Hermes');
+  assert.equal(result.json[0].advisorDecision, 'APPROVED');
+});
+
+test('team leader advisor decision notifications endpoint returns an empty list when there are no relevant notifications', async () => {
+  const leader = await User.create({
+    email: 'empty-team-leader-decision@example.edu',
+    fullName: 'Empty Team Leader Decision',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001782',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/team-leader/notifications/advisor-decisions', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(result.json, []);
+});
+
 test('coordinator advisor transfer persists notifications for both advisor and team leader', async () => {
   const coordinator = await User.create({
     email: 'coordinator-transfer-notify@example.edu',
@@ -978,8 +1063,26 @@ test('assigned advisor can approve a pending advisor request', async () => {
 
   const updatedRequest = await AdvisorRequest.findByPk('advisor-request-1');
   const updatedGroup = await Group.findByPk(group.id);
+  const leaderNotification = await Notification.findOne({
+    where: {
+      userId: leader.id,
+      type: 'ADVISOR_DECISION',
+    },
+    order: [['createdAt', 'DESC']],
+  });
+
   assert.equal(updatedRequest.status, 'APPROVED');
   assert.equal(updatedGroup.advisorId, String(professor.id));
+  assert.equal(Boolean(leaderNotification), true);
+
+  const leaderPayload = JSON.parse(leaderNotification.payload);
+  assert.equal(leaderPayload.requestId, 'advisor-request-1');
+  assert.equal(leaderPayload.groupId, group.id);
+  assert.equal(leaderPayload.groupName, 'Team Atlas');
+  assert.equal(leaderPayload.advisorDecision, 'APPROVED');
+  assert.equal(leaderPayload.advisorId, professor.id);
+  assert.equal(leaderPayload.advisorName, 'Approve Advisor');
+  assert.equal(leaderPayload.advisorEmail, 'approve-advisor@example.edu');
 });
 
 test('advisor request cannot be decided twice', async () => {

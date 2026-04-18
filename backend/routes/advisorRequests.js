@@ -1,11 +1,12 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { authenticate, authorize } = require('../middleware/auth');
+const NotificationService = require('../services/notificationService');
 const {
   getPendingAdvisorRequest,
   updatePendingAdvisorRequestStatus,
 } = require('../controllers/advisorRequestController');
-const { AdvisorRequest, AuditLog, Group } = require('../models');
+const { AdvisorRequest, AuditLog, Group, User } = require('../models');
 
 const router = express.Router();
 
@@ -75,9 +76,9 @@ router.patch(
       const normalizedDecision = String(req.body.decision).toUpperCase();
       const nextStatus = normalizedDecision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
       const note = typeof req.body.note === 'string' ? req.body.note.trim() : null;
+      const group = await Group.findByPk(request.groupId);
 
       if (normalizedDecision === 'APPROVE') {
-        const group = await Group.findByPk(request.groupId);
         if (!group) {
           return res.status(404).json(
             buildErrorResponse('Group not found for this advisor request.', 'GROUP_NOT_FOUND'),
@@ -94,6 +95,26 @@ router.patch(
         note: note || null,
         decidedAt: new Date(),
       });
+
+      const advisorUser = await User.findByPk(req.user.id, {
+        attributes: ['id', 'fullName', 'email'],
+      });
+
+      if (request.teamLeaderId) {
+        await NotificationService.notifyTeamLeaderAdvisorDecision({
+          leaderId: request.teamLeaderId,
+          requestId: request.id,
+          groupId: request.groupId,
+          groupName: group?.name || null,
+          advisorDecision: nextStatus,
+          advisorId: advisorUser?.id ?? req.user.id,
+          advisorName: advisorUser?.fullName ?? null,
+          advisorEmail: advisorUser?.email ?? null,
+          message: group?.name
+            ? `Advisor request for ${group.name} was ${nextStatus.toLowerCase()}.`
+            : `Your advisor request was ${nextStatus.toLowerCase()}.`,
+        });
+      }
 
       await AuditLog.create({
         action: nextStatus === 'APPROVED' ? 'ADVISOR_REQUEST_APPROVED' : 'ADVISOR_REQUEST_REJECTED',

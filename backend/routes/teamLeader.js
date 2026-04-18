@@ -109,4 +109,70 @@ router.get(
   },
 );
 
+router.get(
+  '/notifications/advisor-decisions',
+  authenticate,
+  authorize(['STUDENT']),
+  async (req, res) => {
+    try {
+      const rows = await Notification.findAll({
+        where: {
+          userId: req.user.id,
+          type: 'ADVISOR_DECISION',
+        },
+        order: [['createdAt', 'DESC']],
+        limit: 50,
+      });
+
+      const groupIds = rows
+        .map((row) => parsePayload(row.payload).groupId)
+        .filter(Boolean);
+
+      const groups = groupIds.length > 0
+        ? await Group.findAll({
+          where: {
+            id: {
+              [Op.in]: groupIds,
+            },
+          },
+        })
+        : [];
+
+      const groupMap = new Map(groups.map((group) => [String(group.id), group]));
+
+      const notifications = rows.map((row) => {
+        const payload = parsePayload(row.payload);
+        const group = payload.groupId ? groupMap.get(String(payload.groupId)) : null;
+        const advisorDecision = String(payload.advisorDecision || '').toUpperCase();
+
+        return {
+          id: row.id,
+          type: 'ADVISOR_DECISION',
+          recipientId: req.user.id,
+          requestId: payload.requestId ?? null,
+          groupId: payload.groupId ?? null,
+          groupName: payload.groupName ?? group?.name ?? null,
+          advisorDecision: advisorDecision || null,
+          message: payload.message
+            || (advisorDecision === 'APPROVED'
+              ? 'Your advisor request has been approved.'
+              : 'Your advisor request has been rejected.'),
+          createdAt: row.createdAt,
+          status: row.status,
+          advisor: {
+            id: payload.advisorId ?? null,
+            fullName: payload.advisorName ?? null,
+            email: payload.advisorEmail ?? null,
+          },
+        };
+      });
+
+      return res.status(200).json(notifications);
+    } catch (error) {
+      console.error('Error in team-leader/notifications/advisor-decisions:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
+
 module.exports = router;

@@ -57,6 +57,12 @@ function formatPreview(entry) {
       ? `${groupLabel} is now assigned to ${advisorName}${advisorEmail ? ` (${advisorEmail})` : ''}.`
       : `Your group is now assigned to ${advisorName}${advisorEmail ? ` (${advisorEmail})` : ''}.`;
   }
+  if (entry.type === 'ADVISOR_DECISION') {
+    const decision = String(entry.advisorDecision || entry.payload?.advisorDecision || '').toUpperCase();
+    return groupLabel
+      ? `Advisor request for ${groupLabel} was ${decision === 'APPROVED' ? 'approved' : 'rejected'}.`
+      : `Your advisor request was ${decision === 'APPROVED' ? 'approved' : 'rejected'}.`;
+  }
   return 'Notification received from local mailbox.';
 }
 
@@ -72,6 +78,21 @@ function formatAdvisorTransferPreview(entry) {
   return groupLabel
     ? `${groupLabel} has been transferred to ${advisorName}${advisorEmail ? ` (${advisorEmail})` : ''}.`
     : `Your group has been transferred to ${advisorName}${advisorEmail ? ` (${advisorEmail})` : ''}.`;
+}
+
+function formatAdvisorDecisionSubject(entry) {
+  const groupLabel = getGroupLabel(entry);
+  const decision = String(entry.advisorDecision || entry.payload?.advisorDecision || '').toUpperCase();
+  const decisionLabel = decision === 'APPROVED' ? 'Approved' : 'Rejected';
+  return groupLabel ? `${decisionLabel}: ${groupLabel}` : `Advisor request ${decisionLabel.toLowerCase()}`;
+}
+
+function formatAdvisorDecisionPreview(entry) {
+  const groupLabel = getGroupLabel(entry);
+  const decision = String(entry.advisorDecision || entry.payload?.advisorDecision || '').toUpperCase();
+  return groupLabel
+    ? `${groupLabel} advisor request was ${decision === 'APPROVED' ? 'approved' : 'rejected'}.`
+    : `Your advisor request was ${decision === 'APPROVED' ? 'approved' : 'rejected'}.`;
 }
 
 function formatDate(value) {
@@ -102,9 +123,12 @@ export default function StudentInvitationsPage() {
 
   const [mailbox, setMailbox] = useState([]);
   const [advisorTransfers, setAdvisorTransfers] = useState([]);
+  const [advisorDecisions, setAdvisorDecisions] = useState([]);
   const [selectedMailId, setSelectedMailId] = useState(null);
   const [loadingTransfers, setLoadingTransfers] = useState(true);
   const [transferLoadError, setTransferLoadError] = useState('');
+  const [loadingDecisions, setLoadingDecisions] = useState(true);
+  const [decisionLoadError, setDecisionLoadError] = useState('');
 
   useEffect(() => {
     fetchInvitations();
@@ -182,6 +206,57 @@ export default function StudentInvitationsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    let timeoutId;
+    const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
+
+    async function loadAdvisorDecisions() {
+      try {
+        const response = await fetch('/api/v1/team-leader/notifications/advisor-decisions', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const payload = await response.json().catch(() => []);
+        if (!active) {
+          return;
+        }
+
+        if (!response.ok) {
+          setDecisionLoadError('Advisor decision notifications could not be loaded.');
+          setAdvisorDecisions([]);
+        } else {
+          const rows = Array.isArray(payload) ? payload : payload.notifications || [];
+          setAdvisorDecisions(rows);
+          setDecisionLoadError('');
+        }
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        setDecisionLoadError('Advisor decision notifications could not be loaded.');
+        setAdvisorDecisions([]);
+      } finally {
+        if (!active) {
+          return;
+        }
+
+        setLoadingDecisions(false);
+        timeoutId = window.setTimeout(loadAdvisorDecisions, 15000);
+      }
+    }
+
+    loadAdvisorDecisions();
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
+
   async function handleRespond(invitationId, response) {
     const invitation = invitations.find((inv) => inv.id === invitationId);
 
@@ -231,6 +306,37 @@ export default function StudentInvitationsPage() {
 
   return (
     <main className="page page-mailbox">
+      <section className="panel">
+        <div className="mail-sidebar-header">
+          <p className="mailbox-title">Advisor Decision Notifications</p>
+          <p className="mailbox-count">{advisorDecisions.length} notifications</p>
+        </div>
+
+        {loadingDecisions && (
+          <p className="mail-state" aria-live="polite">Loading advisor decision notifications...</p>
+        )}
+
+        {!loadingDecisions && decisionLoadError && (
+          <p className="mail-state" aria-live="polite">{decisionLoadError}</p>
+        )}
+
+        {!loadingDecisions && !decisionLoadError && advisorDecisions.length === 0 && (
+          <p className="mail-state" aria-live="polite">No advisor decision notifications yet.</p>
+        )}
+
+        {!loadingDecisions && !decisionLoadError && advisorDecisions.length > 0 && (
+          <section className="mail-nav" aria-label="Advisor decision notification list">
+            {advisorDecisions.map((entry) => (
+              <article key={entry.id} className="mail-nav-item">
+                <span className="mail-nav-time">{formatDate(entry.createdAt)}</span>
+                <span className="mail-nav-subject">{formatAdvisorDecisionSubject(entry)}</span>
+                <span className="mail-nav-preview">{formatAdvisorDecisionPreview(entry)}</span>
+              </article>
+            ))}
+          </section>
+        )}
+      </section>
+
       <section className="panel">
         <div className="mail-sidebar-header">
           <p className="mailbox-title">Advisor Transfer Notifications</p>
