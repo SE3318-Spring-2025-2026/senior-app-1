@@ -17,6 +17,7 @@ const roleMenuSections = {
       title: 'Workspace',
       items: [
         { to: '/home', label: 'Professor Home', icon: 'HM' },
+        { to: '/professors/notifications', label: 'Advisor Requests', icon: 'AR' },
       ],
     },
   ],
@@ -32,6 +33,7 @@ const roleMenuSections = {
       items: [
         { to: '/coordinator/student-id-registry/import', label: 'Student ID Import', icon: 'OP' },
         { to: '/coordinator/groups/manage', label: 'Group Membership Edit', icon: 'GM' },
+        { to: '/coordinator/groups/transfer', label: 'Advisor Transfer', icon: 'AT' },
       ],
     },
   ],
@@ -177,14 +179,24 @@ export default function AppShell() {
                       )}
 
                       {authenticatedUser.role === 'Professor' && (
-                        <Link
-                          to="/professors/password-setup"
-                          role="menuitem"
-                          className="app-profile-option"
-                          onClick={() => setOpenProfile(false)}
-                        >
-                          Password Setup
-                        </Link>
+                        <>
+                          <Link
+                            to="/professors/notifications"
+                            role="menuitem"
+                            className="app-profile-option"
+                            onClick={() => setOpenProfile(false)}
+                          >
+                            Advisor Requests
+                          </Link>
+                          <Link
+                            to="/professors/password-setup"
+                            role="menuitem"
+                            className="app-profile-option"
+                            onClick={() => setOpenProfile(false)}
+                          >
+                            Password Setup
+                          </Link>
+                        </>
                       )}
 
                       <button type="button" className="app-profile-option app-login-signout" onClick={handleSignOut}>

@@ -1493,6 +1493,18 @@ button:disabled {
   color: var(--muted);
 }
 
+.mail-state-success {
+  background: var(--success-bg);
+  border-color: rgba(22, 101, 52, 0.18);
+  color: #14532d;
+}
+
+.mail-state-error {
+  background: var(--error-bg);
+  border-color: rgba(180, 35, 24, 0.18);
+  color: #7f1d1d;
+}
+
 .page-mailbox {
   width: calc(100% - 32px);
   max-width: 1200px;
