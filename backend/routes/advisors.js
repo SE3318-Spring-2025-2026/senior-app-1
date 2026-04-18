@@ -1,7 +1,7 @@
 const express = require('express');
 const { Op } = require('sequelize');
 const { authenticate, authorize } = require('../middleware/auth');
-const { AdvisorRequest, Notification } = require('../models');
+const { AdvisorRequest, Group, Notification } = require('../models');
 
 const router = express.Router();
 
@@ -72,6 +72,62 @@ router.get(
       return res.status(200).json(notifications);
     } catch (error) {
       console.error('Error in advisors/notifications/advisee-requests:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
+
+router.get(
+  '/notifications/group-transfers',
+  authenticate,
+  authorize(['PROFESSOR']),
+  async (req, res) => {
+    try {
+      const rows = await Notification.findAll({
+        where: {
+          userId: req.user.id,
+          type: 'GROUP_TRANSFER',
+        },
+        order: [['createdAt', 'DESC']],
+        limit: 50,
+      });
+
+      const groupIds = rows
+        .map((row) => parsePayload(row.payload).groupId)
+        .filter(Boolean);
+
+      const groups = groupIds.length > 0
+        ? await Group.findAll({
+          where: {
+            id: {
+              [Op.in]: groupIds,
+            },
+          },
+        })
+        : [];
+
+      const groupMap = new Map(groups.map((group) => [String(group.id), group]));
+
+      const notifications = rows.map((row) => {
+        const payload = parsePayload(row.payload);
+        const group = payload.groupId ? groupMap.get(String(payload.groupId)) : null;
+
+        return {
+          id: row.id,
+          type: 'GROUP_TRANSFER',
+          recipientId: req.user.id,
+          groupId: payload.groupId ?? null,
+          groupName: payload.groupName ?? group?.name ?? null,
+          message: payload.message || 'A new group has been assigned to you through transfer.',
+          read: false,
+          createdAt: row.createdAt,
+          status: row.status,
+        };
+      });
+
+      return res.status(200).json(notifications);
+    } catch (error) {
+      console.error('Error in advisors/notifications/group-transfers:', error);
       return res.status(500).json({ message: 'Internal server error' });
     }
   },

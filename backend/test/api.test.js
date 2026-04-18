@@ -640,6 +640,91 @@ test('advisor notifications endpoint returns only advisee requests for the authe
   assert.equal(result.json[0].requestStatus, 'PENDING');
 });
 
+test('advisor can view group transfer notifications relevant only to the authenticated advisor', async () => {
+  const professor = await User.create({
+    email: 'transfer-advisor@example.edu',
+    fullName: 'Transfer Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherProfessor = await User.create({
+    email: 'other-transfer-advisor@example.edu',
+    fullName: 'Other Transfer Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await Group.create({
+    id: 'group-transfer-1',
+    name: 'Team Orion',
+    memberIds: [],
+    advisorId: String(professor.id),
+  });
+
+  await Notification.create({
+    userId: professor.id,
+    type: 'GROUP_TRANSFER',
+    payload: JSON.stringify({
+      groupId: 'group-transfer-1',
+      groupName: 'Team Orion',
+      message: 'Team Orion has been assigned to you through transfer.',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: professor.id,
+    type: 'ADVISEE_REQUEST',
+    payload: JSON.stringify({
+      requestId: 'ignore-me',
+      groupId: 'group-ignore',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: otherProfessor.id,
+    type: 'GROUP_TRANSFER',
+    payload: JSON.stringify({
+      groupId: 'group-transfer-2',
+      groupName: 'Team Nova',
+      message: 'Team Nova has been assigned to you through transfer.',
+    }),
+    status: 'SENT',
+  });
+
+  const result = await request('/api/v1/advisors/notifications/group-transfers', {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(Array.isArray(result.json), true);
+  assert.equal(result.json.length, 1);
+  assert.equal(result.json[0].type, 'GROUP_TRANSFER');
+  assert.equal(result.json[0].groupId, 'group-transfer-1');
+  assert.equal(result.json[0].groupName, 'Team Orion');
+});
+
+test('group transfer notifications endpoint returns an empty list when there are no relevant notifications', async () => {
+  const professor = await User.create({
+    email: 'empty-transfer-advisor@example.edu',
+    fullName: 'Empty Transfer Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/advisors/notifications/group-transfers', {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(result.json, []);
+});
+
 test('assigned advisor can approve a pending advisor request', async () => {
   const professor = await User.create({
     email: 'approve-advisor@example.edu',
