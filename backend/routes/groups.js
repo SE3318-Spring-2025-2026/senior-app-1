@@ -17,6 +17,10 @@ router.get('/joined', authenticate, groupController.listJoinedGroups);
 
 router.get('/mine', authenticate, groupController.getMyGroup);
 
+
+// PATCH /api/v1/groups/:groupId/advisor-release
+router.patch('/:groupId/advisor-release', authenticate, groupController.releaseAdvisorFromGroup);
+
 router.patch('/:groupId', authenticate, groupController.renameGroupValidation, groupController.renameGroup);
 
 router.delete('/:groupId', authenticate, groupController.deleteGroupValidation, groupController.deleteGroup);

@@ -4,6 +4,56 @@ const sequelize = require('../db');
 const NotificationService = require('./notificationService');
 
 class GroupService {
+
+  /**
+   * Release advisor from group
+   */
+  static async releaseAdvisor(groupId, advisorId) {
+    return await sequelize.transaction(async (t) => {
+      const group = await Group.findByPk(groupId, { transaction: t, lock: t.LOCK.UPDATE });
+      if (!group) throw new Error('Group not found');
+      if (!group.advisorId) throw new Error('No advisor assigned to this group');
+      if (group.advisorId !== advisorId) throw new Error('Only the assigned advisor can release this group');
+
+      // Update advisorId and status
+      group.advisorId = null;
+      group.status = 'LOOKING_FOR_ADVISOR';
+      await group.save({ transaction: t });
+
+      // Audit log
+      await AuditLog.create({
+        action: 'ADVISOR_RELEASE',
+        actorId: advisorId,
+        targetType: 'GROUP',
+        targetId: groupId,
+        metadata: {
+          groupId,
+          groupName: group.name,
+        },
+      }, { transaction: t });
+
+      // Notify group leader and members
+      const memberIds = Array.isArray(group.memberIds) ? group.memberIds : [];
+      if (group.leaderId) {
+        await NotificationService.notifyAdvisorReleased({
+          userId: group.leaderId,
+          groupId: group.id,
+          groupName: group.name,
+        });
+      }
+      for (const memberId of memberIds) {
+        if (memberId && memberId !== group.leaderId) {
+          await NotificationService.notifyAdvisorReleased({
+            userId: memberId,
+            groupId: group.id,
+            groupName: group.name,
+          });
+        }
+      }
+
+      return group;
+    });
+  }
   static async findAnyGroupForUser(userId, options = {}) {
     const normalizedUserId = String(userId);
     const excludedGroupId = options.excludeGroupId ? String(options.excludeGroupId) : null;
