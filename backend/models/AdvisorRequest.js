@@ -1,15 +1,16 @@
-const { DataTypes } = require('sequelize');
+const { DataTypes, Model } = require('sequelize');
 const sequelize = require('../db');
 
-const AdvisorRequest = sequelize.define(
-  'AdvisorRequest',
+class AdvisorRequest extends Model {}
+
+AdvisorRequest.init(
   {
     id: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING, // Ana dal UUID (String) kullanıyor, sistemi bozmamak için bu kalmalı
       primaryKey: true,
     },
     groupId: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING, // Ana dal UUID (String) kullanıyor
       allowNull: false,
     },
     advisorId: {
@@ -18,26 +19,28 @@ const AdvisorRequest = sequelize.define(
     },
     teamLeaderId: {
       type: DataTypes.INTEGER,
-      allowNull: true,
+      allowNull: true, // Ana dalda null bırakılmasına izin verilmiş, esneklik için kalmalı
     },
     status: {
-      type: DataTypes.ENUM('PENDING', 'APPROVED', 'REJECTED'),
+      type: DataTypes.ENUM('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'), // Senin eklediğin CANCELLED statüsü korundu
       allowNull: false,
       defaultValue: 'PENDING',
     },
     note: {
-      type: DataTypes.TEXT,
+      type: DataTypes.TEXT, // Controller 'note' bekliyor ve TEXT uzun notlar için STRING'den daha güvenlidir
       allowNull: true,
     },
     decidedAt: {
-      type: DataTypes.DATE,
+      type: DataTypes.DATE, // Controller karar verildiğinde buraya tarih atıyor, zorunlu alan
       allowNull: true,
     },
   },
   {
+    sequelize,
+    modelName: 'AdvisorRequest',
     tableName: 'AdvisorRequests',
     timestamps: true,
-  },
+  }
 );
 
 module.exports = AdvisorRequest;

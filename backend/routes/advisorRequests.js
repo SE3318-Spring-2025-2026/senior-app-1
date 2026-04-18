@@ -5,6 +5,7 @@ const NotificationService = require('../services/notificationService');
 const {
   getPendingAdvisorRequest,
   updatePendingAdvisorRequestStatus,
+  listAdvisorRequests, // Senin yazdığın controller metodu eklendi
 } = require('../controllers/advisorRequestController');
 const { AdvisorRequest, AuditLog, Group, User } = require('../models');
 
@@ -12,6 +13,15 @@ const router = express.Router();
 
 const buildErrorResponse = (message, code) => ({ message, code });
 
+// 1. Senin Dalından Gelen: Çoğul İstekleri Listeleme (Ekibin güvenlik katmanlarıyla güçlendirildi)
+router.get(
+  '/advisor-requests',
+  authenticate,
+  authorize(['PROFESSOR']),
+  listAdvisorRequests
+);
+
+// 2. Ana Daldan Gelen: Tekil İstek Getirme
 router.get(
   '/pending-advisor-requests/:requestId',
   authenticate,
@@ -19,6 +29,7 @@ router.get(
   getPendingAdvisorRequest,
 );
 
+// 3. Ana Daldan Gelen: Durum Güncelleme (Controller'a yönlendirilen versiyon)
 router.patch(
   '/pending-advisor-requests/:requestId/status',
   authenticate,
@@ -36,6 +47,8 @@ router.patch(
   },
 );
 
+// 4. Ana Daldan Gelen: Karar Verme 
+// (Not: Bu kadar iş mantığının route içinde olması hatalıdır, takımın yazdığı loglama/bildirimleri bozmamak için şimdilik tutuluyor)
 router.patch(
   '/advisor-requests/:requestId/decision',
   authenticate,

@@ -23,6 +23,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import './styles.css';
 
+import AdvisorRequestsPage from './AdvisorRequestsPage';
+
 export default function App() {
   return (
     <AuthProvider>
@@ -50,6 +52,7 @@ export default function App() {
               <Route path="/coordinator/groups/manage" element={<CoordinatorGroupMembershipPage />} />
               <Route path="/coordinator/groups/transfer" element={<CoordinatorAdvisorTransferPage />} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
+              <Route path="/advisor/requests" element={<AdvisorRequestsPage />} />
               <Route path="*" element={<HomePage />} />
             </Route>
           </Routes>
