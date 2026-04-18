@@ -33,6 +33,7 @@ const roleMenuSections = {
       items: [
         { to: '/coordinator/student-id-registry/import', label: 'Student ID Import', icon: 'OP' },
         { to: '/coordinator/groups/manage', label: 'Group Membership Edit', icon: 'GM' },
+        { to: '/coordinator/groups/transfer', label: 'Advisor Transfer', icon: 'AT' },
       ],
     },
   ],

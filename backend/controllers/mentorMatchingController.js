@@ -71,7 +71,57 @@ const syncUserDatabaseAssignment = [
   },
 ];
 
+const transferByCoordinator = [
+  param('groupId').isString().trim().notEmpty(),
+  body('newAdvisorId').isInt({ min: 1 }).toInt(),
+  body('reason').optional().isString().trim(),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        code: 'INVALID_COORDINATOR_TRANSFER_INPUT',
+        message: 'groupId and newAdvisorId are required.',
+      });
+    }
+
+    try {
+      const assignment = await mentorMatchingService.transferAdvisorByCoordinator({
+        groupId: req.params.groupId,
+        newAdvisorId: req.body.newAdvisorId,
+      });
+
+      return res.status(200).json(assignment);
+    } catch (error) {
+      if (error.status && error.code) {
+        return res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
+      return res.status(500).json({
+        code: 'COORDINATOR_TRANSFER_FAILED',
+        message: 'Advisor transfer could not be completed.',
+      });
+    }
+  },
+];
+
+const listCoordinatorAdvisors = async (_req, res) => {
+  try {
+    const advisors = await mentorMatchingService.listActiveAdvisors();
+    return res.status(200).json({ data: advisors });
+  } catch (_error) {
+    return res.status(500).json({
+      code: 'ADVISOR_LIST_FAILED',
+      message: 'Advisor list could not be loaded.',
+    });
+  }
+};
+
 module.exports = {
+  listCoordinatorAdvisors,
   syncUserDatabaseAssignment,
+  transferByCoordinator,
   transferInGroupDatabase,
 };

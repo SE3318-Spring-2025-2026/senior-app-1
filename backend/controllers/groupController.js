@@ -1,7 +1,7 @@
 const { body, param, validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const GroupService = require('../services/groupService');
-const { Group, User, Invitation } = require('../models');
+const { Group, User, Invitation, Professor } = require('../models');
 
 /**
  * Validation middleware for creating a group
@@ -262,6 +262,10 @@ exports.listGroups = async (req, res) => {
         userIds.add(Number(group.leaderId));
       }
 
+      if (group.advisorId) {
+        userIds.add(Number(group.advisorId));
+      }
+
       if (Array.isArray(group.memberIds)) {
         group.memberIds.forEach((id) => userIds.add(Number(id)));
       }
@@ -277,9 +281,20 @@ exports.listGroups = async (req, res) => {
       : [];
 
     const usersById = new Map(users.map((user) => [String(user.id), user]));
+    const professorRows = userIds.size > 0
+      ? await Professor.findAll({
+        where: {
+          userId: { [Op.in]: [...userIds] },
+        },
+        attributes: ['userId', 'department', 'fullName'],
+      })
+      : [];
+    const professorsByUserId = new Map(professorRows.map((professor) => [String(professor.userId), professor]));
 
     const data = visibleGroups.map((group) => {
       const leader = usersById.get(String(group.leaderId || ''));
+      const advisorUser = usersById.get(String(group.advisorId || ''));
+      const advisorProfessor = professorsByUserId.get(String(group.advisorId || ''));
       const memberIds = Array.isArray(group.memberIds) ? group.memberIds : [];
       const currentUserId = String(req.user?.id || '');
       const isLeader = String(group.leaderId || '') === currentUserId;
@@ -296,6 +311,14 @@ exports.listGroups = async (req, res) => {
             fullName: leader.fullName,
             studentId: leader.studentId,
             email: leader.email,
+          }
+          : null,
+        advisor: advisorUser
+          ? {
+            id: advisorUser.id,
+            fullName: advisorProfessor?.fullName || advisorUser.fullName,
+            email: advisorUser.email,
+            department: advisorProfessor?.department || null,
           }
           : null,
         members: memberIds.map((id) => {
