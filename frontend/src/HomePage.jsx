@@ -121,7 +121,26 @@ export default function HomePage() {
             </div>
           </section>
         ) : (
-          <div className="main-empty-canvas" />
+          <>
+            {role === 'PROFESSOR' ? (
+              <section className="student-home-panel">
+                <p><strong>Inbox:</strong> Advisor request notifications</p>
+                <p className="student-home-note">
+                  Review incoming advisor requests from team leaders without leaving the workspace.
+                </p>
+                <div className="workspace-actions">
+                  <Link className="workspace-button workspace-button-primary" to="/professors/notifications">
+                    Advisor Requests
+                  </Link>
+                  <Link className="workspace-button workspace-button-secondary" to="/professors/password-setup">
+                    Password Setup
+                  </Link>
+                </div>
+              </section>
+            ) : (
+              <div className="main-empty-canvas" />
+            )}
+          </>
         )}
       </section>
     </main>
