@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 const { getAdvisorRequestDetails } = require('../controllers/advisorController');
 
 // GET /api/v1/advisor-requests/:requestId
@@ -9,6 +9,7 @@ const { getAdvisorRequestDetails } = require('../controllers/advisorController')
 router.get(
   '/advisor-requests/:requestId',
   authenticate,
+  authorize(['STUDENT']),
   getAdvisorRequestDetails
 );
 

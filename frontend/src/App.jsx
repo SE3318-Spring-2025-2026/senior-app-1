@@ -18,6 +18,7 @@ import Register from './Register';
 import StudentLoginPage from './StudentLoginPage';
 import StudentGroupShellPage from './StudentGroupShellPage';
 import StudentInvitationsPage from './StudentInvitationsPage';
+import TeamLeaderAdvisorRequestDetailsPage from './TeamLeaderAdvisorRequestDetailsPage';
 import AppShell from './components/AppShell';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -39,6 +40,7 @@ export default function App() {
               <Route path="/students/login" element={<AuthPage />} />
               <Route path="/students/groups/new" element={<StudentGroupShellPage />} />
               <Route path="/students/notifications" element={<StudentInvitationsPage />} />
+              <Route path="/team-leader/advisor-requests/:requestId" element={<TeamLeaderAdvisorRequestDetailsPage />} />
               <Route path="/professors/login" element={<AuthPage />} />
               <Route path="/professors/notifications" element={<ProfessorAdvisorRequestsPage />} />
               <Route path="/professors/password-setup" element={<ProfessorPasswordSetupPage />} />

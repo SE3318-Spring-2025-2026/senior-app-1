@@ -8,25 +8,7 @@ const { AdvisorRequest, Group, User } = require('../models');
  * @throws {Error} If request not found or user unauthorized
  */
 async function getAdvisorRequestDetails(requestId, userId) {
-  // Fetch the request with related data
-  const request = await AdvisorRequest.findByPk(requestId, {
-    include: [
-      {
-        model: Group,
-        attributes: ['id', 'name', 'teamLeaderId'],
-      },
-      {
-        model: User,
-        as: 'advisor',
-        attributes: ['id', 'email', 'fullName'],
-      },
-      {
-        model: User,
-        as: 'teamLeader',
-        attributes: ['id', 'email', 'fullName'],
-      },
-    ],
-  });
+  const request = await AdvisorRequest.findByPk(requestId);
 
   if (!request) {
     const error = new Error('Advisor request not found');
@@ -35,8 +17,23 @@ async function getAdvisorRequestDetails(requestId, userId) {
     throw error;
   }
 
+  const group = await Group.findByPk(request.groupId, {
+    attributes: ['id', 'name', 'leaderId'],
+  });
+
+  const advisor = await User.findByPk(request.advisorId, {
+    attributes: ['id', 'email', 'fullName'],
+  });
+
+  const teamLeader = request.teamLeaderId
+    ? await User.findByPk(request.teamLeaderId, {
+      attributes: ['id', 'email', 'fullName'],
+    })
+    : null;
+
   // Authorization check: Only the team leader can view the request
-  if (request.teamLeaderId !== userId) {
+  const ownerId = request.teamLeaderId ?? group?.leaderId;
+  if (!ownerId || String(ownerId) !== String(userId)) {
     const error = new Error('You do not have permission to access this request');
     error.code = 'FORBIDDEN';
     error.statusCode = 403;
@@ -50,13 +47,13 @@ async function getAdvisorRequestDetails(requestId, userId) {
     professorId: request.advisorId,
     teamLeaderId: request.teamLeaderId,
     status: request.status,
-    decisionNote: request.decisionNote,
+    decisionNote: request.note,
     createdAt: request.createdAt,
     updatedAt: request.updatedAt,
     // Optional: Include related data if needed
-    group: request.Group,
-    advisor: request.advisor,
-    teamLeader: request.teamLeader,
+    group,
+    advisor,
+    teamLeader,
   };
 }
 

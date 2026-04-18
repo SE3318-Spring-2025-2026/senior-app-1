@@ -11,7 +11,7 @@ const buildErrorResponse = (message, code) => ({
  * Retrieve advisor request details
  */
 const getAdvisorRequestDetails = [
-  param('requestId').isInt().toInt(),
+  param('requestId').isString().trim().notEmpty(),
 
   async (req, res) => {
     const errors = validationResult(req);
