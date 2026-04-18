@@ -56,7 +56,6 @@ async function request(method, path, body) {
   };
 }
 
-
 const apiClient = {
   get(path) {
     return request('GET', path);
@@ -66,6 +65,9 @@ const apiClient = {
   },
   patch(path, body) {
     return request('PATCH', path, body);
+  },
+  delete(path) {
+    return request('DELETE', path);
   },
 };
 
