@@ -10,6 +10,7 @@ const {
   storeLinkedGitHubAccount,
   updateStudentGitHubLink,
 } = require('../controllers/studentController');
+const { Group } = require('../models');
 
 const router = express.Router();
 
@@ -21,5 +22,31 @@ router.patch('/user-database/students/:studentId/github-link', updateStudentGitH
 router.get('/students/me/github/link', authenticate, startGitHubLink);
 router.get('/auth/github/callback', handleGitHubCallback);
 router.post('/linked-github-account-store/links', storeLinkedGitHubAccount);
+
+/**
+ * GET /api/v1/groups/my-groups
+ * Get groups where the authenticated user is the team leader
+ */
+router.get('/groups/my-groups', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const groups = await Group.findAll({
+      where: {
+        leaderId: userId,
+      },
+      attributes: ['id', 'name', 'leaderId', 'memberIds', 'advisorId', 'status', 'createdAt'],
+      order: [['createdAt', 'DESC']],
+    });
+
+    return res.status(200).json(groups);
+  } catch (error) {
+    console.error('Error fetching user groups:', error);
+    return res.status(500).json({
+      code: 'FETCH_GROUPS_FAILED',
+      message: 'Failed to fetch groups',
+    });
+  }
+});
 
 module.exports = router;
