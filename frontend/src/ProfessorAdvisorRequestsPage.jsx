@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 function getProfessorToken() {
   return window.localStorage.getItem('professorToken') || window.localStorage.getItem('authToken');
@@ -365,9 +366,9 @@ export default function ProfessorAdvisorRequestsPage() {
 
           {!loadingTransfers && !transferLoadError && transferNotifications.length > 0 && (
             <section className="mail-nav" aria-label="Group transfer notification list">
-                {transferNotifications.map((entry) => (
+              {transferNotifications.map((entry) => (
+                <article key={entry.id} className="mail-nav-item">
                   <button
-                    key={entry.id}
                     type="button"
                     className="mail-nav-item"
                     onClick={() => {
@@ -380,8 +381,14 @@ export default function ProfessorAdvisorRequestsPage() {
                     <span className="mail-nav-subject">{buildTransferSubject(entry)}</span>
                     <span className="mail-nav-preview">{buildTransferPreview(entry)}</span>
                   </button>
-                ))}
-              </section>
+                  {entry.groupId && (
+                    <Link to={`/groups/${entry.groupId}`}>
+                      Open Group
+                    </Link>
+                  )}
+                </article>
+              ))}
+            </section>
           )}
         </div>
 
@@ -460,6 +467,14 @@ export default function ProfessorAdvisorRequestsPage() {
                       <dd>{formatStatus(selectedRequest.status)}</dd>
                     </div>
                   </dl>
+
+                  {selectedRequest?.groupId && (
+                    <div className="mail-actions">
+                      <Link className="workspace-button workspace-button-primary" to={`/groups/${selectedRequest.groupId}`}>
+                        Open Group
+                      </Link>
+                    </div>
+                  )}
 
                   {canDecide && (
                     <div className="mail-actions">

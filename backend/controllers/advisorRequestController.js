@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const { body, validationResult } = require('express-validator');
 const { AdvisorRequest, Group, Professor, User } = require('../models');
 const { processDecision } = require('../services/advisorRequestService');
+const NotificationService = require('../services/notificationService');
 
 const buildErrorResponse = (message, code) => ({
   message,
@@ -96,11 +97,30 @@ const createAdvisorRequest = [
         where: {
           groupId,
           advisorId,
-          status: { [Op.in]: ['PENDING', 'APPROVED'] },
+          status: 'PENDING',
         },
       });
 
       if (existingRequest) {
+        return res.status(409).json({
+          code: 'REQUEST_ALREADY_EXISTS',
+          message: 'An advisor request already exists for this group and advisor',
+          errors: {
+            groupId: ['An advisor request already exists for this group and advisor'],
+          },
+        });
+      }
+
+      const existingApprovedRequest = await AdvisorRequest.findOne({
+        where: {
+          groupId,
+          advisorId,
+          status: 'APPROVED',
+        },
+        order: [['updatedAt', 'DESC']],
+      });
+
+      if (existingApprovedRequest && String(group.advisorId || '') === String(advisorId)) {
         return res.status(409).json({
           code: 'REQUEST_ALREADY_EXISTS',
           message: 'An advisor request already exists for this group and advisor',
@@ -116,6 +136,15 @@ const createAdvisorRequest = [
         advisorId,
         teamLeaderId: req.user.id,
         status: 'PENDING',
+      });
+
+      await NotificationService.notifyAdvisorRequestReceived({
+        advisorId,
+        requestId: advisorRequest.id,
+        groupId,
+        groupName: group.name,
+        teamLeaderId: req.user.id,
+        teamLeaderName: req.user.fullName || null,
       });
 
       return res.status(201).json({

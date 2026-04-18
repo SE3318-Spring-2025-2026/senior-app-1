@@ -1,5 +1,10 @@
 const Group = require('../models/Group');
-const { Invitation, AuditLog } = require('../models');
+const {
+  Invitation,
+  AuditLog,
+  AdvisorRequest,
+  GroupAdvisorAssignment,
+} = require('../models');
 const sequelize = require('../db');
 const NotificationService = require('./notificationService');
 const mentorMatchingService = require('./mentorMatchingService');
@@ -90,6 +95,8 @@ class GroupService {
 
     try {
       await Invitation.destroy({ where: { groupId: group.id } });
+      await AdvisorRequest.destroy({ where: { groupId: group.id } });
+      await GroupAdvisorAssignment.destroy({ where: { groupId: group.id } });
       await group.destroy();
 
       await AuditLog.create({

@@ -15,10 +15,17 @@ export default function GroupPage() {
   const [userAdvisorId, setUserAdvisorId] = useState(null);
   const [error, setError] = useState(null);
   const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
+  const [isStudentViewer, setIsStudentViewer] = useState(false);
+
+  const loadGroupData = async () => {
+    const response = await apiClient.get(`/v1/groups/${groupId}/membership`);
+    return response.data.data;
+  };
 
   useEffect(() => {
     const studentId = window.localStorage.getItem('studentId');
     setUserStudentId(studentId);
+    setIsStudentViewer(Boolean(window.localStorage.getItem('studentUser') || studentId));
 
     try {
       const professorUser = JSON.parse(window.localStorage.getItem('professorUser') || '{}');
@@ -47,6 +54,7 @@ export default function GroupPage() {
       setGroup((prev) => ({
         ...prev,
         advisorId: null,
+        advisor: null,
         status: response.data?.data?.status || 'LOOKING_FOR_ADVISOR',
       }));
       notify({
@@ -68,8 +76,8 @@ export default function GroupPage() {
     const fetchGroupData = async () => {
       try {
         setLoading(true);
-        const response = await apiClient.get(`/v1/groups/${groupId}/membership`);
-        setGroup(response.data.data);
+        const data = await loadGroupData();
+        setGroup(data);
         setError(null);
       } catch (err) {
         console.error('Error fetching group data:', err);
@@ -104,18 +112,14 @@ export default function GroupPage() {
     try {
       setJoining(true);
 
-      const response = await apiClient.post(`/v1/groups/${groupId}/membership/finalize`, {
+      await apiClient.post(`/v1/groups/${groupId}/membership/finalize`, {
         studentId: userStudentId,
       });
 
-      // Update local state
-      setGroup((prevGroup) => ({
-        ...prevGroup,
-        members: response.data.data.members || [...(prevGroup?.members || []), userStudentId],
-        currentMemberCount: response.data.data.totalMembers,
-      }));
+      const refreshedGroup = await loadGroupData();
 
-      // Show success notification
+      setGroup(refreshedGroup);
+
       notify({
         type: 'success',
         title: 'Joined group successfully',
@@ -171,55 +175,49 @@ export default function GroupPage() {
     );
   }
 
-  const isAlreadyMember = userStudentId && group.members?.includes(userStudentId);
+  const isAlreadyMember = Boolean(
+    userStudentId
+    && (group.memberIds || group.members?.map((member) => String(member.id)) || []).includes(String(userStudentId)),
+  );
   const isFull = group.currentMemberCount >= group.maxMembers;
   const isFinalized = group.status === 'COMPLETED' || group.status === 'DISBANDED';
 
   const isAdvisor = userAdvisorId && group.advisorId && String(group.advisorId) === String(userAdvisorId);
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
+    <div className="group-page-shell">
       {/* Group Header */}
-      <div style={{ marginBottom: '2rem' }}>
+      <div className="group-page-header">
         <h1>{group.groupName || 'Unnamed Group'}</h1>
-        <p style={{ color: '#666' }}>Status: <strong>{group.status}</strong></p>
+        <p className="group-page-status">Status: <strong>{group.status}</strong></p>
       </div>
 
       {/* Group Info */}
-      <div style={{ 
-        border: '1px solid #ddd', 
-        padding: '1rem', 
-        borderRadius: '8px', 
-        marginBottom: '2rem',
-        backgroundColor: '#f9f9f9',
-      }}>
-        <div style={{ marginBottom: '1rem' }}>
+      <div className="group-details-card">
+        <div className="group-details-summary">
           <h3>Group Details</h3>
           <p><strong>Status:</strong> {group.status}</p>
           <p><strong>Members:</strong> {group.currentMemberCount} / {group.maxMembers}</p>
           <p><strong>Available Slots:</strong> {group.availableSlots}</p>
-          <p><strong>Advisor:</strong> {group.advisorId ? group.advisorId : <span style={{ color: '#999' }}>None assigned</span>}</p>
+          <p>
+            <strong>Advisor:</strong>{' '}
+            {group.advisor
+              ? `${group.advisor.fullName || group.advisor.email}${group.advisor.department ? ` (${group.advisor.department})` : ''}`
+              : <span className="group-muted">None assigned</span>}
+          </p>
         </div>
 
         {/* Member List */}
         <div>
-          <h3>Members ({group.members?.length || 0})</h3>
+          <h3>Members ({group.currentMemberCount || 0})</h3>
           {group.members && group.members.length > 0 ? (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {group.members.map((memberId, index) => (
-                <li
-                  key={`${memberId}-${index}`}
-                  style={{
-                    padding: '0.5rem',
-                    backgroundColor: '#fff',
-                    borderRadius: '4px',
-                    marginBottom: '0.5rem',
-                    border: '1px solid #eee',
-                  }}
-                >
-                  {memberId}
-                  {memberId === userStudentId && (
-                    <span style={{ marginLeft: '0.5rem', color: '#28a745', fontWeight: 'bold' }}>
+            <ul className="group-members-list">
+              {group.members.map((member, index) => (
+                <li key={`${member.id}-${index}`} className="group-member-chip">
+                  {member.fullName || member.email || member.studentId || member.id}
+                  {member.isLeader ? ' (Leader)' : ''}
+                  {String(member.id) === String(userStudentId) && (
+                    <span className="group-member-you">
                       (You)
                     </span>
                   )}
@@ -227,14 +225,14 @@ export default function GroupPage() {
               ))}
             </ul>
           ) : (
-            <p style={{ color: '#999' }}>No members yet</p>
+            <p className="group-muted">No members yet</p>
           )}
         </div>
       </div>
 
       {/* Action Buttons */}
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        {isAlreadyMember ? (
+        {isStudentViewer && isAlreadyMember ? (
           <div style={{ 
             padding: '1rem', 
             backgroundColor: '#d4edda', 
@@ -244,7 +242,7 @@ export default function GroupPage() {
           }}>
             ✓ You are a member of this group
           </div>
-        ) : isFinalized ? (
+        ) : isStudentViewer && isFinalized ? (
           <div style={{ 
             padding: '1rem', 
             backgroundColor: '#f8d7da', 
@@ -254,7 +252,7 @@ export default function GroupPage() {
           }}>
             This group is no longer accepting members
           </div>
-        ) : isFull ? (
+        ) : isStudentViewer && isFull ? (
           <div style={{ 
             padding: '1rem', 
             backgroundColor: '#fff3cd', 
@@ -264,7 +262,7 @@ export default function GroupPage() {
           }}>
             This group is at full capacity
           </div>
-        ) : (
+        ) : isStudentViewer ? (
           <button
             onClick={handleJoinGroup}
             disabled={joining}
@@ -281,7 +279,7 @@ export default function GroupPage() {
           >
             {joining ? 'Joining...' : 'Join Group'}
           </button>
-        )}
+        ) : null}
 
         {isAdvisor && (
           <>

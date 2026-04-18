@@ -6,7 +6,10 @@
   --line: rgba(168, 183, 206, 0.2);
   --accent: #12a8b2;
   --accent-strong: #38c3cc;
-  --error-bg: #fef3f2;
+  --error-bg: linear-gradient(180deg, rgba(72, 24, 27, 0.94), rgba(53, 19, 23, 0.94));
+  --error-line: rgba(248, 113, 113, 0.34);
+  --error-ink: #fecaca;
+  --error-ink-strong: #ffe4e6;
   --success-bg: #ecfdf3;
   --warning-bg: #fff7ed;
   --shadow: 0 24px 64px rgba(6, 10, 16, 0.35);
@@ -395,6 +398,8 @@ textarea {
 
 .notification-error {
   background: var(--error-bg);
+  border-color: var(--error-line);
+  color: var(--error-ink-strong);
 }
 
 .notification-warning {
@@ -1472,7 +1477,8 @@ button:disabled {
 
 .feedback-error {
   background: var(--error-bg);
-  border-color: rgba(180, 35, 24, 0.18);
+  border-color: var(--error-line);
+  color: var(--error-ink-strong);
 }
 
 .feedback-warning {
@@ -1501,8 +1507,26 @@ button:disabled {
 
 .mail-state-error {
   background: var(--error-bg);
-  border-color: rgba(180, 35, 24, 0.18);
-  color: #7f1d1d;
+  border-color: var(--error-line);
+  color: var(--error-ink-strong);
+}
+
+.field-error {
+  margin-top: 8px;
+  border: 1px solid var(--error-line);
+  border-radius: 14px;
+  background: var(--error-bg);
+  color: var(--error-ink);
+  padding: 10px 12px;
+  box-shadow: 0 12px 28px rgba(33, 10, 14, 0.24);
+}
+
+.field-error p {
+  margin: 0;
+}
+
+.field-error p + p {
+  margin-top: 6px;
 }
 
 .page-mailbox {
@@ -1765,6 +1789,81 @@ button:disabled {
 .mail-detail-grid dd {
   margin: 6px 0 0;
   font-weight: 600;
+}
+
+.group-page-shell {
+  padding: 2rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.group-page-header {
+  margin-bottom: 2rem;
+}
+
+.group-page-status {
+  color: var(--muted);
+}
+
+.group-details-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(28, 38, 52, 0.96), rgba(20, 28, 40, 0.96));
+  box-shadow: var(--shadow);
+  padding: 1.1rem;
+  margin-bottom: 2rem;
+}
+
+.group-details-summary {
+  margin-bottom: 1rem;
+}
+
+.group-details-summary h3 {
+  margin-top: 0;
+}
+
+.group-muted {
+  color: var(--muted);
+}
+
+.group-members-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.group-member-chip {
+  padding: 0.65rem 0.75rem;
+  background: rgba(65, 79, 102, 0.22);
+  border-radius: 10px;
+  border: 1px solid rgba(168, 183, 206, 0.16);
+}
+
+.group-member-you {
+  margin-left: 0.5rem;
+  color: #6ee7b7;
+  font-weight: 700;
+}
+
+.cleanup-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.cleanup-delete-button {
+  background: linear-gradient(140deg, #8f1d2c 0%, #b42336 55%, #d14343 100%);
+  box-shadow: 0 12px 24px rgba(149, 35, 53, 0.24);
+}
+
+.cleanup-delete-button:hover {
+  box-shadow: 0 18px 32px rgba(149, 35, 53, 0.3);
+}
+
+.cleanup-hint {
+  margin: 0;
 }
 
 @keyframes mailDrawerIn {

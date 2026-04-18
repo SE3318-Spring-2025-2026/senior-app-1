@@ -419,7 +419,7 @@ export default function HomePage() {
               )}
             </section>
             <div className="workspace-actions">
-              <Link className="workspace-button workspace-button-primary" to="/students/groups/new">
+              <Link className="workspace-button workspace-button-primary" to="/students/groups/manage">
                 Manage Group
               </Link>
               <Link className="workspace-button workspace-button-secondary" to="/students/notifications">

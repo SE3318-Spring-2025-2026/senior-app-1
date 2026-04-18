@@ -8,7 +8,7 @@ const roleMenuSections = {
       title: 'Workspace',
       items: [
         { to: '/home', label: 'Student Home', icon: 'HM' },
-        { to: '/students/groups/new', label: 'Manage Group', icon: 'GR' },
+        { to: '/students/groups/manage', label: 'Manage Group', icon: 'GR' },
       ],
     },
   ],
@@ -34,6 +34,7 @@ const roleMenuSections = {
         { to: '/coordinator/student-id-registry/import', label: 'Student ID Import', icon: 'OP' },
         { to: '/coordinator/groups/manage', label: 'Group Membership Edit', icon: 'GM' },
         { to: '/coordinator/groups/transfer', label: 'Advisor Transfer', icon: 'AT' },
+        { to: '/coordinator/groups/cleanup', label: 'Group Cleanup', icon: 'GC' },
       ],
     },
   ],
@@ -49,6 +50,7 @@ const roleMenuSections = {
       items: [
         { to: '/admin/professors/new', label: 'Create Professor Account', icon: 'MG' },
         { to: '/admin/coordinators/new', label: 'Create Coordinator Account', icon: 'CG' },
+        { to: '/admin/groups/cleanup', label: 'Group Cleanup', icon: 'GC' },
       ],
     },
   ],
