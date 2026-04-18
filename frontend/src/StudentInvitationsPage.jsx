@@ -50,7 +50,28 @@ function formatPreview(entry) {
       ? `Your membership update for ${groupLabel} has been delivered.`
       : 'A membership acceptance update was delivered.';
   }
+  if (entry.type === 'ADVISOR_TRANSFER') {
+    const advisorName = entry.newAdvisor?.fullName || entry.payload?.newAdvisorName || 'the new advisor';
+    const advisorEmail = entry.newAdvisor?.email || entry.payload?.newAdvisorEmail || '';
+    return groupLabel
+      ? `${groupLabel} is now assigned to ${advisorName}${advisorEmail ? ` (${advisorEmail})` : ''}.`
+      : `Your group is now assigned to ${advisorName}${advisorEmail ? ` (${advisorEmail})` : ''}.`;
+  }
   return 'Notification received from local mailbox.';
+}
+
+function formatAdvisorTransferSubject(entry) {
+  const groupLabel = getGroupLabel(entry);
+  return groupLabel ? `Advisor transfer: ${groupLabel}` : 'Advisor transfer update';
+}
+
+function formatAdvisorTransferPreview(entry) {
+  const advisorName = entry.newAdvisor?.fullName || entry.payload?.newAdvisorName || 'a new advisor';
+  const advisorEmail = entry.newAdvisor?.email || entry.payload?.newAdvisorEmail || '';
+  const groupLabel = getGroupLabel(entry);
+  return groupLabel
+    ? `${groupLabel} has been transferred to ${advisorName}${advisorEmail ? ` (${advisorEmail})` : ''}.`
+    : `Your group has been transferred to ${advisorName}${advisorEmail ? ` (${advisorEmail})` : ''}.`;
 }
 
 function formatDate(value) {
@@ -80,7 +101,10 @@ export default function StudentInvitationsPage() {
   const { notify } = useNotification();
 
   const [mailbox, setMailbox] = useState([]);
+  const [advisorTransfers, setAdvisorTransfers] = useState([]);
   const [selectedMailId, setSelectedMailId] = useState(null);
+  const [loadingTransfers, setLoadingTransfers] = useState(true);
+  const [transferLoadError, setTransferLoadError] = useState('');
 
   useEffect(() => {
     fetchInvitations();
@@ -105,6 +129,57 @@ export default function StudentInvitationsPage() {
       });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    let timeoutId;
+    const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
+
+    async function loadAdvisorTransfers() {
+      try {
+        const response = await fetch('/api/v1/team-leader/notifications/advisor-transfers', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const payload = await response.json().catch(() => []);
+        if (!active) {
+          return;
+        }
+
+        if (!response.ok) {
+          setTransferLoadError('Advisor transfer notifications could not be loaded.');
+          setAdvisorTransfers([]);
+        } else {
+          const rows = Array.isArray(payload) ? payload : payload.notifications || [];
+          setAdvisorTransfers(rows);
+          setTransferLoadError('');
+        }
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        setTransferLoadError('Advisor transfer notifications could not be loaded.');
+        setAdvisorTransfers([]);
+      } finally {
+        if (!active) {
+          return;
+        }
+
+        setLoadingTransfers(false);
+        timeoutId = window.setTimeout(loadAdvisorTransfers, 15000);
+      }
+    }
+
+    loadAdvisorTransfers();
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
   }, []);
 
   async function handleRespond(invitationId, response) {
@@ -156,6 +231,37 @@ export default function StudentInvitationsPage() {
 
   return (
     <main className="page page-mailbox">
+      <section className="panel">
+        <div className="mail-sidebar-header">
+          <p className="mailbox-title">Advisor Transfer Notifications</p>
+          <p className="mailbox-count">{advisorTransfers.length} notifications</p>
+        </div>
+
+        {loadingTransfers && (
+          <p className="mail-state" aria-live="polite">Loading advisor transfer notifications...</p>
+        )}
+
+        {!loadingTransfers && transferLoadError && (
+          <p className="mail-state" aria-live="polite">{transferLoadError}</p>
+        )}
+
+        {!loadingTransfers && !transferLoadError && advisorTransfers.length === 0 && (
+          <p className="mail-state" aria-live="polite">No advisor transfer notifications yet.</p>
+        )}
+
+        {!loadingTransfers && !transferLoadError && advisorTransfers.length > 0 && (
+          <section className="mail-nav" aria-label="Advisor transfer notification list">
+            {advisorTransfers.map((entry) => (
+              <article key={entry.id} className="mail-nav-item">
+                <span className="mail-nav-time">{formatDate(entry.createdAt)}</span>
+                <span className="mail-nav-subject">{formatAdvisorTransferSubject(entry)}</span>
+                <span className="mail-nav-preview">{formatAdvisorTransferPreview(entry)}</span>
+              </article>
+            ))}
+          </section>
+        )}
+      </section>
+
       <section className="single-panel">
         {loading && (
           <p className="mail-state" aria-live="polite">Loading mail...</p>

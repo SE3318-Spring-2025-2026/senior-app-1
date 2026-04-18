@@ -1,5 +1,6 @@
 const sequelize = require('../db');
 const { Group, GroupAdvisorAssignment, Professor, User } = require('../models');
+const NotificationService = require('./notificationService');
 
 function createServiceError(status, code, message) {
   const error = new Error(message);
@@ -150,7 +151,8 @@ async function syncAdvisorAssignmentsForGroup({ groupId, advisorId, transaction 
 }
 
 async function transferAdvisorByCoordinator({ groupId, newAdvisorId }) {
-  return sequelize.transaction(async (transaction) => {
+  const result = await sequelize.transaction(async (transaction) => {
+    const group = await loadGroupForTransfer(groupId, { transaction });
     const assignment = await transferAdvisorInGroupDatabase({
       groupId,
       newAdvisorId,
@@ -165,10 +167,45 @@ async function transferAdvisorByCoordinator({ groupId, newAdvisorId }) {
     return {
       groupId: assignment.groupId,
       advisorId: assignment.advisorId,
+      leaderId: group.leaderId || null,
+      groupName: group.name || null,
       updatedAt: assignment.updatedAt,
       updatedCount: syncResult.updatedCount,
     };
   });
+
+  const advisorUser = await findActiveProfessorUser(newAdvisorId);
+
+  await Promise.all([
+    NotificationService.notifyAdvisorTransferredGroup({
+      advisorId: advisorUser.id,
+      groupId: result.groupId,
+      groupName: result.groupName,
+      message: result.groupName
+        ? `${result.groupName} has been assigned to you through transfer.`
+        : 'A new group has been assigned to you through transfer.',
+    }),
+    result.leaderId
+      ? NotificationService.notifyTeamLeaderAdvisorTransferred({
+        leaderId: Number.parseInt(String(result.leaderId), 10),
+        groupId: result.groupId,
+        groupName: result.groupName,
+        newAdvisorId: advisorUser.id,
+        newAdvisorName: advisorUser.fullName,
+        newAdvisorEmail: advisorUser.email,
+        message: result.groupName
+          ? `${result.groupName} has been transferred to advisor ${advisorUser.fullName}.`
+          : 'Your group advisor has been changed through a transfer.',
+      })
+      : Promise.resolve(),
+  ]);
+
+  return {
+    groupId: result.groupId,
+    advisorId: result.advisorId,
+    updatedAt: result.updatedAt,
+    updatedCount: result.updatedCount,
+  };
 }
 
 async function removeAdvisorAssignmentFromGroup({ groupId }) {
