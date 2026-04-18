@@ -56,10 +56,13 @@ export default function ProfessorAdvisorRequestsPage() {
   const [feedback, setFeedback] = useState({ type: '', message: '' });
 
   useEffect(() => {
-    const controller = new AbortController();
+    let active = true;
+    let timeoutId;
     const token = window.localStorage.getItem('professorToken') || window.localStorage.getItem('authToken');
 
     async function loadRequests() {
+      const controller = new AbortController();
+
       try {
         const response = await fetch('/api/v1/advisors/notifications/advisee-requests', {
           headers: token
@@ -73,30 +76,48 @@ export default function ProfessorAdvisorRequestsPage() {
         const payload = await response.json().catch(() => []);
 
         if (!response.ok) {
+          if (!active) {
+            return;
+          }
+
           setLoadError('Advisor requests could not be loaded.');
           setRequests([]);
           return;
         }
 
+        if (!active) {
+          return;
+        }
+
         const rows = Array.isArray(payload) ? payload : payload.notifications || [];
         setRequests(rows);
-        setSelectedRequestId((current) => current || rows[0]?.id || null);
+        setSelectedRequestId((current) => (
+          rows.some((entry) => entry.id === current) ? current : rows[0]?.id || null
+        ));
         setLoadError('');
       } catch (error) {
-        if (error.name === 'AbortError') {
+        if (error.name === 'AbortError' || !active) {
           return;
         }
 
         setLoadError('Advisor requests could not be loaded.');
         setRequests([]);
       } finally {
+        if (!active) {
+          return;
+        }
+
         setLoading(false);
+        timeoutId = window.setTimeout(loadRequests, 15000);
       }
     }
 
     loadRequests();
 
-    return () => controller.abort();
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
   }, []);
 
   useEffect(() => {
