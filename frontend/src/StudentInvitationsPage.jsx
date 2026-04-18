@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
 import { useStudentInvitations } from './hooks/useStudentInvitations';
 
@@ -99,6 +100,10 @@ function formatAdvisorDecisionPreview(entry) {
   return groupLabel
     ? `${groupLabel} advisor request was ${decision === 'APPROVED' ? 'approved' : 'rejected'}.`
     : `Your advisor request was ${decision === 'APPROVED' ? 'approved' : 'rejected'}.`;
+}
+
+function getAdvisorDecisionRequestId(entry) {
+  return entry.requestId || entry.payload?.requestId || null;
 }
 
 function formatAdvisorReleaseSubject(entry) {
@@ -572,6 +577,14 @@ export default function StudentInvitationsPage() {
               <p className="field-error" role="alert" aria-live="polite">
                 {selectedError}
               </p>
+            )}
+
+            {selectedMail.type === 'ADVISOR_DECISION' && getAdvisorDecisionRequestId(selectedMail) && (
+              <div className="mail-actions">
+                <Link to={`/team-leader/advisor-requests/${getAdvisorDecisionRequestId(selectedMail)}`}>
+                  View request details
+                </Link>
+              </div>
             )}
           </section>
         </div>

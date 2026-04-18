@@ -4,6 +4,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const NotificationService = require('../services/notificationService');
 const sequelize = require('../db');
 const { syncAdvisorAssignmentsForGroup } = require('../services/mentorMatchingService');
+const { getAdvisorRequestDetails } = require('../controllers/advisorController');
 const {
   createAdvisorRequest,
   getPendingAdvisorRequest,
@@ -28,6 +29,13 @@ router.get(
   authenticate,
   authorize(['PROFESSOR']),
   listAdvisorRequests,
+);
+
+router.get(
+  '/advisor-requests/:requestId',
+  authenticate,
+  authorize(['STUDENT']),
+  getAdvisorRequestDetails,
 );
 
 router.get(

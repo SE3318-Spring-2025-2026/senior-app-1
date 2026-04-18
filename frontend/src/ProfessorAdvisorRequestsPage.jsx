@@ -32,6 +32,7 @@ function normalizeAdviseeNotification(entry) {
     groupName: entry?.groupName || group?.name || null,
     createdAt: entry?.createdAt || advisorRequest?.createdAt || null,
     status: entry?.status || (entry?.isRead ? 'READ' : 'UNREAD'),
+    isRead: Boolean(entry?.isRead || entry?.status === 'READ'),
     message: entry?.message || null,
     note: entry?.note ?? null,
     decidedAt: entry?.decidedAt ?? null,
@@ -47,6 +48,7 @@ function normalizeTransferNotification(entry) {
     groupName: entry?.groupName || group?.name || null,
     createdAt: entry?.createdAt || null,
     status: entry?.status || (entry?.isRead ? 'READ' : 'UNREAD'),
+    isRead: Boolean(entry?.isRead || entry?.status === 'READ'),
     message: entry?.message || entry?.reason || null,
     reason: entry?.reason || null,
   };
@@ -230,6 +232,51 @@ export default function ProfessorAdvisorRequestsPage() {
   const selectedRequestBusy = selectedRequest && submittingDecision === selectedRequest.requestId;
   const canDecide = selectedRequest?.requestId && selectedRequest?.requestStatus === 'PENDING';
 
+  async function markNotificationAsRead(type, id) {
+    const token = getProfessorToken();
+    if (!token || !id) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/v1/advisors/notifications/${type}/${id}/read`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      if (type === 'advisee-request') {
+        setRequests((current) => current.map((entry) => (
+          entry.id === id
+            ? {
+              ...entry,
+              status: 'READ',
+              isRead: true,
+            }
+            : entry
+        )));
+        return;
+      }
+
+      setTransferNotifications((current) => current.map((entry) => (
+        entry.id === id
+          ? {
+            ...entry,
+            status: 'READ',
+            isRead: true,
+          }
+          : entry
+      )));
+    } catch {
+      // Keep mailbox interaction resilient; a failed read update should not block the UI.
+    }
+  }
+
   async function handleDecision(decision) {
     if (!selectedRequest?.requestId) {
       setFeedback({
@@ -318,14 +365,23 @@ export default function ProfessorAdvisorRequestsPage() {
 
           {!loadingTransfers && !transferLoadError && transferNotifications.length > 0 && (
             <section className="mail-nav" aria-label="Group transfer notification list">
-              {transferNotifications.map((entry) => (
-                <article key={entry.id} className="mail-nav-item">
-                  <span className="mail-nav-time">{formatDate(entry.createdAt)}</span>
-                  <span className="mail-nav-subject">{buildTransferSubject(entry)}</span>
-                  <span className="mail-nav-preview">{buildTransferPreview(entry)}</span>
-                </article>
-              ))}
-            </section>
+                {transferNotifications.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="mail-nav-item"
+                    onClick={() => {
+                      if (!entry.isRead) {
+                        markNotificationAsRead('group-transfer', entry.id);
+                      }
+                    }}
+                  >
+                    <span className="mail-nav-time">{formatDate(entry.createdAt)}</span>
+                    <span className="mail-nav-subject">{buildTransferSubject(entry)}</span>
+                    <span className="mail-nav-preview">{buildTransferPreview(entry)}</span>
+                  </button>
+                ))}
+              </section>
           )}
         </div>
 
@@ -357,7 +413,12 @@ export default function ProfessorAdvisorRequestsPage() {
                       key={entry.id}
                       type="button"
                       className={`mail-nav-item${isActive ? ' mail-nav-item-active' : ''}`}
-                      onClick={() => setSelectedRequestId(entry.id)}
+                      onClick={() => {
+                        setSelectedRequestId(entry.id);
+                        if (!entry.isRead) {
+                          markNotificationAsRead('advisee-request', entry.id);
+                        }
+                      }}
                     >
                       <span className="mail-nav-time">{formatDate(entry.createdAt)}</span>
                       <span className="mail-nav-subject">{buildSubject(entry)}</span>
