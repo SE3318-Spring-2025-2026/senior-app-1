@@ -1,6 +1,80 @@
 const { Notification } = require('../models');
 
 class NotificationService {
+  static async notifyAdvisorTransferredGroup({
+    advisorId,
+    groupId,
+    groupName,
+    message = 'A new group has been assigned to you through transfer.',
+  }) {
+    let row;
+
+    try {
+      row = await Notification.create({
+        userId: advisorId,
+        type: 'GROUP_TRANSFER',
+        payload: JSON.stringify({
+          groupId,
+          groupName,
+          message,
+        }),
+        status: 'PENDING',
+      });
+    } catch (error) {
+      console.error('[NotificationService] Failed to persist advisor transfer notification', error);
+      return;
+    }
+
+    await NotificationService.#pushAndMark(row, `user:${advisorId}`, {
+      groupId,
+      groupName,
+      message,
+    });
+  }
+
+  static async notifyTeamLeaderAdvisorTransferred({
+    leaderId,
+    groupId,
+    groupName,
+    newAdvisorId,
+    newAdvisorName,
+    newAdvisorEmail,
+    newAdvisorDepartment = null,
+    message = 'Your group advisor has been changed through a transfer.',
+  }) {
+    let row;
+
+    try {
+      row = await Notification.create({
+        userId: leaderId,
+        type: 'ADVISOR_TRANSFER',
+        payload: JSON.stringify({
+          groupId,
+          groupName,
+          newAdvisorId,
+          newAdvisorName,
+          newAdvisorEmail,
+          newAdvisorDepartment,
+          message,
+        }),
+        status: 'PENDING',
+      });
+    } catch (error) {
+      console.error('[NotificationService] Failed to persist team leader transfer notification', error);
+      return;
+    }
+
+    await NotificationService.#pushAndMark(row, `user:${leaderId}`, {
+      groupId,
+      groupName,
+      newAdvisorId,
+      newAdvisorName,
+      newAdvisorEmail,
+      newAdvisorDepartment,
+      message,
+    });
+  }
+
   static async queueInviteAlert(targetId, groupId, invitationId) {
     let row;
 
