@@ -1,4 +1,7 @@
 import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useNotification } from './contexts/NotificationContext';
 
 function getAdminName() {
   try {
@@ -25,16 +28,32 @@ const adminTools = [
   },
   {
     eyebrow: 'Registry',
-    title: 'Coordinator Upload',
-    description: 'Open the coordinator-facing valid student ID import page used to bulk refresh the registry.',
-    href: '/coordinator/student-id-registry/import',
-    cta: 'Open Upload Page',
+    title: 'Add Coordinator',
+    description: 'Create a coordinator account that can manage student ID imports and manual group membership edits.',
+    href: '/admin/coordinators/new',
+    cta: 'Open Add Coordinator',
     status: 'Ready',
   },
 ];
 
 export default function AdminHomePage() {
+  const navigate = useNavigate();
+  const { notify } = useNotification();
   const adminName = getAdminName();
+  const token = window.localStorage.getItem('adminToken') || '';
+
+  useEffect(() => {
+    if (token) {
+      return;
+    }
+
+    notify({
+      type: 'warning',
+      title: 'Admin login required',
+      message: 'Please sign in before opening the admin workspace.',
+    });
+    navigate('/admin/login', { replace: true });
+  }, [navigate, notify, token]);
 
   return (
     <main className="page">

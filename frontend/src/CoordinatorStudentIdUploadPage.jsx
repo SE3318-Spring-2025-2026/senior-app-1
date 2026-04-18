@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { useNotification } from './contexts/NotificationContext';
 
 const initialFeedback = {
@@ -50,11 +51,25 @@ function parseStudentIds(rawValue) {
 }
 
 export default function CoordinatorStudentIdUploadPage() {
-  const [token, setToken] = useState(() => window.localStorage.getItem('coordinatorToken') || '');
   const [studentIdsText, setStudentIdsText] = useState('');
   const [feedback, setFeedback] = useState(initialFeedback);
   const [submitting, setSubmitting] = useState(false);
+  const navigate = useNavigate();
   const { notify } = useNotification();
+  const token = window.localStorage.getItem('coordinatorToken') || '';
+
+  useEffect(() => {
+    if (token) {
+      return;
+    }
+
+    notify({
+      type: 'warning',
+      title: 'Coordinator login required',
+      message: 'Please sign in before opening the student ID upload page.',
+    });
+    navigate('/coordinator/login', { replace: true });
+  }, [navigate, notify, token]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -69,16 +84,11 @@ export default function CoordinatorStudentIdUploadPage() {
     });
 
     try {
-      if (token.trim()) {
-        window.localStorage.setItem('coordinatorToken', token.trim());
-        window.localStorage.setItem('authToken', token.trim());
-      }
-
       const response = await fetch('/api/v1/coordinator/student-id-registry/import', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token.trim() ? { Authorization: `Bearer ${token.trim()}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ studentIds }),
       });
@@ -140,21 +150,14 @@ export default function CoordinatorStudentIdUploadPage() {
         </p>
       </section>
 
+      <p className="back-link-wrap">
+        <Link className="back-link" to="/coordinator">
+          Back to Coordinator Workspace
+        </Link>
+      </p>
+
       <section className="panel">
         <form className="form" onSubmit={handleSubmit}>
-          <label className="field">
-            <span>Coordinator Bearer Token</span>
-            <input
-              id="token"
-              name="token"
-              type="text"
-              autoComplete="off"
-              placeholder="Paste a coordinator JWT token"
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
-            />
-          </label>
-
           <label className="field">
             <span>Student IDs</span>
             <textarea

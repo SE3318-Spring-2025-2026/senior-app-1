@@ -13,6 +13,9 @@ const initialFeedback = {
   title: 'Professor Registration',
   message: 'Create a professor account from the admin workspace.',
   result: '',
+  setupToken: '',
+  setupUrl: '',
+  expiresAt: '',
 };
 
 function mapRegisterError(payload, status) {
@@ -66,6 +69,9 @@ export default function AdminProfessorCreatePage() {
       title: 'Creating professor',
       message: 'Saving the professor account and preparing first-time password setup.',
       result: '',
+      setupToken: '',
+      setupUrl: '',
+      expiresAt: '',
     });
 
     try {
@@ -88,8 +94,11 @@ export default function AdminProfessorCreatePage() {
       setFeedback({
         type: 'success',
         title: 'Professor created',
-        message: result.message || 'Professor account created. The professor can now choose a password.',
+        message: result.message || 'Professor account created. Share the generated setup token with the professor.',
         result: 'Ready for password setup',
+        setupToken: result.setupToken || '',
+        setupUrl: result.setupToken ? `/professors/password-setup?token=${encodeURIComponent(result.setupToken)}` : '',
+        expiresAt: result.passwordSetupTokenExpiresAt || '',
       });
       notify({
         type: 'success',
@@ -103,6 +112,9 @@ export default function AdminProfessorCreatePage() {
         title: 'Request failed',
         message: 'The professor creation request could not reach the backend. Check whether the backend server is running.',
         result: 'Network error',
+        setupToken: '',
+        setupUrl: '',
+        expiresAt: '',
       });
       notify({
         type: 'error',
@@ -207,6 +219,26 @@ export default function AdminProfessorCreatePage() {
                   <dt>Result</dt>
                   <dd>{feedback.result}</dd>
                 </div>
+                {feedback.setupToken && (
+                  <div>
+                    <dt>Setup Token</dt>
+                    <dd>{feedback.setupToken}</dd>
+                  </div>
+                )}
+                {feedback.setupUrl && (
+                  <div>
+                    <dt>Setup Page</dt>
+                    <dd>
+                      <Link to={feedback.setupUrl}>Open professor setup link</Link>
+                    </dd>
+                  </div>
+                )}
+                {feedback.expiresAt && (
+                  <div>
+                    <dt>Token Expires</dt>
+                    <dd>{new Date(feedback.expiresAt).toLocaleString()}</dd>
+                  </div>
+                )}
               </dl>
             )}
           </section>

@@ -3,11 +3,8 @@ const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const professorService = require('../services/professorService');
 
-const adminLogin = [
-  body('email').isEmail().normalizeEmail(),
-  body('password').isString().notEmpty(),
-
-  async (req, res) => {
+function buildRoleLoginHandler(role, successMessage, invalidMessage, failureCode) {
+  return async (req, res) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -21,13 +18,13 @@ const adminLogin = [
       const user = await req.app.locals.models.User.findOne({
         where: {
           email,
-          role: 'ADMIN',
+          role,
         },
       });
 
       if (!user || !user.password) {
         return res.status(401).json({
-          message: 'Invalid admin email or password.',
+          message: invalidMessage,
           code: 'INVALID_CREDENTIALS',
         });
       }
@@ -36,7 +33,7 @@ const adminLogin = [
 
       if (!passwordMatches) {
         return res.status(401).json({
-          message: 'Invalid admin email or password.',
+          message: invalidMessage,
           code: 'INVALID_CREDENTIALS',
         });
       }
@@ -58,16 +55,38 @@ const adminLogin = [
           fullName: user.fullName,
           role: user.role,
         },
-        message: 'Admin login successful.',
+        message: successMessage,
       });
     } catch (error) {
-      console.error('Admin login failed unexpectedly:', error);
+      console.error(`${role} login failed unexpectedly:`, error);
       return res.status(500).json({
-        message: 'Admin login could not be completed.',
-        code: 'ADMIN_LOGIN_FAILED',
+        message: `${role} login could not be completed.`,
+        code: failureCode,
       });
     }
-  },
+  };
+}
+
+const adminLogin = [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isString().notEmpty(),
+  buildRoleLoginHandler(
+    'ADMIN',
+    'Admin login successful.',
+    'Invalid admin email or password.',
+    'ADMIN_LOGIN_FAILED',
+  ),
+];
+
+const coordinatorLogin = [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isString().notEmpty(),
+  buildRoleLoginHandler(
+    'COORDINATOR',
+    'Coordinator login successful.',
+    'Invalid coordinator email or password.',
+    'COORDINATOR_LOGIN_FAILED',
+  ),
 ];
 
 const registerProfessor = [
@@ -112,4 +131,59 @@ const registerProfessor = [
   },
 ];
 
-module.exports = { adminLogin, registerProfessor };
+const registerCoordinator = [
+  body('email').isEmail().normalizeEmail(),
+  body('fullName').isString().trim().isLength({ min: 3 }),
+  body('password').isString().isLength({ min: 8 }),
+
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          code: 'INVALID_COORDINATOR_INPUT',
+          message: 'Coordinator email, full name, and password are required.',
+          errors: errors.array(),
+        });
+      }
+
+      const { email, fullName, password } = req.body;
+
+      const existing = await req.app.locals.models.User.findOne({
+        where: { email },
+      });
+
+      if (existing) {
+        return res.status(409).json({
+          code: 'DUPLICATE_EMAIL',
+          message: 'A user with this email already exists.',
+        });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const coordinator = await req.app.locals.models.User.create({
+        email,
+        fullName,
+        role: 'COORDINATOR',
+        status: 'ACTIVE',
+        password: hashedPassword,
+      });
+
+      return res.status(201).json({
+        userId: coordinator.id,
+        email: coordinator.email,
+        fullName: coordinator.fullName,
+        role: coordinator.role,
+        message: 'Coordinator account created successfully.',
+      });
+    } catch (error) {
+      console.error('Coordinator registration failed unexpectedly:', error);
+      return res.status(500).json({
+        code: 'COORDINATOR_CREATE_FAILED',
+        message: 'Coordinator account could not be created.',
+      });
+    }
+  },
+];
+
+module.exports = { adminLogin, coordinatorLogin, registerProfessor, registerCoordinator };

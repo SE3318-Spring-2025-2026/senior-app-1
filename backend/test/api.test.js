@@ -1,13 +1,9 @@
+require('./setupTestEnv');
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
-process.env.JWT_SECRET = 'test-secret';
-process.env.SQLITE_STORAGE = ':memory:';
-process.env.FRONTEND_URL = 'http://localhost:5173';
-process.env.GITHUB_CLIENT_ID = '';
-process.env.GITHUB_CLIENT_SECRET = '';
 
 const sequelize = require('../db');
 const app = require('../app');
@@ -18,7 +14,10 @@ const {
   ValidStudentId,
   LinkedGitHubAccount,
   OAuthState,
+  Group,
   AdvisorRequest,
+  AuditLog,
+  Notification,
 } = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
@@ -59,6 +58,9 @@ test.after(async () => {
 
 test.beforeEach(async () => {
   await AdvisorRequest.destroy({ where: {} });
+  await Notification.destroy({ where: {} });
+  await AuditLog.destroy({ where: {} });
+  await Group.destroy({ where: {} });
   await LinkedGitHubAccount.destroy({ where: {} });
   await OAuthState.destroy({ where: {} });
   await User.destroy({ where: {} });
@@ -210,6 +212,348 @@ test('admin can log in with email and password', async () => {
 
   assert.equal(invalidResult.response.status, 401);
   assert.equal(invalidResult.json.code, 'INVALID_CREDENTIALS');
+});
+
+test('coordinator can log in with email and password', async () => {
+  const password = 'CoordinatorPass2026!';
+
+  await User.create({
+    email: 'coordinator-login@example.com',
+    fullName: 'Coordinator Login',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash(password, 10),
+  });
+
+  const successResult = await request('/api/v1/coordinator/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'coordinator-login@example.com',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'COORDINATOR');
+
+  const invalidResult = await request('/api/v1/coordinator/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'coordinator-login@example.com',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidResult.response.status, 401);
+  assert.equal(invalidResult.json.code, 'INVALID_CREDENTIALS');
+});
+
+test('student can log in with student ID and password only when the student ID is eligible', async () => {
+  const password = 'StrongPass1!';
+
+  await createStudent({
+    studentId: '11070001000',
+    email: 'student-login@example.edu',
+    fullName: 'Student Login',
+    password,
+  });
+
+  const successResult = await request('/api/v1/students/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001000',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'STUDENT');
+  assert.equal(successResult.json.user.studentId, '11070001000');
+
+  const wrongPassword = await request('/api/v1/students/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001000',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(wrongPassword.response.status, 401);
+  assert.equal(wrongPassword.json.code, 'INVALID_CREDENTIALS');
+
+  await User.create({
+    email: 'ineligible-login@example.edu',
+    fullName: 'Ineligible Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001999',
+    passwordHash: await bcrypt.hash(password, 10),
+  });
+
+  const ineligibleResult = await request('/api/v1/students/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001999',
+      password,
+    }),
+  });
+
+  assert.equal(ineligibleResult.response.status, 403);
+  assert.equal(ineligibleResult.json.code, 'STUDENT_NOT_ELIGIBLE');
+});
+
+test('professor can log in with email and chosen password after setup', async () => {
+  const password = 'StrongPass1!';
+
+  await User.create({
+    email: 'prof-login@example.edu',
+    fullName: 'Professor Login',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash(password, 10),
+  });
+
+  const successResult = await request('/api/v1/professors/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'prof-login@example.edu',
+      password,
+    }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+  assert.equal(typeof successResult.json.token, 'string');
+  assert.equal(successResult.json.user.role, 'PROFESSOR');
+
+  const invalidResult = await request('/api/v1/professors/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'prof-login@example.edu',
+      password: 'WrongPass1!',
+    }),
+  });
+
+  assert.equal(invalidResult.response.status, 401);
+  assert.equal(invalidResult.json.errorCode, 'INVALID_CREDENTIALS');
+});
+
+test('advisor notifications endpoint returns only advisee requests for the authenticated professor', async () => {
+  const professor = await User.create({
+    email: 'advisor@example.edu',
+    fullName: 'Advisor Inbox',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherProfessor = await User.create({
+    email: 'other-advisor@example.edu',
+    fullName: 'Other Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await Notification.create({
+    userId: professor.id,
+    type: 'ADVISEE_REQUEST',
+    payload: JSON.stringify({
+      requestId: 'req-1',
+      groupId: 'group-1',
+      groupName: 'Team Atlas',
+      requestStatus: 'PENDING',
+      message: 'Team Atlas requested you as advisor.',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: professor.id,
+    type: 'GROUP_INVITE',
+    payload: JSON.stringify({
+      groupId: 'group-ignore',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: otherProfessor.id,
+    type: 'ADVISEE_REQUEST',
+    payload: JSON.stringify({
+      requestId: 'req-2',
+      groupId: 'group-2',
+      groupName: 'Team Nova',
+      requestStatus: 'PENDING',
+      message: 'Team Nova requested you as advisor.',
+    }),
+    status: 'SENT',
+  });
+
+  const result = await request('/api/v1/advisors/notifications/advisee-requests', {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(Array.isArray(result.json), true);
+  assert.equal(result.json.length, 1);
+  assert.equal(result.json[0].type, 'ADVISEE_REQUEST');
+  assert.equal(result.json[0].requestId, 'req-1');
+  assert.equal(result.json[0].groupName, 'Team Atlas');
+  assert.equal(result.json[0].requestStatus, 'PENDING');
+});
+
+test('assigned advisor can approve a pending advisor request', async () => {
+  const professor = await User.create({
+    email: 'approve-advisor@example.edu',
+    fullName: 'Approve Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const leader = await User.create({
+    email: 'leader@example.edu',
+    fullName: 'Team Leader',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001235',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const group = await Group.create({
+    id: 'group-approve-1',
+    name: 'Team Atlas',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-1',
+    groupId: group.id,
+    advisorId: professor.id,
+    teamLeaderId: leader.id,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/advisor-requests/advisor-request-1/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      decision: 'APPROVE',
+      note: 'I can supervise this team.',
+    }),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.status, 'APPROVED');
+  assert.equal(result.json.note, 'I can supervise this team.');
+  assert.equal(result.json.message, 'Advisor request approved successfully.');
+
+  const updatedRequest = await AdvisorRequest.findByPk('advisor-request-1');
+  const updatedGroup = await Group.findByPk(group.id);
+  assert.equal(updatedRequest.status, 'APPROVED');
+  assert.equal(updatedGroup.advisorId, String(professor.id));
+});
+
+test('advisor request cannot be decided twice', async () => {
+  const professor = await User.create({
+    email: 'resolved-advisor@example.edu',
+    fullName: 'Resolved Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-2',
+    groupId: 'group-resolved-1',
+    advisorId: professor.id,
+    status: 'APPROVED',
+  });
+
+  const result = await request('/api/v1/advisor-requests/advisor-request-2/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      decision: 'REJECT',
+    }),
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'REQUEST_ALREADY_RESOLVED');
+  assert.equal(result.json.message, 'Advisor request has already been decided.');
+});
+
+test('only the assigned advisor can decide an advisor request', async () => {
+  const professor = await User.create({
+    email: 'owner-advisor@example.edu',
+    fullName: 'Owner Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherProfessor = await User.create({
+    email: 'other-owner-advisor@example.edu',
+    fullName: 'Other Owner Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-3',
+    groupId: 'group-owner-1',
+    advisorId: professor.id,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/advisor-requests/advisor-request-3/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(otherProfessor)),
+    },
+    body: JSON.stringify({
+      decision: 'APPROVE',
+    }),
+  });
+
+  assert.equal(result.response.status, 403);
+  assert.equal(result.json.code, 'FORBIDDEN');
+});
+
+test('advisor notifications endpoint rejects non-professor users', async () => {
+  const student = await User.create({
+    email: 'student-not-allowed@example.edu',
+    fullName: 'Student Viewer',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001234',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/advisors/notifications/advisee-requests', {
+    headers: await authHeaderFor(student),
+  });
+
+  assert.equal(result.response.status, 403);
+  assert.equal(result.json.message, 'Forbidden');
 });
 
 test('admin can register professor and duplicate email returns 409', async () => {
@@ -1191,6 +1535,19 @@ test('manual linked account store and github patch endpoint update student statu
   assert.equal(storeResult.response.status, 200);
   assert.equal(storeResult.json.linked, true);
 
+  const relinkAttempt = await request('/api/v1/linked-github-account-store/links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      studentId: '11070001001',
+      githubId: '87654321',
+      githubUsername: 'student-gh-second',
+    }),
+  });
+
+  assert.equal(relinkAttempt.response.status, 409);
+  assert.equal(relinkAttempt.json.code, 'GITHUB_RELINK_NOT_ALLOWED');
+
   const patchResult = await request('/api/v1/user-database/students/11070001001/github-link', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -1206,4 +1563,219 @@ test('manual linked account store and github patch endpoint update student statu
     githubLinked: true,
     message: 'Student GitHub link updated successfully',
   });
+});
+
+// ============================================
+// NOTIFICATION TESTS (Issue 12)
+// ============================================
+
+test('[NOTIFICATIONS] backend emits notification after successful finalize only', async () => {
+  const leader = await User.create({
+    email: 'notif-leader@example.com',
+    fullName: 'Notification Leader',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const leaderHeaders = await authHeaderFor(leader);
+
+  // Create group with leader
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({
+      groupName: 'Notification Test Group',
+      maxMembers: 2,
+    }),
+  });
+
+  const groupId = groupResult.json.data.groupId;
+
+  // Capture console output BEFORE making requests
+  const originalLog = console.log;
+  const capturedLogs = [];
+  console.log = (...args) => {
+    capturedLogs.push(args.join(' '));
+    originalLog(...args);
+  };
+
+  // Successful finalize - SHOULD emit notification
+  const successResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070010000' }),
+  });
+
+  assert.equal(successResult.response.status, 200);
+
+  // Give time for async notification to be logged
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Verify notification was emitted (check logs contain NotificationService event)
+  const notificationLogged = capturedLogs.some((log) => log.includes('[NotificationService] Event emitted'));
+  assert.equal(notificationLogged, true, 'Notification should be emitted on successful finalize');
+
+  // Reset logs
+  capturedLogs.length = 0;
+
+  // Failed finalize (duplicate member) - should NOT emit notification
+  const failureResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070010000' }), // Same student, should fail
+  });
+
+  assert.equal(failureResult.response.status, 400);
+  assert.equal(failureResult.json.code, 'DUPLICATE_MEMBER');
+
+  // Give time in case error still triggers notification
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Verify notification was NOT emitted for failed request
+  const failureNotificationLogged = capturedLogs.some((log) =>
+    log.includes('[NotificationService] Event emitted')
+  );
+  assert.equal(failureNotificationLogged, false, 'Notification should NOT be emitted on failed finalize');
+
+  // Restore console.log
+  console.log = originalLog;
+});
+
+test('[E2E NOTIFICATIONS] leader receives notification after invitee accepts', async () => {
+  const leader = await User.create({
+    email: 'e2e-notif-leader@example.com',
+    fullName: 'E2E Notification Leader',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const leaderHeaders = await authHeaderFor(leader);
+
+  // Create group with explicit leader
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({
+      groupName: 'E2E Notification Test',
+      maxMembers: 3,
+    }),
+  });
+
+  const groupId = groupResult.json.data.groupId;
+
+  // Capture logs for notification verification
+  const originalLog = console.log;
+  const allNotifications = [];
+  console.log = (...args) => {
+    const logEntry = args.join(' ');
+    allNotifications.push(logEntry);
+    originalLog(...args);
+  };
+
+  // Invitee 1 accepts (first member)
+  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070020000' }),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  // Invitee 2 accepts (second member)
+  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070020001' }),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  // Verify leader received 2 notifications by checking all logs
+  const emittedEventLines = allNotifications.filter((log) =>
+    log.includes('[NotificationService] Event emitted')
+  );
+  
+  assert.equal(emittedEventLines.length, 2, `Leader should receive 2 acceptance notifications. Got ${emittedEventLines.length} Event emitted logs`);
+
+  // Restore console.log
+  console.log = originalLog;
+});
+
+test('[E2E NOTIFICATIONS] no notification emitted when finalize returns 400', async () => {
+  const leader = await User.create({
+    email: 'no-notif-leader@example.com',
+    fullName: 'No Notification Leader',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+  });
+
+  const leaderHeaders = await authHeaderFor(leader);
+
+  // Create group with small capacity
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({
+      groupName: 'No Notification Test',
+      maxMembers: 1, // Only 1 slot
+    }),
+  });
+
+  const groupId = groupResult.json.data.groupId;
+
+  // Capture logs
+  const originalLog = console.log;
+  const allNotifications = [];
+  console.log = (...args) => {
+    const logEntry = args.join(' ');
+    if (logEntry.includes('[NotificationService]')) {
+      allNotifications.push(logEntry);
+    }
+    originalLog(...args);
+  };
+
+  // Fill the group
+  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070030000' }),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const beforeCount = allNotifications.length;
+
+  // Try to exceed capacity - should return 400, NO notification
+  const capacityExceededResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: '11070030001' }),
+  });
+
+  assert.equal(capacityExceededResult.response.status, 400);
+  assert.equal(capacityExceededResult.json.code, 'MAX_MEMBERS_REACHED');
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Verify no new notifications were emitted for the 400 response
+  const afterCount = allNotifications.length;
+  assert.equal(beforeCount, afterCount, 'No notification should be emitted for failed finalize (400)');
+
+  // Try invalid student ID - should return 400, NO notification
+  const invalidIdResult = await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+    body: JSON.stringify({ studentId: 'invalid-id' }),
+  });
+
+  assert.equal(invalidIdResult.response.status, 400);
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Verify no new notifications for validation error
+  const finalCount = allNotifications.length;
+  assert.equal(afterCount, finalCount, 'No notification should be emitted for validation errors');
+
+  // Restore console.log
+  console.log = originalLog;
 });
