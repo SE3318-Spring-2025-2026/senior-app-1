@@ -15,6 +15,7 @@ const {
   LinkedGitHubAccount,
   OAuthState,
   Group,
+  GroupAdvisorAssignment,
   AdvisorRequest,
   AuditLog,
   Notification,
@@ -57,6 +58,7 @@ test.after(async () => {
 });
 
 test.beforeEach(async () => {
+  await GroupAdvisorAssignment.destroy({ where: {} });
   await AdvisorRequest.destroy({ where: {} });
   await Notification.destroy({ where: {} });
   await AuditLog.destroy({ where: {} });
@@ -64,6 +66,344 @@ test.beforeEach(async () => {
   await LinkedGitHubAccount.destroy({ where: {} });
   await OAuthState.destroy({ where: {} });
   await User.destroy({ where: {} });
+});
+
+test('assigned advisor can retrieve a pending advisor request for decision processing', async () => {
+  const professor = await User.create({
+    email: 'pending-advisor@example.edu',
+    fullName: 'Pending Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-pending-1',
+    groupId: 'group-pending-1',
+    advisorId: professor.id,
+    teamLeaderId: 42,
+    status: 'PENDING',
+    note: 'Please review our team request.',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-pending-1', {
+    method: 'GET',
+    headers: {
+      ...(await authHeaderFor(professor)),
+    },
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.id, 'advisor-request-pending-1');
+  assert.equal(result.json.groupId, 'group-pending-1');
+  assert.equal(result.json.advisorId, professor.id);
+  assert.equal(result.json.teamLeaderId, 42);
+  assert.equal(result.json.status, 'PENDING');
+  assert.equal(result.json.note, 'Please review our team request.');
+});
+
+test('pending advisor request retrieval returns 404 for unknown request ids', async () => {
+  const professor = await User.create({
+    email: 'missing-advisor@example.edu',
+    fullName: 'Missing Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/request-does-not-exist', {
+    method: 'GET',
+    headers: {
+      ...(await authHeaderFor(professor)),
+    },
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'REQUEST_NOT_FOUND');
+});
+
+test('pending advisor request retrieval rejects non-pending requests', async () => {
+  const professor = await User.create({
+    email: 'resolved-advisor@example.edu',
+    fullName: 'Resolved Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-resolved-1',
+    groupId: 'group-resolved-1',
+    advisorId: professor.id,
+    status: 'APPROVED',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-resolved-1', {
+    method: 'GET',
+    headers: {
+      ...(await authHeaderFor(professor)),
+    },
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'REQUEST_NOT_PENDING');
+});
+
+test('pending advisor request retrieval is limited to the assigned advisor', async () => {
+  const ownerProfessor = await User.create({
+    email: 'owner-advisor@example.edu',
+    fullName: 'Owner Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  const otherProfessor = await User.create({
+    email: 'other-advisor@example.edu',
+    fullName: 'Other Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-owned-1',
+    groupId: 'group-owned-1',
+    advisorId: ownerProfessor.id,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-owned-1', {
+    method: 'GET',
+    headers: {
+      ...(await authHeaderFor(otherProfessor)),
+    },
+  });
+
+  assert.equal(result.response.status, 403);
+  assert.equal(result.json.code, 'FORBIDDEN');
+});
+
+test('assigned advisor can update the status of a pending advisor request', async () => {
+  const professor = await User.create({
+    email: 'status-update-advisor@example.edu',
+    fullName: 'Status Update Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-status-1',
+    groupId: 'group-status-1',
+    advisorId: professor.id,
+    teamLeaderId: 88,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-status-1/status', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      status: 'APPROVED',
+    }),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.id, 'advisor-request-status-1');
+  assert.equal(result.json.status, 'APPROVED');
+
+  const updatedRequest = await AdvisorRequest.findByPk('advisor-request-status-1');
+  assert.equal(updatedRequest.status, 'APPROVED');
+  assert.notEqual(updatedRequest.decidedAt, null);
+});
+
+test('pending advisor request status update rejects invalid status transitions', async () => {
+  const professor = await User.create({
+    email: 'invalid-transition-advisor@example.edu',
+    fullName: 'Invalid Transition Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-status-2',
+    groupId: 'group-status-2',
+    advisorId: professor.id,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-status-2/status', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      status: 'PENDING',
+    }),
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'INVALID_STATUS_TRANSITION');
+
+  const unchangedRequest = await AdvisorRequest.findByPk('advisor-request-status-2');
+  assert.equal(unchangedRequest.status, 'PENDING');
+});
+
+test('pending advisor request status update returns 404 for unknown request ids', async () => {
+  const professor = await User.create({
+    email: 'missing-status-advisor@example.edu',
+    fullName: 'Missing Status Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/request-missing/status', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      status: 'REJECTED',
+    }),
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'REQUEST_NOT_FOUND');
+});
+
+test('pending advisor request status update rejects non-pending requests', async () => {
+  const professor = await User.create({
+    email: 'non-pending-status-advisor@example.edu',
+    fullName: 'Non Pending Status Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-status-3',
+    groupId: 'group-status-3',
+    advisorId: professor.id,
+    status: 'REJECTED',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-status-3/status', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      status: 'APPROVED',
+    }),
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'REQUEST_NOT_PENDING');
+});
+
+test('coordinator can remove advisor assignment from a group record', async () => {
+  const coordinator = await User.create({
+    email: 'group-db-coordinator@example.edu',
+    fullName: 'Group DB Coordinator',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+  });
+
+  const advisor = await User.create({
+    email: 'group-db-advisor@example.edu',
+    fullName: 'Group DB Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  const student = await User.create({
+    email: 'group-db-student@example.edu',
+    fullName: 'Group DB Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001337',
+  });
+
+  const group = await Group.create({
+    id: 'group-remove-1',
+    name: 'Cleanup Team',
+    leaderId: String(student.id),
+    memberIds: [String(student.id)],
+    advisorId: String(advisor.id),
+  });
+
+  await GroupAdvisorAssignment.create({
+    groupId: group.id,
+    studentUserId: student.id,
+    advisorUserId: advisor.id,
+  });
+
+  const result = await request('/api/v1/group-database/groups/group-remove-1/advisor-assignment', {
+    method: 'DELETE',
+    headers: {
+      ...(await authHeaderFor(coordinator)),
+    },
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.groupId, 'group-remove-1');
+  assert.equal(result.json.advisorId, null);
+  assert.equal(result.json.previousAdvisorId, String(advisor.id));
+  assert.equal(result.json.removed, true);
+  assert.equal(result.json.removedAssignmentCount, 1);
+
+  const updatedGroup = await Group.findByPk(group.id);
+  const remainingAssignments = await GroupAdvisorAssignment.count({
+    where: { groupId: group.id },
+  });
+
+  assert.equal(updatedGroup.advisorId, null);
+  assert.equal(remainingAssignments, 0);
+});
+
+test('group advisor assignment removal returns 404 for unknown group ids', async () => {
+  const coordinator = await User.create({
+    email: 'missing-group-coordinator@example.edu',
+    fullName: 'Missing Group Coordinator',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+  });
+
+  const result = await request('/api/v1/group-database/groups/group-missing/advisor-assignment', {
+    method: 'DELETE',
+    headers: {
+      ...(await authHeaderFor(coordinator)),
+    },
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'GROUP_NOT_FOUND');
+});
+
+test('group advisor assignment removal rejects groups without an assignment', async () => {
+  const coordinator = await User.create({
+    email: 'no-assignment-coordinator@example.edu',
+    fullName: 'No Assignment Coordinator',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+  });
+
+  await Group.create({
+    id: 'group-remove-2',
+    name: 'No Advisor Team',
+    memberIds: [],
+    advisorId: null,
+  });
+
+  const result = await request('/api/v1/group-database/groups/group-remove-2/advisor-assignment', {
+    method: 'DELETE',
+    headers: {
+      ...(await authHeaderFor(coordinator)),
+    },
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'GROUP_HAS_NO_ADVISOR');
 });
 
 test('admin can log in with email and password', async () => {
@@ -300,6 +640,538 @@ test('advisor notifications endpoint returns only advisee requests for the authe
   assert.equal(result.json[0].requestStatus, 'PENDING');
 });
 
+test('advisor can view group transfer notifications relevant only to the authenticated advisor', async () => {
+  const professor = await User.create({
+    email: 'transfer-advisor@example.edu',
+    fullName: 'Transfer Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherProfessor = await User.create({
+    email: 'other-transfer-advisor@example.edu',
+    fullName: 'Other Transfer Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await Group.create({
+    id: 'group-transfer-1',
+    name: 'Team Orion',
+    memberIds: [],
+    advisorId: String(professor.id),
+  });
+
+  await Notification.create({
+    userId: professor.id,
+    type: 'GROUP_TRANSFER',
+    payload: JSON.stringify({
+      groupId: 'group-transfer-1',
+      groupName: 'Team Orion',
+      message: 'Team Orion has been assigned to you through transfer.',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: professor.id,
+    type: 'ADVISEE_REQUEST',
+    payload: JSON.stringify({
+      requestId: 'ignore-me',
+      groupId: 'group-ignore',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: otherProfessor.id,
+    type: 'GROUP_TRANSFER',
+    payload: JSON.stringify({
+      groupId: 'group-transfer-2',
+      groupName: 'Team Nova',
+      message: 'Team Nova has been assigned to you through transfer.',
+    }),
+    status: 'SENT',
+  });
+
+  const result = await request('/api/v1/advisors/notifications/group-transfers', {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(Array.isArray(result.json), true);
+  assert.equal(result.json.length, 1);
+  assert.equal(result.json[0].type, 'GROUP_TRANSFER');
+  assert.equal(result.json[0].groupId, 'group-transfer-1');
+  assert.equal(result.json[0].groupName, 'Team Orion');
+});
+
+test('group transfer notifications endpoint returns an empty list when there are no relevant notifications', async () => {
+  const professor = await User.create({
+    email: 'empty-transfer-advisor@example.edu',
+    fullName: 'Empty Transfer Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/advisors/notifications/group-transfers', {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(result.json, []);
+});
+
+test('team leader can view advisor transfer notifications relevant only to the authenticated student', async () => {
+  const leader = await User.create({
+    email: 'team-leader-transfer@example.edu',
+    fullName: 'Team Leader Transfer',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001777',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherLeader = await User.create({
+    email: 'other-team-leader-transfer@example.edu',
+    fullName: 'Other Team Leader Transfer',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001778',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const advisor = await User.create({
+    email: 'new-advisor-transfer@example.edu',
+    fullName: 'New Advisor Transfer',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await Professor.create({
+    userId: advisor.id,
+    department: 'Software Engineering',
+  });
+
+  await Group.create({
+    id: 'team-leader-group-transfer-1',
+    name: 'Team Helios',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+    advisorId: String(advisor.id),
+  });
+
+  await Notification.create({
+    userId: leader.id,
+    type: 'ADVISOR_TRANSFER',
+    payload: JSON.stringify({
+      groupId: 'team-leader-group-transfer-1',
+      groupName: 'Team Helios',
+      newAdvisorId: advisor.id,
+      newAdvisorName: 'New Advisor Transfer',
+      newAdvisorEmail: 'new-advisor-transfer@example.edu',
+      message: 'Your group advisor has been changed to New Advisor Transfer.',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: otherLeader.id,
+    type: 'ADVISOR_TRANSFER',
+    payload: JSON.stringify({
+      groupId: 'team-leader-group-transfer-2',
+      groupName: 'Team Nova',
+      newAdvisorId: advisor.id,
+      newAdvisorName: 'New Advisor Transfer',
+    }),
+    status: 'SENT',
+  });
+
+  const result = await request('/api/v1/team-leader/notifications/advisor-transfers', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(Array.isArray(result.json), true);
+  assert.equal(result.json.length, 1);
+  assert.equal(result.json[0].type, 'ADVISOR_TRANSFER');
+  assert.equal(result.json[0].groupId, 'team-leader-group-transfer-1');
+  assert.equal(result.json[0].groupName, 'Team Helios');
+  assert.equal(result.json[0].newAdvisor.fullName, 'New Advisor Transfer');
+  assert.equal(result.json[0].newAdvisor.email, 'new-advisor-transfer@example.edu');
+});
+
+test('team leader advisor transfer notifications endpoint returns an empty list when there are no relevant notifications', async () => {
+  const leader = await User.create({
+    email: 'empty-team-leader-transfer@example.edu',
+    fullName: 'Empty Team Leader Transfer',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001779',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/team-leader/notifications/advisor-transfers', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(result.json, []);
+});
+
+test('team leader can view advisor decision notifications relevant only to the authenticated student', async () => {
+  const leader = await User.create({
+    email: 'team-leader-decision@example.edu',
+    fullName: 'Team Leader Decision',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001780',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherLeader = await User.create({
+    email: 'other-team-leader-decision@example.edu',
+    fullName: 'Other Team Leader Decision',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001781',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await Group.create({
+    id: 'team-leader-group-decision-1',
+    name: 'Team Hermes',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+  });
+
+  await Notification.create({
+    userId: leader.id,
+    type: 'ADVISOR_DECISION',
+    payload: JSON.stringify({
+      requestId: 'advisor-request-decision-1',
+      groupId: 'team-leader-group-decision-1',
+      groupName: 'Team Hermes',
+      advisorDecision: 'APPROVED',
+      advisorName: 'Decision Advisor',
+      message: 'Advisor request for Team Hermes was approved.',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: otherLeader.id,
+    type: 'ADVISOR_DECISION',
+    payload: JSON.stringify({
+      requestId: 'advisor-request-decision-2',
+      groupId: 'team-leader-group-decision-2',
+      groupName: 'Team Iris',
+      advisorDecision: 'REJECTED',
+      message: 'Advisor request for Team Iris was rejected.',
+    }),
+    status: 'SENT',
+  });
+
+  const result = await request('/api/v1/team-leader/notifications/advisor-decisions', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(Array.isArray(result.json), true);
+  assert.equal(result.json.length, 1);
+  assert.equal(result.json[0].type, 'ADVISOR_DECISION');
+  assert.equal(result.json[0].requestId, 'advisor-request-decision-1');
+  assert.equal(result.json[0].groupId, 'team-leader-group-decision-1');
+  assert.equal(result.json[0].groupName, 'Team Hermes');
+  assert.equal(result.json[0].advisorDecision, 'APPROVED');
+});
+
+test('team leader advisor decision notifications endpoint returns an empty list when there are no relevant notifications', async () => {
+  const leader = await User.create({
+    email: 'empty-team-leader-decision@example.edu',
+    fullName: 'Empty Team Leader Decision',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001782',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/team-leader/notifications/advisor-decisions', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(result.json, []);
+});
+
+test('team leader can view advisor release notifications relevant only to the authenticated student', async () => {
+  const leader = await User.create({
+    email: 'team-leader-release@example.edu',
+    fullName: 'Team Leader Release',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001783',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherLeader = await User.create({
+    email: 'other-team-leader-release@example.edu',
+    fullName: 'Other Team Leader Release',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001784',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const advisor = await User.create({
+    email: 'released-advisor@example.edu',
+    fullName: 'Released Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await Group.create({
+    id: 'team-leader-group-release-1',
+    name: 'Team Apollo',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+  });
+
+  await Notification.create({
+    userId: leader.id,
+    type: 'ADVISOR_RELEASE',
+    payload: JSON.stringify({
+      groupId: 'team-leader-group-release-1',
+      groupName: 'Team Apollo',
+      previousAdvisorId: advisor.id,
+      previousAdvisorName: 'Released Advisor',
+      previousAdvisorEmail: 'released-advisor@example.edu',
+      message: 'Team Apollo is no longer assigned to advisor Released Advisor.',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: otherLeader.id,
+    type: 'ADVISOR_RELEASE',
+    payload: JSON.stringify({
+      groupId: 'team-leader-group-release-2',
+      groupName: 'Team Aurora',
+      previousAdvisorName: 'Released Advisor',
+      message: 'Team Aurora is no longer assigned to advisor Released Advisor.',
+    }),
+    status: 'SENT',
+  });
+
+  const result = await request('/api/v1/team-leader/notifications/advisor-releases', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(Array.isArray(result.json), true);
+  assert.equal(result.json.length, 1);
+  assert.equal(result.json[0].type, 'ADVISOR_RELEASE');
+  assert.equal(result.json[0].groupId, 'team-leader-group-release-1');
+  assert.equal(result.json[0].groupName, 'Team Apollo');
+  assert.equal(result.json[0].previousAdvisor.fullName, 'Released Advisor');
+  assert.equal(result.json[0].previousAdvisor.email, 'released-advisor@example.edu');
+});
+
+test('team leader advisor release notifications endpoint returns an empty list when there are no relevant notifications', async () => {
+  const leader = await User.create({
+    email: 'empty-team-leader-release@example.edu',
+    fullName: 'Empty Team Leader Release',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001785',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/team-leader/notifications/advisor-releases', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(result.json, []);
+});
+
+test('coordinator advisor transfer persists notifications for both advisor and team leader', async () => {
+  const coordinator = await User.create({
+    email: 'coordinator-transfer-notify@example.edu',
+    fullName: 'Coordinator Transfer Notify',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const leader = await User.create({
+    email: 'leader-transfer-notify@example.edu',
+    fullName: 'Leader Transfer Notify',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001888',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const currentAdvisor = await User.create({
+    email: 'current-advisor-transfer@example.edu',
+    fullName: 'Current Advisor Transfer',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const newAdvisor = await User.create({
+    email: 'new-advisor-transfer-notify@example.edu',
+    fullName: 'New Advisor Transfer Notify',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await Professor.create({
+    userId: currentAdvisor.id,
+    department: 'Software Engineering',
+  });
+
+  await Professor.create({
+    userId: newAdvisor.id,
+    department: 'Software Engineering',
+  });
+
+  const group = await Group.create({
+    id: 'group-transfer-notify-1',
+    name: 'Team Atlas',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+    advisorId: String(currentAdvisor.id),
+  });
+
+  await GroupAdvisorAssignment.create({
+    groupId: group.id,
+    studentUserId: leader.id,
+    advisorUserId: currentAdvisor.id,
+  });
+
+  const result = await request('/api/v1/coordinator/groups/group-transfer-notify-1/advisor-transfer', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({
+      newAdvisorId: newAdvisor.id,
+    }),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.advisorId, String(newAdvisor.id));
+
+  const advisorNotification = await Notification.findOne({
+    where: {
+      userId: newAdvisor.id,
+      type: 'GROUP_TRANSFER',
+    },
+    order: [['createdAt', 'DESC']],
+  });
+
+  const leaderNotification = await Notification.findOne({
+    where: {
+      userId: leader.id,
+      type: 'ADVISOR_TRANSFER',
+    },
+    order: [['createdAt', 'DESC']],
+  });
+
+  assert.equal(Boolean(advisorNotification), true);
+  assert.equal(Boolean(leaderNotification), true);
+
+  const advisorPayload = JSON.parse(advisorNotification.payload);
+  const leaderPayload = JSON.parse(leaderNotification.payload);
+
+  assert.equal(advisorPayload.groupId, 'group-transfer-notify-1');
+  assert.equal(advisorPayload.groupName, 'Team Atlas');
+  assert.equal(leaderPayload.groupId, 'group-transfer-notify-1');
+  assert.equal(leaderPayload.groupName, 'Team Atlas');
+  assert.equal(leaderPayload.newAdvisorId, newAdvisor.id);
+  assert.equal(leaderPayload.newAdvisorName, 'New Advisor Transfer Notify');
+  assert.equal(leaderPayload.newAdvisorEmail, 'new-advisor-transfer-notify@example.edu');
+});
+
+test('coordinator advisor release persists a notification for the team leader', async () => {
+  const coordinator = await User.create({
+    email: 'coordinator-release-notify@example.edu',
+    fullName: 'Coordinator Release Notify',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const leader = await User.create({
+    email: 'leader-release-notify@example.edu',
+    fullName: 'Leader Release Notify',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001889',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const advisor = await User.create({
+    email: 'advisor-release-notify@example.edu',
+    fullName: 'Advisor Release Notify',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const group = await Group.create({
+    id: 'group-release-notify-1',
+    name: 'Team Zephyr',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+    advisorId: String(advisor.id),
+  });
+
+  await GroupAdvisorAssignment.create({
+    groupId: group.id,
+    studentUserId: leader.id,
+    advisorUserId: advisor.id,
+  });
+
+  const result = await request('/api/v1/group-database/groups/group-release-notify-1/advisor-assignment', {
+    method: 'DELETE',
+    headers: {
+      ...(await authHeaderFor(coordinator)),
+    },
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.groupId, 'group-release-notify-1');
+  assert.equal(result.json.removed, true);
+
+  const leaderNotification = await Notification.findOne({
+    where: {
+      userId: leader.id,
+      type: 'ADVISOR_RELEASE',
+    },
+    order: [['createdAt', 'DESC']],
+  });
+
+  assert.equal(Boolean(leaderNotification), true);
+
+  const leaderPayload = JSON.parse(leaderNotification.payload);
+  assert.equal(leaderPayload.groupId, 'group-release-notify-1');
+  assert.equal(leaderPayload.groupName, 'Team Zephyr');
+  assert.equal(leaderPayload.previousAdvisorId, advisor.id);
+  assert.equal(leaderPayload.previousAdvisorName, 'Advisor Release Notify');
+  assert.equal(leaderPayload.previousAdvisorEmail, 'advisor-release-notify@example.edu');
+});
+
 test('assigned advisor can approve a pending advisor request', async () => {
   const professor = await User.create({
     email: 'approve-advisor@example.edu',
@@ -352,8 +1224,26 @@ test('assigned advisor can approve a pending advisor request', async () => {
 
   const updatedRequest = await AdvisorRequest.findByPk('advisor-request-1');
   const updatedGroup = await Group.findByPk(group.id);
+  const leaderNotification = await Notification.findOne({
+    where: {
+      userId: leader.id,
+      type: 'ADVISOR_DECISION',
+    },
+    order: [['createdAt', 'DESC']],
+  });
+
   assert.equal(updatedRequest.status, 'APPROVED');
   assert.equal(updatedGroup.advisorId, String(professor.id));
+  assert.equal(Boolean(leaderNotification), true);
+
+  const leaderPayload = JSON.parse(leaderNotification.payload);
+  assert.equal(leaderPayload.requestId, 'advisor-request-1');
+  assert.equal(leaderPayload.groupId, group.id);
+  assert.equal(leaderPayload.groupName, 'Team Atlas');
+  assert.equal(leaderPayload.advisorDecision, 'APPROVED');
+  assert.equal(leaderPayload.advisorId, professor.id);
+  assert.equal(leaderPayload.advisorName, 'Approve Advisor');
+  assert.equal(leaderPayload.advisorEmail, 'approve-advisor@example.edu');
 });
 
 test('advisor request cannot be decided twice', async () => {

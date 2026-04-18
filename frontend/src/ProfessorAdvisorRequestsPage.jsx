@@ -35,19 +35,34 @@ function buildPreview(entry) {
   return entry.message || 'A team leader submitted an advisor request for your review.';
 }
 
+function buildTransferSubject(entry) {
+  const groupName = entry.groupName || entry.groupId || 'Unknown group';
+  return `${groupName} transfer notification`;
+}
+
+function buildTransferPreview(entry) {
+  return entry.message || 'A new group has been assigned to you through transfer.';
+}
+
 export default function ProfessorAdvisorRequestsPage() {
   const [requests, setRequests] = useState([]);
+  const [transferNotifications, setTransferNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingTransfers, setLoadingTransfers] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [transferLoadError, setTransferLoadError] = useState('');
   const [selectedRequestId, setSelectedRequestId] = useState(null);
   const [submittingDecision, setSubmittingDecision] = useState('');
   const [feedback, setFeedback] = useState({ type: '', message: '' });
 
   useEffect(() => {
-    const controller = new AbortController();
+    let active = true;
+    let timeoutId;
     const token = window.localStorage.getItem('professorToken') || window.localStorage.getItem('authToken');
 
     async function loadRequests() {
+      const controller = new AbortController();
+
       try {
         const response = await fetch('/api/v1/advisors/notifications/advisee-requests', {
           headers: token
@@ -61,30 +76,102 @@ export default function ProfessorAdvisorRequestsPage() {
         const payload = await response.json().catch(() => []);
 
         if (!response.ok) {
+          if (!active) {
+            return;
+          }
+
           setLoadError('Advisor requests could not be loaded.');
           setRequests([]);
           return;
         }
 
+        if (!active) {
+          return;
+        }
+
         const rows = Array.isArray(payload) ? payload : payload.notifications || [];
         setRequests(rows);
-        setSelectedRequestId((current) => current || rows[0]?.id || null);
+        setSelectedRequestId((current) => (
+          rows.some((entry) => entry.id === current) ? current : rows[0]?.id || null
+        ));
         setLoadError('');
       } catch (error) {
-        if (error.name === 'AbortError') {
+        if (error.name === 'AbortError' || !active) {
           return;
         }
 
         setLoadError('Advisor requests could not be loaded.');
         setRequests([]);
       } finally {
+        if (!active) {
+          return;
+        }
+
         setLoading(false);
+        timeoutId = window.setTimeout(loadRequests, 15000);
       }
     }
 
     loadRequests();
 
-    return () => controller.abort();
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    let timeoutId;
+    const token = window.localStorage.getItem('professorToken') || window.localStorage.getItem('authToken');
+
+    async function loadTransfers() {
+      try {
+        const response = await fetch('/api/v1/advisors/notifications/group-transfers', {
+          headers: token
+            ? {
+              Authorization: `Bearer ${token}`,
+            }
+            : {},
+        });
+
+        const payload = await response.json().catch(() => []);
+
+        if (!active) {
+          return;
+        }
+
+        if (!response.ok) {
+          setTransferLoadError('Group transfer notifications could not be loaded.');
+          setTransferNotifications([]);
+        } else {
+          const rows = Array.isArray(payload) ? payload : payload.notifications || [];
+          setTransferNotifications(rows);
+          setTransferLoadError('');
+        }
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        setTransferLoadError('Group transfer notifications could not be loaded.');
+        setTransferNotifications([]);
+      } finally {
+        if (!active) {
+          return;
+        }
+
+        setLoadingTransfers(false);
+        timeoutId = window.setTimeout(loadTransfers, 15000);
+      }
+    }
+
+    loadTransfers();
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
   }, []);
 
   const selectedRequest = requests.find((entry) => entry.id === selectedRequestId) || null;
@@ -154,11 +241,42 @@ export default function ProfessorAdvisorRequestsPage() {
         <p className="eyebrow">Advisor Inbox</p>
         <h1>Incoming advisor requests</h1>
         <p className="subtitle">
-          Review requests submitted by team leaders. New entries are fetched from the backend when this page opens.
+          Review requests submitted by team leaders and monitor newly transferred groups. Notifications refresh automatically while this page stays open.
         </p>
       </section>
 
       <section className="single-panel">
+        <div className="panel">
+          <div className="mail-sidebar-header">
+            <p className="mailbox-title">Group Transfer Notifications</p>
+            <p className="mailbox-count">{transferNotifications.length} notifications</p>
+          </div>
+
+          {loadingTransfers && (
+            <p className="mail-state" aria-live="polite">Loading group transfer notifications...</p>
+          )}
+
+          {!loadingTransfers && transferLoadError && (
+            <p className="mail-state" aria-live="polite">{transferLoadError}</p>
+          )}
+
+          {!loadingTransfers && !transferLoadError && transferNotifications.length === 0 && (
+            <p className="mail-state" aria-live="polite">No transfer notifications yet.</p>
+          )}
+
+          {!loadingTransfers && !transferLoadError && transferNotifications.length > 0 && (
+            <section className="mail-nav" aria-label="Group transfer notification list">
+              {transferNotifications.map((entry) => (
+                <article key={entry.id} className="mail-nav-item">
+                  <span className="mail-nav-time">{formatDate(entry.createdAt)}</span>
+                  <span className="mail-nav-subject">{buildTransferSubject(entry)}</span>
+                  <span className="mail-nav-preview">{buildTransferPreview(entry)}</span>
+                </article>
+              ))}
+            </section>
+          )}
+        </div>
+
         {loading && (
           <p className="mail-state" aria-live="polite">Loading advisor requests...</p>
         )}

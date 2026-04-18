@@ -5,6 +5,7 @@ import AdminLoginPage from './AdminLoginPage';
 import AdminProfessorCreatePage from './AdminProfessorCreatePage';
 import AuthPage from './AuthPage';
 import CoordinatorGroupMembershipPage from './CoordinatorGroupMembershipPage';
+import CoordinatorAdvisorTransferPage from './CoordinatorAdvisorTransferPage';
 import CoordinatorHomePage from './CoordinatorHomePage';
 import CoordinatorLoginPage from './CoordinatorLoginPage';
 import CoordinatorStudentIdUploadPage from './CoordinatorStudentIdUploadPage';
@@ -47,6 +48,7 @@ export default function App() {
               <Route path="/coordinator" element={<CoordinatorHomePage />} />
               <Route path="/coordinator/student-id-registry/import" element={<CoordinatorStudentIdUploadPage />} />
               <Route path="/coordinator/groups/manage" element={<CoordinatorGroupMembershipPage />} />
+              <Route path="/coordinator/groups/transfer" element={<CoordinatorAdvisorTransferPage />} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="*" element={<HomePage />} />
             </Route>
