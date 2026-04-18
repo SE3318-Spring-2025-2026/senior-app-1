@@ -175,4 +175,64 @@ router.get(
   },
 );
 
+router.get(
+  '/notifications/advisor-releases',
+  authenticate,
+  authorize(['STUDENT']),
+  async (req, res) => {
+    try {
+      const rows = await Notification.findAll({
+        where: {
+          userId: req.user.id,
+          type: 'ADVISOR_RELEASE',
+        },
+        order: [['createdAt', 'DESC']],
+        limit: 50,
+      });
+
+      const groupIds = rows
+        .map((row) => parsePayload(row.payload).groupId)
+        .filter(Boolean);
+
+      const groups = groupIds.length > 0
+        ? await Group.findAll({
+          where: {
+            id: {
+              [Op.in]: groupIds,
+            },
+          },
+        })
+        : [];
+
+      const groupMap = new Map(groups.map((group) => [String(group.id), group]));
+
+      const notifications = rows.map((row) => {
+        const payload = parsePayload(row.payload);
+        const group = payload.groupId ? groupMap.get(String(payload.groupId)) : null;
+
+        return {
+          id: row.id,
+          type: 'ADVISOR_RELEASE',
+          recipientId: req.user.id,
+          groupId: payload.groupId ?? null,
+          groupName: payload.groupName ?? group?.name ?? null,
+          message: payload.message || 'Your group advisor has been released from the group.',
+          createdAt: row.createdAt,
+          status: row.status,
+          previousAdvisor: {
+            id: payload.previousAdvisorId ?? null,
+            fullName: payload.previousAdvisorName ?? null,
+            email: payload.previousAdvisorEmail ?? null,
+          },
+        };
+      });
+
+      return res.status(200).json(notifications);
+    } catch (error) {
+      console.error('Error in team-leader/notifications/advisor-releases:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
+
 module.exports = router;

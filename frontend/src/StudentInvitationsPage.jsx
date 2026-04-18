@@ -63,6 +63,12 @@ function formatPreview(entry) {
       ? `Advisor request for ${groupLabel} was ${decision === 'APPROVED' ? 'approved' : 'rejected'}.`
       : `Your advisor request was ${decision === 'APPROVED' ? 'approved' : 'rejected'}.`;
   }
+  if (entry.type === 'ADVISOR_RELEASE') {
+    const advisorName = entry.previousAdvisor?.fullName || entry.payload?.previousAdvisorName || 'the previous advisor';
+    return groupLabel
+      ? `${advisorName} is no longer assigned to ${groupLabel}.`
+      : `${advisorName} is no longer assigned to your group.`;
+  }
   return 'Notification received from local mailbox.';
 }
 
@@ -95,6 +101,19 @@ function formatAdvisorDecisionPreview(entry) {
     : `Your advisor request was ${decision === 'APPROVED' ? 'approved' : 'rejected'}.`;
 }
 
+function formatAdvisorReleaseSubject(entry) {
+  const groupLabel = getGroupLabel(entry);
+  return groupLabel ? `Advisor released: ${groupLabel}` : 'Advisor release update';
+}
+
+function formatAdvisorReleasePreview(entry) {
+  const advisorName = entry.previousAdvisor?.fullName || entry.payload?.previousAdvisorName || 'the previous advisor';
+  const groupLabel = getGroupLabel(entry);
+  return groupLabel
+    ? `${advisorName} left ${groupLabel}.`
+    : `${advisorName} left your group.`;
+}
+
 function formatDate(value) {
   if (!value) {
     return 'Now';
@@ -124,11 +143,14 @@ export default function StudentInvitationsPage() {
   const [mailbox, setMailbox] = useState([]);
   const [advisorTransfers, setAdvisorTransfers] = useState([]);
   const [advisorDecisions, setAdvisorDecisions] = useState([]);
+  const [advisorReleases, setAdvisorReleases] = useState([]);
   const [selectedMailId, setSelectedMailId] = useState(null);
   const [loadingTransfers, setLoadingTransfers] = useState(true);
   const [transferLoadError, setTransferLoadError] = useState('');
   const [loadingDecisions, setLoadingDecisions] = useState(true);
   const [decisionLoadError, setDecisionLoadError] = useState('');
+  const [loadingReleases, setLoadingReleases] = useState(true);
+  const [releaseLoadError, setReleaseLoadError] = useState('');
 
   useEffect(() => {
     fetchInvitations();
@@ -199,6 +221,57 @@ export default function StudentInvitationsPage() {
     }
 
     loadAdvisorTransfers();
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    let timeoutId;
+    const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
+
+    async function loadAdvisorReleases() {
+      try {
+        const response = await fetch('/api/v1/team-leader/notifications/advisor-releases', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const payload = await response.json().catch(() => []);
+        if (!active) {
+          return;
+        }
+
+        if (!response.ok) {
+          setReleaseLoadError('Advisor release notifications could not be loaded.');
+          setAdvisorReleases([]);
+        } else {
+          const rows = Array.isArray(payload) ? payload : payload.notifications || [];
+          setAdvisorReleases(rows);
+          setReleaseLoadError('');
+        }
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        setReleaseLoadError('Advisor release notifications could not be loaded.');
+        setAdvisorReleases([]);
+      } finally {
+        if (!active) {
+          return;
+        }
+
+        setLoadingReleases(false);
+        timeoutId = window.setTimeout(loadAdvisorReleases, 15000);
+      }
+    }
+
+    loadAdvisorReleases();
 
     return () => {
       active = false;
@@ -306,6 +379,37 @@ export default function StudentInvitationsPage() {
 
   return (
     <main className="page page-mailbox">
+      <section className="panel">
+        <div className="mail-sidebar-header">
+          <p className="mailbox-title">Advisor Release Notifications</p>
+          <p className="mailbox-count">{advisorReleases.length} notifications</p>
+        </div>
+
+        {loadingReleases && (
+          <p className="mail-state" aria-live="polite">Loading advisor release notifications...</p>
+        )}
+
+        {!loadingReleases && releaseLoadError && (
+          <p className="mail-state" aria-live="polite">{releaseLoadError}</p>
+        )}
+
+        {!loadingReleases && !releaseLoadError && advisorReleases.length === 0 && (
+          <p className="mail-state" aria-live="polite">No advisor release notifications yet.</p>
+        )}
+
+        {!loadingReleases && !releaseLoadError && advisorReleases.length > 0 && (
+          <section className="mail-nav" aria-label="Advisor release notification list">
+            {advisorReleases.map((entry) => (
+              <article key={entry.id} className="mail-nav-item">
+                <span className="mail-nav-time">{formatDate(entry.createdAt)}</span>
+                <span className="mail-nav-subject">{formatAdvisorReleaseSubject(entry)}</span>
+                <span className="mail-nav-preview">{formatAdvisorReleasePreview(entry)}</span>
+              </article>
+            ))}
+          </section>
+        )}
+      </section>
+
       <section className="panel">
         <div className="mail-sidebar-header">
           <p className="mailbox-title">Advisor Decision Notifications</p>

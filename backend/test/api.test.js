@@ -908,6 +908,98 @@ test('team leader advisor decision notifications endpoint returns an empty list 
   assert.deepEqual(result.json, []);
 });
 
+test('team leader can view advisor release notifications relevant only to the authenticated student', async () => {
+  const leader = await User.create({
+    email: 'team-leader-release@example.edu',
+    fullName: 'Team Leader Release',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001783',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherLeader = await User.create({
+    email: 'other-team-leader-release@example.edu',
+    fullName: 'Other Team Leader Release',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001784',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const advisor = await User.create({
+    email: 'released-advisor@example.edu',
+    fullName: 'Released Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await Group.create({
+    id: 'team-leader-group-release-1',
+    name: 'Team Apollo',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+  });
+
+  await Notification.create({
+    userId: leader.id,
+    type: 'ADVISOR_RELEASE',
+    payload: JSON.stringify({
+      groupId: 'team-leader-group-release-1',
+      groupName: 'Team Apollo',
+      previousAdvisorId: advisor.id,
+      previousAdvisorName: 'Released Advisor',
+      previousAdvisorEmail: 'released-advisor@example.edu',
+      message: 'Team Apollo is no longer assigned to advisor Released Advisor.',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: otherLeader.id,
+    type: 'ADVISOR_RELEASE',
+    payload: JSON.stringify({
+      groupId: 'team-leader-group-release-2',
+      groupName: 'Team Aurora',
+      previousAdvisorName: 'Released Advisor',
+      message: 'Team Aurora is no longer assigned to advisor Released Advisor.',
+    }),
+    status: 'SENT',
+  });
+
+  const result = await request('/api/v1/team-leader/notifications/advisor-releases', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(Array.isArray(result.json), true);
+  assert.equal(result.json.length, 1);
+  assert.equal(result.json[0].type, 'ADVISOR_RELEASE');
+  assert.equal(result.json[0].groupId, 'team-leader-group-release-1');
+  assert.equal(result.json[0].groupName, 'Team Apollo');
+  assert.equal(result.json[0].previousAdvisor.fullName, 'Released Advisor');
+  assert.equal(result.json[0].previousAdvisor.email, 'released-advisor@example.edu');
+});
+
+test('team leader advisor release notifications endpoint returns an empty list when there are no relevant notifications', async () => {
+  const leader = await User.create({
+    email: 'empty-team-leader-release@example.edu',
+    fullName: 'Empty Team Leader Release',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001785',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/team-leader/notifications/advisor-releases', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(result.json, []);
+});
+
 test('coordinator advisor transfer persists notifications for both advisor and team leader', async () => {
   const coordinator = await User.create({
     email: 'coordinator-transfer-notify@example.edu',
@@ -1009,6 +1101,75 @@ test('coordinator advisor transfer persists notifications for both advisor and t
   assert.equal(leaderPayload.newAdvisorId, newAdvisor.id);
   assert.equal(leaderPayload.newAdvisorName, 'New Advisor Transfer Notify');
   assert.equal(leaderPayload.newAdvisorEmail, 'new-advisor-transfer-notify@example.edu');
+});
+
+test('coordinator advisor release persists a notification for the team leader', async () => {
+  const coordinator = await User.create({
+    email: 'coordinator-release-notify@example.edu',
+    fullName: 'Coordinator Release Notify',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const leader = await User.create({
+    email: 'leader-release-notify@example.edu',
+    fullName: 'Leader Release Notify',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001889',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const advisor = await User.create({
+    email: 'advisor-release-notify@example.edu',
+    fullName: 'Advisor Release Notify',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const group = await Group.create({
+    id: 'group-release-notify-1',
+    name: 'Team Zephyr',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+    advisorId: String(advisor.id),
+  });
+
+  await GroupAdvisorAssignment.create({
+    groupId: group.id,
+    studentUserId: leader.id,
+    advisorUserId: advisor.id,
+  });
+
+  const result = await request('/api/v1/group-database/groups/group-release-notify-1/advisor-assignment', {
+    method: 'DELETE',
+    headers: {
+      ...(await authHeaderFor(coordinator)),
+    },
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.groupId, 'group-release-notify-1');
+  assert.equal(result.json.removed, true);
+
+  const leaderNotification = await Notification.findOne({
+    where: {
+      userId: leader.id,
+      type: 'ADVISOR_RELEASE',
+    },
+    order: [['createdAt', 'DESC']],
+  });
+
+  assert.equal(Boolean(leaderNotification), true);
+
+  const leaderPayload = JSON.parse(leaderNotification.payload);
+  assert.equal(leaderPayload.groupId, 'group-release-notify-1');
+  assert.equal(leaderPayload.groupName, 'Team Zephyr');
+  assert.equal(leaderPayload.previousAdvisorId, advisor.id);
+  assert.equal(leaderPayload.previousAdvisorName, 'Advisor Release Notify');
+  assert.equal(leaderPayload.previousAdvisorEmail, 'advisor-release-notify@example.edu');
 });
 
 test('assigned advisor can approve a pending advisor request', async () => {
