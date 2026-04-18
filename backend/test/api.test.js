@@ -177,6 +177,128 @@ test('pending advisor request retrieval is limited to the assigned advisor', asy
   assert.equal(result.json.code, 'FORBIDDEN');
 });
 
+test('assigned advisor can update the status of a pending advisor request', async () => {
+  const professor = await User.create({
+    email: 'status-update-advisor@example.edu',
+    fullName: 'Status Update Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-status-1',
+    groupId: 'group-status-1',
+    advisorId: professor.id,
+    teamLeaderId: 88,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-status-1/status', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      status: 'APPROVED',
+    }),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.id, 'advisor-request-status-1');
+  assert.equal(result.json.status, 'APPROVED');
+
+  const updatedRequest = await AdvisorRequest.findByPk('advisor-request-status-1');
+  assert.equal(updatedRequest.status, 'APPROVED');
+  assert.notEqual(updatedRequest.decidedAt, null);
+});
+
+test('pending advisor request status update rejects invalid status transitions', async () => {
+  const professor = await User.create({
+    email: 'invalid-transition-advisor@example.edu',
+    fullName: 'Invalid Transition Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-status-2',
+    groupId: 'group-status-2',
+    advisorId: professor.id,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-status-2/status', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      status: 'PENDING',
+    }),
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'INVALID_STATUS_TRANSITION');
+
+  const unchangedRequest = await AdvisorRequest.findByPk('advisor-request-status-2');
+  assert.equal(unchangedRequest.status, 'PENDING');
+});
+
+test('pending advisor request status update returns 404 for unknown request ids', async () => {
+  const professor = await User.create({
+    email: 'missing-status-advisor@example.edu',
+    fullName: 'Missing Status Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/request-missing/status', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      status: 'REJECTED',
+    }),
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'REQUEST_NOT_FOUND');
+});
+
+test('pending advisor request status update rejects non-pending requests', async () => {
+  const professor = await User.create({
+    email: 'non-pending-status-advisor@example.edu',
+    fullName: 'Non Pending Status Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-status-3',
+    groupId: 'group-status-3',
+    advisorId: professor.id,
+    status: 'REJECTED',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-status-3/status', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      status: 'APPROVED',
+    }),
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'REQUEST_NOT_PENDING');
+});
+
 test('admin can log in with email and password', async () => {
   const password = 'AdminPass2026!';
 
