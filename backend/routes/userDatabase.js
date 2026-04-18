@@ -6,6 +6,7 @@ const {
   importValidStudentIds,
   updateProfessorPassword,
 } = require('../controllers/userDatabaseController');
+const { syncUserDatabaseAssignment } = require('../controllers/mentorMatchingController');
 
 const router = express.Router();
 
@@ -17,6 +18,12 @@ router.patch(
   authenticate,
   authorize(['ADMIN']),
   updateProfessorPassword
+);
+router.patch(
+  '/groups/:groupId/advisor-assignment',
+  authenticate,
+  authorize(['COORDINATOR']),
+  syncUserDatabaseAssignment,
 );
 
 module.exports = router;

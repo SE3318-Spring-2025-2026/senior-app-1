@@ -33,6 +33,14 @@ const coordinatorTools = [
     cta: 'Open Membership Manager',
     status: 'Ready',
   },
+  {
+    eyebrow: 'Groups',
+    title: 'Advisor Transfer',
+    description: 'Transfer a group from its current advisor to another active advisor.',
+    href: '/coordinator/groups/transfer',
+    cta: 'Open Transfer Tool',
+    status: 'Ready',
+  },
 ];
 
 export default function CoordinatorHomePage() {
