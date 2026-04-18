@@ -80,6 +80,9 @@ function AdvisorRequestDetailsView({ requestId, authToken, onClose }) {
     });
   };
 
+  const professorUser = request?.professor?.user || request?.advisor || null;
+  const teamLeader = request?.group?.teamLeader || request?.teamLeader || null;
+
   if (loading) {
     return (
       <div className="advisor-request-view loading">
@@ -168,22 +171,40 @@ function AdvisorRequestDetailsView({ requestId, authToken, onClose }) {
                 <label>Group Name</label>
                 <span className="value">{request.group.name}</span>
               </div>
+              {teamLeader && (
+                <>
+                  <div className="info-item">
+                    <label>Team Leader</label>
+                    <span className="value">{teamLeader.fullName}</span>
+                  </div>
+                  <div className="info-item">
+                    <label>Team Leader Email</label>
+                    <span className="value">{teamLeader.email}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
 
-        {request.advisor && (
+        {(request.advisor || request.professor) && (
           <div className="request-section">
             <h3>Requested Advisor</h3>
             <div className="info-grid">
               <div className="info-item">
                 <label>Name</label>
-                <span className="value">{request.advisor.fullName}</span>
+                <span className="value">{professorUser?.fullName}</span>
               </div>
               <div className="info-item">
                 <label>Email</label>
-                <span className="value">{request.advisor.email}</span>
+                <span className="value">{professorUser?.email}</span>
               </div>
+              {request.professor?.department && (
+                <div className="info-item">
+                  <label>Department</label>
+                  <span className="value">{request.professor.department}</span>
+                </div>
+              )}
             </div>
           </div>
         )}

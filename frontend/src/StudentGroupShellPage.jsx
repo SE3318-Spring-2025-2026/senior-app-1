@@ -458,6 +458,7 @@ export default function StudentGroupShellPage() {
 
                   <div className="invite-form-actions">
                     <button type="button" onClick={() => setShowAddGroupModal(true)}>Add Group</button>
+                    <Link to="/team-leader/advisor-requests/new">Request Advisor</Link>
                     <button type="button" onClick={handleDeleteSelectedGroup}>Delete Group</button>
                   </div>
                 </>

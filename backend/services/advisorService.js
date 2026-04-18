@@ -1,4 +1,4 @@
-const { AdvisorRequest, Group, User } = require('../models');
+const { AdvisorRequest, Group, Professor, User } = require('../models');
 
 /**
  * Get advisor request details by requestId
@@ -17,11 +17,7 @@ async function getAdvisorRequestDetails(requestId, userId) {
     throw error;
   }
 
-  const group = await Group.findByPk(request.groupId, {
-    attributes: ['id', 'name', 'leaderId'],
-  });
-
-  const advisor = await User.findByPk(request.advisorId, {
+  const advisorUser = await User.findByPk(request.advisorId, {
     attributes: ['id', 'email', 'fullName'],
   });
 
@@ -30,6 +26,15 @@ async function getAdvisorRequestDetails(requestId, userId) {
       attributes: ['id', 'email', 'fullName'],
     })
     : null;
+
+  const group = await Group.findByPk(request.groupId, {
+    attributes: ['id', 'name', 'leaderId'],
+  });
+
+  const professor = await Professor.findOne({
+    where: { userId: request.advisorId },
+    attributes: ['id', 'department', 'userId'],
+  });
 
   // Authorization check: Only the team leader can view the request
   const ownerId = request.teamLeaderId ?? group?.leaderId;
@@ -50,9 +55,31 @@ async function getAdvisorRequestDetails(requestId, userId) {
     decisionNote: request.note,
     createdAt: request.createdAt,
     updatedAt: request.updatedAt,
-    // Optional: Include related data if needed
-    group,
-    advisor,
+    group: group
+      ? {
+        id: group.id,
+        name: group.name,
+        teamLeader,
+      }
+      : null,
+    advisor: advisorUser
+      ? {
+        id: advisorUser.id,
+        email: advisorUser.email,
+        fullName: advisorUser.fullName,
+      }
+      : null,
+    professor: {
+      id: professor?.id ?? null,
+      department: professor?.department ?? null,
+      user: advisorUser
+        ? {
+          id: advisorUser.id,
+          email: advisorUser.email,
+          fullName: advisorUser.fullName,
+        }
+        : null,
+    },
     teamLeader,
   };
 }

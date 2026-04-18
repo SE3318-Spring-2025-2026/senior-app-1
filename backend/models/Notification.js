@@ -48,10 +48,11 @@ const Notification = sequelize.define(
      * Delivery lifecycle:
      *   PENDING  – persisted, not yet pushed
      *   SENT     – successfully pushed to client
+     *   READ     – viewed by the recipient
      *   FAILED   – push failed; eligible for retry job
      */
     status: {
-      type: DataTypes.ENUM('PENDING', 'SENT', 'FAILED'),
+      type: DataTypes.ENUM('PENDING', 'SENT', 'READ', 'FAILED'),
       allowNull: false,
       defaultValue: 'PENDING',
     },

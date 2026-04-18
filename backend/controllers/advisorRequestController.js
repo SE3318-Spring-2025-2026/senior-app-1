@@ -26,14 +26,18 @@ function formatValidationErrors(errors) {
 const createAdvisorRequest = [
   body('groupId').isString().trim().notEmpty().withMessage('Group ID is required'),
   body('advisorId')
-    .exists({ checkFalsy: true })
-    .withMessage('Advisor is required')
-    .bail()
+    .optional({ values: 'falsy' })
+    .isInt({ min: 1 })
+    .withMessage('Advisor selection must be a positive integer')
+    .toInt(),
+  body('professorId')
+    .optional({ values: 'falsy' })
     .isInt({ min: 1 })
     .withMessage('Advisor selection must be a positive integer')
     .toInt(),
   async (req, res) => {
     const errors = validationResult(req);
+    const requestedAdvisorId = req.body.advisorId ?? req.body.professorId;
     if (!errors.isEmpty()) {
       return res.status(400).json({
         code: 'VALIDATION_ERROR',
@@ -42,7 +46,18 @@ const createAdvisorRequest = [
       });
     }
 
-    const { groupId, advisorId } = req.body;
+    if (!requestedAdvisorId) {
+      return res.status(400).json({
+        code: 'VALIDATION_ERROR',
+        message: 'Please check your input and try again',
+        errors: {
+          advisorId: ['Advisor is required'],
+        },
+      });
+    }
+
+    const { groupId } = req.body;
+    const advisorId = requestedAdvisorId;
 
     try {
       const group = await Group.findByPk(groupId);

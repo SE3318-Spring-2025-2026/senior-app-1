@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import apiClient from '../services/apiClient';
+import { useEffect, useState } from 'react';
+import apiClient from './services/apiClient';
 
 const initialForm = {
   groupId: '',
@@ -12,16 +12,22 @@ const initialFeedback = {
   result: '',
 };
 
+const initialFieldErrors = {
+  groupId: [],
+  professorId: [],
+};
+
 export default function SubmitAdvisorRequestPage() {
   const [form, setForm] = useState(initialForm);
   const [feedback, setFeedback] = useState(initialFeedback);
+  const [fieldErrors, setFieldErrors] = useState(initialFieldErrors);
   const [groups, setGroups] = useState([]);
   const [professors, setProfessors] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    const loadData = async () => {
+    async function loadData() {
       try {
         const [groupsRes, professorsRes] = await Promise.all([
           apiClient.get('/v1/groups/my-groups'),
@@ -29,35 +35,44 @@ export default function SubmitAdvisorRequestPage() {
         ]);
         setGroups(groupsRes.data || []);
         setProfessors(professorsRes.data || []);
+        setFeedback(initialFeedback);
       } catch (error) {
-        console.error('Failed to load data:', error);
+        console.error('Failed to load advisor request form data:', error);
         setFeedback({
           status: 'error',
           title: 'Error',
-          result: error.mappedError?.result || 'Failed to load groups and professors',
+          result: error.response?.data?.message || 'Failed to load groups and professors.',
         });
       } finally {
         setIsLoading(false);
       }
-    };
+    }
 
     loadData();
   }, []);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
+  function handleChange(event) {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (fieldErrors[name]?.length > 0) {
+      setFieldErrors((current) => ({
+        ...current,
+        [name]: [],
+      }));
+    }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
     setFeedback({ status: 'loading', title: '', result: '' });
+    setFieldErrors(initialFieldErrors);
     setIsSubmitting(true);
 
     try {
       await apiClient.post('/v1/advisor-requests', {
-        groupId: parseInt(form.groupId, 10),
-        professorId: parseInt(form.professorId, 10),
+        groupId: form.groupId,
+        professorId: Number(form.professorId),
       });
 
       setFeedback({
@@ -65,20 +80,122 @@ export default function SubmitAdvisorRequestPage() {
         title: 'Request Submitted',
         result: 'Your advisor request has been submitted successfully.',
       });
-
       setForm(initialForm);
 
       const groupsRes = await apiClient.get('/v1/groups/my-groups');
       setGroups(groupsRes.data || []);
     } catch (error) {
-      console.error('Submit error:', error);
-      const errorData = error.response?.data;
+      console.error('Submit advisor request error:', error);
+      const errorData = error.response?.data || {};
+      setFieldErrors({
+        groupId: errorData.errors?.groupId || [],
+        professorId: errorData.errors?.professorId || errorData.errors?.advisorId || [],
+      });
       setFeedback({
         status: 'error',
-        title: errorData?.code || 'Error',
-        result: errorData?.message || error.mappedError?.result || 'Failed to submit request',
+        title: errorData.code || 'Error',
+        result: errorData.message || 'Failed to submit request.',
       });
     } finally {
       setIsSubmitting(false);
     }
-  };\n\n  if (isLoading) {\n    return (\n      <div className=\"page\">\n        <div className=\"feedback feedback-loading\">\n          <h2>Loading...</h2>\n        </div>\n      </div>\n    );\n  }\n\n  return (\n    <div className=\"page\">\n      <div className=\"hero\">\n        <h1>Submit Advisor Request</h1>\n        <p className=\"subtitle\">Request a professor to be your group's advisor</p>\n      </div>\n\n      <div className=\"panel\">\n        <form className=\"form\" onSubmit={handleSubmit}>\n          <div className=\"field\">\n            <span>Your Group *</span>\n            <select\n              name=\"groupId\"\n              value={form.groupId}\n              onChange={handleChange}\n              disabled={isSubmitting}\n              required\n            >\n              <option value=\"\">-- Select a group --</option>\n              {groups.map((group) => (\n                <option key={group.id} value={group.id}>\n                  {group.name}\n                  {group.advisorId ? ' (Already has advisor)' : ''}\n                </option>\n              ))}\n            </select>\n          </div>\n\n          <div className=\"field\">\n            <span>Select Professor *</span>\n            <select\n              name=\"professorId\"\n              value={form.professorId}\n              onChange={handleChange}\n              disabled={isSubmitting}\n              required\n            >\n              <option value=\"\">-- Select a professor --</option>\n              {professors.map((prof) => (\n                <option key={prof.id} value={prof.id}>\n                  {prof.fullName}\n                </option>\n              ))}\n            </select>\n          </div>\n\n          <button\n            type=\"submit\"\n            disabled={\n              isSubmitting\n              || !form.groupId\n              || !form.professorId\n              || groups.length === 0\n              || professors.length === 0\n            }\n          >\n            {isSubmitting ? 'Submitting...' : 'Submit Request'}\n          </button>\n        </form>\n\n        {feedback.status && (\n          <div className={`feedback feedback-${feedback.status}`}>\n            <div className=\"feedback-label\">{feedback.status}</div>\n            {feedback.title && <h2>{feedback.title}</h2>}\n            <p>{feedback.result}</p>\n          </div>\n        )}\n      </div>\n    </div>\n  );\n}
+  }
+
+  if (isLoading) {
+    return (
+      <div className="page">
+        <div className="feedback feedback-loading">
+          <h2>Loading...</h2>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page">
+      <div className="hero">
+        <h1>Submit Advisor Request</h1>
+        <p className="subtitle">Request a professor to be your group&apos;s advisor.</p>
+      </div>
+
+      <div className="panel">
+        <form className="form" onSubmit={handleSubmit}>
+          <label className="field">
+            <span>Your Group *</span>
+            <select
+              name="groupId"
+              value={form.groupId}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              aria-invalid={fieldErrors.groupId.length > 0}
+              required
+            >
+              <option value="">-- Select a group --</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                  {group.advisorId ? ' (Already has advisor)' : ''}
+                </option>
+              ))}
+            </select>
+            {fieldErrors.groupId.length > 0 && (
+              <div className="field-error" role="alert">
+                {fieldErrors.groupId.map((error) => (
+                  <p key={error}>{error}</p>
+                ))}
+              </div>
+            )}
+          </label>
+
+          <label className="field">
+            <span>Select Professor *</span>
+            <select
+              name="professorId"
+              value={form.professorId}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              aria-invalid={fieldErrors.professorId.length > 0}
+              required
+            >
+              <option value="">-- Select a professor --</option>
+              {professors.map((professor) => (
+                <option key={professor.id} value={professor.id}>
+                  {professor.fullName}
+                  {professor.department ? ` (${professor.department})` : ''}
+                </option>
+              ))}
+            </select>
+            {fieldErrors.professorId.length > 0 && (
+              <div className="field-error" role="alert">
+                {fieldErrors.professorId.map((error) => (
+                  <p key={error}>{error}</p>
+                ))}
+              </div>
+            )}
+          </label>
+
+          <button
+            type="submit"
+            disabled={
+              isSubmitting
+              || !form.groupId
+              || !form.professorId
+              || groups.length === 0
+              || professors.length === 0
+            }
+          >
+            {isSubmitting ? 'Submitting...' : 'Submit Request'}
+          </button>
+        </form>
+
+        {feedback.status && (
+          <div className={`feedback feedback-${feedback.status}`} aria-live="polite">
+            <div className="feedback-label">{feedback.status}</div>
+            {feedback.title && <h2>{feedback.title}</h2>}
+            <p>{feedback.result}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

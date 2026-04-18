@@ -11,6 +11,7 @@ require('../models');
 const {
   User,
   Group,
+  Professor,
   GroupAdvisorAssignment,
   AdvisorRequest,
   AuditLog,
@@ -373,4 +374,148 @@ test('orphan group cleanup works after advisor removal', async () => {
   
   const deleted = await Group.findByPk(group.id);
   assert.equal(deleted, null);
+});
+
+test('advisor notification endpoints filter by authenticated advisor and support mark-as-read', async () => {
+  const advisorA = await User.create({
+    email: 'advisor-a@example.com',
+    fullName: 'Advisor A',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+  const advisorB = await User.create({
+    email: 'advisor-b@example.com',
+    fullName: 'Advisor B',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await Notification.bulkCreate([
+    {
+      userId: advisorA.id,
+      type: 'ADVISOR_REQUEST',
+      payload: JSON.stringify({
+        requestId: 'req-a',
+        groupId: 'group-a',
+        groupName: 'Group A',
+        status: 'PENDING',
+      }),
+      status: 'SENT',
+    },
+    {
+      userId: advisorB.id,
+      type: 'ADVISOR_REQUEST',
+      payload: JSON.stringify({
+        requestId: 'req-b',
+        groupId: 'group-b',
+        groupName: 'Group B',
+        status: 'PENDING',
+      }),
+      status: 'SENT',
+    },
+    {
+      userId: advisorA.id,
+      type: 'GROUP_TRANSFER',
+      payload: JSON.stringify({
+        groupId: 'group-transfer-a',
+        groupName: 'Transfer A',
+        message: 'Transferred to you',
+      }),
+      status: 'SENT',
+    },
+  ]);
+
+  const headersA = await authHeaderFor(advisorA);
+
+  const adviseeResponse = await request('/api/v1/advisors/notifications/advisee-requests', {
+    headers: headersA,
+  });
+  assert.equal(adviseeResponse.response.status, 200);
+  assert.equal(adviseeResponse.json.count, 1);
+  assert.equal(adviseeResponse.json.data[0].groupName, 'Group A');
+  assert.equal(adviseeResponse.json.data[0].isRead, false);
+
+  const transferResponse = await request('/api/v1/advisors/notifications/group-transfers', {
+    headers: headersA,
+  });
+  assert.equal(transferResponse.response.status, 200);
+  assert.equal(transferResponse.json.count, 1);
+  assert.equal(transferResponse.json.data[0].groupName, 'Transfer A');
+
+  const notificationId = adviseeResponse.json.data[0].id;
+  const markReadResponse = await request(`/api/v1/advisors/notifications/advisee-request/${notificationId}/read`, {
+    method: 'PUT',
+    headers: headersA,
+  });
+  assert.equal(markReadResponse.response.status, 200);
+  assert.equal(markReadResponse.json.notification.isRead, true);
+
+  const updatedNotification = await Notification.findByPk(notificationId);
+  assert.equal(updatedNotification.status, 'READ');
+
+  const forbiddenRead = await request(`/api/v1/advisors/notifications/advisee-request/${notificationId}/read`, {
+    method: 'PUT',
+    headers: await authHeaderFor(advisorB),
+  });
+  assert.equal(forbiddenRead.response.status, 404);
+});
+
+test('team leader can view their advisor request details but others cannot', async () => {
+  const leader = await User.create({
+    email: 'leader-details@example.com',
+    fullName: 'Leader Details',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070008888',
+    password: 'irrelevant',
+  });
+  const outsider = await User.create({
+    email: 'outsider-details@example.com',
+    fullName: 'Outsider Details',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070007777',
+    password: 'irrelevant',
+  });
+  const advisorUser = await User.create({
+    email: 'advisor-details@example.com',
+    fullName: 'Advisor Details',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: 'irrelevant',
+  });
+  const professor = await Professor.create({
+    userId: advisorUser.id,
+    department: 'Computer Engineering',
+  });
+  const group = await Group.create({
+    id: '11111111-1111-1111-1111-111111111111',
+    name: 'Detail Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+    status: 'FORMATION',
+  });
+  const advisorRequest = await AdvisorRequest.create({
+    id: '22222222-2222-2222-2222-222222222222',
+    groupId: group.id,
+    advisorId: advisorUser.id,
+    teamLeaderId: leader.id,
+    status: 'PENDING',
+  });
+
+  const okResponse = await request(`/api/v1/advisor-requests/${advisorRequest.id}`, {
+    headers: await authHeaderFor(leader),
+  });
+  assert.equal(okResponse.response.status, 200);
+  assert.equal(okResponse.json.id, advisorRequest.id);
+  assert.equal(okResponse.json.group.id, group.id);
+  assert.equal(okResponse.json.group.teamLeader.id, leader.id);
+  assert.equal(okResponse.json.professor.id, professor.id);
+  assert.equal(okResponse.json.professor.user.id, advisorUser.id);
+
+  const forbiddenResponse = await request(`/api/v1/advisor-requests/${advisorRequest.id}`, {
+    headers: await authHeaderFor(outsider),
+  });
+  assert.equal(forbiddenResponse.response.status, 403);
 });
