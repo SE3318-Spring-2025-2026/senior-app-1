@@ -66,6 +66,117 @@ test.beforeEach(async () => {
   await User.destroy({ where: {} });
 });
 
+test('assigned advisor can retrieve a pending advisor request for decision processing', async () => {
+  const professor = await User.create({
+    email: 'pending-advisor@example.edu',
+    fullName: 'Pending Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-pending-1',
+    groupId: 'group-pending-1',
+    advisorId: professor.id,
+    teamLeaderId: 42,
+    status: 'PENDING',
+    note: 'Please review our team request.',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-pending-1', {
+    method: 'GET',
+    headers: {
+      ...(await authHeaderFor(professor)),
+    },
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.id, 'advisor-request-pending-1');
+  assert.equal(result.json.groupId, 'group-pending-1');
+  assert.equal(result.json.advisorId, professor.id);
+  assert.equal(result.json.teamLeaderId, 42);
+  assert.equal(result.json.status, 'PENDING');
+  assert.equal(result.json.note, 'Please review our team request.');
+});
+
+test('pending advisor request retrieval returns 404 for unknown request ids', async () => {
+  const professor = await User.create({
+    email: 'missing-advisor@example.edu',
+    fullName: 'Missing Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/request-does-not-exist', {
+    method: 'GET',
+    headers: {
+      ...(await authHeaderFor(professor)),
+    },
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'REQUEST_NOT_FOUND');
+});
+
+test('pending advisor request retrieval rejects non-pending requests', async () => {
+  const professor = await User.create({
+    email: 'resolved-advisor@example.edu',
+    fullName: 'Resolved Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-resolved-1',
+    groupId: 'group-resolved-1',
+    advisorId: professor.id,
+    status: 'APPROVED',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-resolved-1', {
+    method: 'GET',
+    headers: {
+      ...(await authHeaderFor(professor)),
+    },
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'REQUEST_NOT_PENDING');
+});
+
+test('pending advisor request retrieval is limited to the assigned advisor', async () => {
+  const ownerProfessor = await User.create({
+    email: 'owner-advisor@example.edu',
+    fullName: 'Owner Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  const otherProfessor = await User.create({
+    email: 'other-advisor@example.edu',
+    fullName: 'Other Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-owned-1',
+    groupId: 'group-owned-1',
+    advisorId: ownerProfessor.id,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/pending-advisor-requests/advisor-request-owned-1', {
+    method: 'GET',
+    headers: {
+      ...(await authHeaderFor(otherProfessor)),
+    },
+  });
+
+  assert.equal(result.response.status, 403);
+  assert.equal(result.json.code, 'FORBIDDEN');
+});
+
 test('admin can log in with email and password', async () => {
   const password = 'AdminPass2026!';
 

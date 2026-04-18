@@ -1,11 +1,19 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { authenticate, authorize } = require('../middleware/auth');
+const { getPendingAdvisorRequest } = require('../controllers/advisorRequestController');
 const { AdvisorRequest, AuditLog, Group } = require('../models');
 
 const router = express.Router();
 
 const buildErrorResponse = (message, code) => ({ message, code });
+
+router.get(
+  '/pending-advisor-requests/:requestId',
+  authenticate,
+  authorize(['PROFESSOR']),
+  getPendingAdvisorRequest,
+);
 
 router.patch(
   '/advisor-requests/:requestId/decision',
