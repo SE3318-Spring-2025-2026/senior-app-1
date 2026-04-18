@@ -1,8 +1,7 @@
 const { body, param, validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const GroupService = require('../services/groupService');
-const { Group, User, Invitation, Professor, AuditLog } = require('../models');
-const NotificationService = require('../services/notificationService');
+const { Group, User, Invitation, Professor } = require('../models');
 
 // ==========================================
 // ADVISOR RELEASE & ASSIGNMENT REMOVAL LOGIC
@@ -10,7 +9,7 @@ const NotificationService = require('../services/notificationService');
 
 // Validation for advisor release (PATCH)
 exports.advisorReleaseValidation = [
-  param('groupId').isUUID().withMessage('Group ID must be a valid UUID'),
+  param('groupId').isString().trim().notEmpty().withMessage('Group ID is required'),
 ];
 
 // Validation for advisor assignment removal (DELETE)
@@ -30,10 +29,8 @@ exports.advisorRelease = async (req, res) => {
       return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
     }
     const { groupId } = req.params;
-    const user = req.user;
-    
-    const result = await GroupService.releaseAdvisor(groupId, user);
-    
+    const result = await GroupService.releaseAdvisor(groupId, req.user.id);
+
     return res.status(200).json({ code: 'SUCCESS', message: 'Advisor released from group', data: result });
   } catch (error) {
     if (error.code === 'GROUP_NOT_FOUND') {
@@ -51,9 +48,8 @@ exports.advisorRelease = async (req, res) => {
 };
 
 /**
- * Remove advisor assignment from a group
- * DELETE /api/v1/groups/:groupId/advisor-assignment
- * RBAC: ADMIN, COORDINATOR, or current advisor
+ * Remove advisor assignment from a group.
+ * Compatible path: DELETE /api/v1/groups/:groupId/advisor-assignment
  */
 exports.removeAdvisorAssignment = async (req, res) => {
   try {
@@ -63,57 +59,23 @@ exports.removeAdvisorAssignment = async (req, res) => {
     }
 
     const { groupId } = req.params;
-    const user = req.user;
-
-    const group = await Group.findByPk(groupId);
-    if (!group) {
-      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
-    }
-
-    const allowedRoles = ['ADMIN', 'COORDINATOR'];
-    if (!allowedRoles.includes(user.role) && String(group.advisorId) !== String(user.id)) {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not authorized to remove this advisor assignment' });
-    }
-
-    if (!group.advisorId) {
-      return res.status(400).json({ code: 'NO_ADVISOR_ASSIGNED', message: 'No advisor assigned to this group' });
-    }
-
-    const prevAdvisorId = group.advisorId;
-    group.advisorId = null;
-    if (group.status === 'ADVISOR_ASSIGNED') {
-      group.status = 'PENDING_ADVISOR';
-    }
-    await group.save();
-
-    await AuditLog.create({
-      action: 'ADVISOR_REMOVED',
-      actorId: user.id,
-      groupId: group.id,
-      targetId: prevAdvisorId,
-      metadata: JSON.stringify({ prevAdvisorId }),
-    });
-
-    if (group.leaderId) {
-      await NotificationService.notifyMembershipAccepted({
-        groupId: group.id,
-        leaderId: group.leaderId,
-        studentId: prevAdvisorId,
-        totalMembers: group.memberIds?.length || 0,
-        maxMembers: group.maxMembers,
-      });
-    }
+    const result = await GroupService.removeAdvisorAssignment(groupId, req.user);
 
     return res.status(200).json({
       code: 'SUCCESS',
       message: 'Advisor assignment removed successfully',
-      data: {
-        groupId: group.id,
-        status: group.status,
-        advisorId: group.advisorId,
-      },
+      data: result,
     });
   } catch (error) {
+    if (error.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    }
+    if (error.code === 'NO_ADVISOR_ASSIGNED') {
+      return res.status(400).json({ code: 'NO_ADVISOR_ASSIGNED', message: 'No advisor assigned to this group' });
+    }
+    if (error.code === 'FORBIDDEN') {
+      return res.status(403).json({ code: 'FORBIDDEN', message: error.message });
+    }
     console.error('Error in removeAdvisorAssignment:', error);
     return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
@@ -142,7 +104,7 @@ exports.deleteOrphanGroup = async (req, res) => {
     const { groupId } = req.params;
     const result = await GroupService.deleteOrphanGroup(groupId, req.user);
 
-    return res.status(200).json({ code: 'SUCCESS', message: 'Group deleted successfully', data: { groupId } });
+    return res.status(200).json({ code: 'SUCCESS', message: 'Group deleted successfully', data: result });
   } catch (error) {
     if (error.code === 'GROUP_NOT_FOUND') {
       return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
@@ -293,6 +255,7 @@ exports.getGroupMembership = async (req, res) => {
         groupId: groupData.id,
         groupName: groupData.name,
         status: groupData.status,
+        advisorId: groupData.advisorId || null,
         maxMembers: groupData.maxMembers,
         members: groupData.memberIds,
         currentMemberCount: groupData.memberIds.length,

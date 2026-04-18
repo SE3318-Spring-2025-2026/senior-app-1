@@ -2,6 +2,8 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { authenticate, authorize } = require('../middleware/auth');
 const NotificationService = require('../services/notificationService');
+const sequelize = require('../db');
+const { syncAdvisorAssignmentsForGroup } = require('../services/mentorMatchingService');
 const {
   getPendingAdvisorRequest,
   updatePendingAdvisorRequestStatus,
@@ -89,7 +91,7 @@ router.patch(
       const normalizedDecision = String(req.body.decision).toUpperCase();
       const nextStatus = normalizedDecision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
       const note = typeof req.body.note === 'string' ? req.body.note.trim() : null;
-      const group = await Group.findByPk(request.groupId);
+      let group = await Group.findByPk(request.groupId);
 
       if (normalizedDecision === 'APPROVE') {
         if (!group) {
@@ -98,15 +100,33 @@ router.patch(
           );
         }
 
-        await group.update({
-          advisorId: String(req.user.id),
-        });
+        if (group.advisorId && String(group.advisorId) !== String(req.user.id)) {
+          return res.status(409).json(
+            buildErrorResponse('Group already has an assigned advisor.', 'GROUP_ALREADY_HAS_ADVISOR'),
+          );
+        }
       }
 
-      await request.update({
-        status: nextStatus,
-        note: note || null,
-        decidedAt: new Date(),
+      await sequelize.transaction(async (transaction) => {
+        if (normalizedDecision === 'APPROVE') {
+          group = await Group.findByPk(request.groupId, { transaction, lock: transaction.LOCK.UPDATE });
+          await group.update({
+            advisorId: String(req.user.id),
+            status: 'HAS_ADVISOR',
+          }, { transaction });
+
+          await syncAdvisorAssignmentsForGroup({
+            groupId: request.groupId,
+            advisorId: req.user.id,
+            transaction,
+          });
+        }
+
+        await request.update({
+          status: nextStatus,
+          note: note || null,
+          decidedAt: new Date(),
+        }, { transaction });
       });
 
       const advisorUser = await User.findByPk(req.user.id, {

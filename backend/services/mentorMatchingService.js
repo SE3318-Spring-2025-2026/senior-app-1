@@ -223,6 +223,7 @@ async function removeAdvisorAssignmentFromGroup({ groupId }) {
 
     const previousAdvisorId = group.advisorId;
     group.advisorId = null;
+    group.status = 'LOOKING_FOR_ADVISOR';
     await group.save({ transaction });
 
     return {

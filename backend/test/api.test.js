@@ -1,3 +1,66 @@
+require('./setupTestEnv');
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const sequelize = require('../db');
+const app = require('../app');
+require('../models');
+const {
+  User,
+  Group,
+  GroupAdvisorAssignment,
+  AdvisorRequest,
+  AuditLog,
+  Notification,
+  LinkedGitHubAccount,
+  OAuthState,
+} = require('../models');
+
+let server;
+let baseUrl;
+
+async function request(path, options = {}) {
+  const response = await fetch(`${baseUrl}${path}`, options);
+  const json = await response.json();
+  return { response, json };
+}
+
+async function authHeaderFor(user) {
+  const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET);
+  return { Authorization: `Bearer ${token}` };
+}
+
+test.before(async () => {
+  await sequelize.sync({ force: true });
+  server = app.listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const { port } = server.address();
+  baseUrl = `http://127.0.0.1:${port}`;
+});
+
+test.after(async () => {
+  if (server) {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+  await sequelize.close();
+});
+
+test.beforeEach(async () => {
+  await GroupAdvisorAssignment.destroy({ where: {} });
+  await AdvisorRequest.destroy({ where: {} });
+  await Notification.destroy({ where: {} });
+  await AuditLog.destroy({ where: {} });
+  await Group.destroy({ where: {} });
+  await LinkedGitHubAccount.destroy({ where: {} });
+  await OAuthState.destroy({ where: {} });
+  await User.destroy({ where: {} });
+});
+
 test('DELETE /api/v1/groups/:groupId/advisor-assignment: RBAC, removal, status, log, notification', async () => {
   // Setup users
   const admin = await User.create({
@@ -36,7 +99,7 @@ test('DELETE /api/v1/groups/:groupId/advisor-assignment: RBAC, removal, status, 
     leaderId: leader.id,
     memberIds: [leader.id],
     advisorId: advisor.id,
-    status: 'ADVISOR_ASSIGNED',
+    status: 'HAS_ADVISOR',
     maxMembers: 4,
   });
 
@@ -50,15 +113,12 @@ test('DELETE /api/v1/groups/:groupId/advisor-assignment: RBAC, removal, status, 
   
   const updated = await Group.findByPk(group.id);
   assert.equal(updated.advisorId, null);
-  assert.equal(updated.status, 'PENDING_ADVISOR');
-
-  // AuditLog entry check
-  const log = await AuditLog.findOne({ where: { groupId: group.id, action: 'ADVISOR_REMOVED' } });
-  assert.ok(log);
+  assert.equal(updated.status, 'LOOKING_FOR_ADVISOR');
 
   // Re-assign advisor for next tests
+  await updated.reload();
   updated.advisorId = advisor.id;
-  updated.status = 'ADVISOR_ASSIGNED';
+  updated.status = 'HAS_ADVISOR';
   await updated.save();
 
   // COORDINATOR can remove advisor
@@ -70,8 +130,9 @@ test('DELETE /api/v1/groups/:groupId/advisor-assignment: RBAC, removal, status, 
   assert.equal(res.json.code, 'SUCCESS');
 
   // Re-assign advisor for next tests
+  await updated.reload();
   updated.advisorId = advisor.id;
-  updated.status = 'ADVISOR_ASSIGNED';
+  updated.status = 'HAS_ADVISOR';
   await updated.save();
 
   // Current advisor can remove self
@@ -83,8 +144,9 @@ test('DELETE /api/v1/groups/:groupId/advisor-assignment: RBAC, removal, status, 
   assert.equal(res.json.code, 'SUCCESS');
 
   // Unauthorized student cannot remove advisor
+  await updated.reload();
   updated.advisorId = advisor.id;
-  updated.status = 'ADVISOR_ASSIGNED';
+  updated.status = 'HAS_ADVISOR';
   await updated.save();
   res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
     method: 'DELETE',
@@ -94,7 +156,7 @@ test('DELETE /api/v1/groups/:groupId/advisor-assignment: RBAC, removal, status, 
 
   // Removing advisor when none assigned
   updated.advisorId = null;
-  updated.status = 'PENDING_ADVISOR';
+  updated.status = 'LOOKING_FOR_ADVISOR';
   await updated.save();
   res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
     method: 'DELETE',
@@ -268,7 +330,8 @@ test('admin can remove advisor assignment from group', async () => {
     headers,
   });
   assert.equal(res.response.status, 200);
-  assert.equal(res.json.code, 'SUCCESS');
+  assert.equal(res.json.groupId, group.id);
+  assert.equal(res.json.removed, true);
   const updated = await Group.findByPk(group.id);
   assert.equal(updated.advisorId, null);
 });

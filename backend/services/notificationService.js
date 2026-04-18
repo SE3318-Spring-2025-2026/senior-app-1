@@ -1,25 +1,3 @@
-  /**
-   * Notify group members and leader that advisor has released the group
-   * @param {object} param0
-   * @param {string|number} param0.userId
-   * @param {string} param0.groupId
-   * @param {string} param0.groupName
-   */
-  static async notifyAdvisorReleased({ userId, groupId, groupName }) {
-    let row;
-    try {
-      row = await Notification.create({
-        userId,
-        type: 'ADVISOR_RELEASED',
-        payload: JSON.stringify({ groupId, groupName }),
-        status: 'PENDING',
-      });
-    } catch (error) {
-      console.error('[NotificationService] Failed to persist advisor release notification', error);
-      return;
-    }
-    await NotificationService.#pushAndMark(row, `user:${userId}`, { groupId, groupName });
-  }
 const { Notification } = require('../models');
 
 class NotificationService {
@@ -183,6 +161,37 @@ class NotificationService {
       previousAdvisorId,
       previousAdvisorName,
       previousAdvisorEmail,
+      message,
+    });
+  }
+
+  static async notifyAdvisorReleased({
+    userId,
+    groupId,
+    groupName,
+    message = 'Your advisor assignment has been released.',
+  }) {
+    let row;
+
+    try {
+      row = await Notification.create({
+        userId,
+        type: 'ADVISOR_RELEASE',
+        payload: JSON.stringify({
+          groupId,
+          groupName,
+          message,
+        }),
+        status: 'PENDING',
+      });
+    } catch (error) {
+      console.error('[NotificationService] Failed to persist advisor release notification', error);
+      return;
+    }
+
+    await NotificationService.#pushAndMark(row, `user:${userId}`, {
+      groupId,
+      groupName,
       message,
     });
   }
