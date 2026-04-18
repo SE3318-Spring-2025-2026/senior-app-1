@@ -1,5 +1,57 @@
 import { useEffect, useState } from 'react';
 
+function getProfessorToken() {
+  return window.localStorage.getItem('professorToken') || window.localStorage.getItem('authToken');
+}
+
+function parseNotificationRows(payload) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
+  }
+
+  if (Array.isArray(payload?.notifications)) {
+    return payload.notifications;
+  }
+
+  return [];
+}
+
+function normalizeAdviseeNotification(entry) {
+  const advisorRequest = entry?.advisorRequest || {};
+  const group = advisorRequest?.group || {};
+
+  return {
+    id: entry?.id,
+    requestId: entry?.requestId || advisorRequest?.id || null,
+    requestStatus: entry?.requestStatus || advisorRequest?.status || null,
+    groupId: entry?.groupId || advisorRequest?.groupId || null,
+    groupName: entry?.groupName || group?.name || null,
+    createdAt: entry?.createdAt || advisorRequest?.createdAt || null,
+    status: entry?.status || (entry?.isRead ? 'READ' : 'UNREAD'),
+    message: entry?.message || null,
+    note: entry?.note ?? null,
+    decidedAt: entry?.decidedAt ?? null,
+  };
+}
+
+function normalizeTransferNotification(entry) {
+  const group = entry?.group || {};
+
+  return {
+    id: entry?.id,
+    groupId: entry?.groupId || null,
+    groupName: entry?.groupName || group?.name || null,
+    createdAt: entry?.createdAt || null,
+    status: entry?.status || (entry?.isRead ? 'READ' : 'UNREAD'),
+    message: entry?.message || entry?.reason || null,
+    reason: entry?.reason || null,
+  };
+}
+
 function formatDate(value) {
   if (!value) {
     return 'Now';
@@ -41,7 +93,7 @@ function buildTransferSubject(entry) {
 }
 
 function buildTransferPreview(entry) {
-  return entry.message || 'A new group has been assigned to you through transfer.';
+  return entry.reason || entry.message || 'A new group has been assigned to you through transfer.';
 }
 
 export default function ProfessorAdvisorRequestsPage() {
@@ -58,7 +110,7 @@ export default function ProfessorAdvisorRequestsPage() {
   useEffect(() => {
     let active = true;
     let timeoutId;
-    const token = window.localStorage.getItem('professorToken') || window.localStorage.getItem('authToken');
+    const token = getProfessorToken();
 
     async function loadRequests() {
       const controller = new AbortController();
@@ -89,7 +141,7 @@ export default function ProfessorAdvisorRequestsPage() {
           return;
         }
 
-        const rows = Array.isArray(payload) ? payload : payload.notifications || [];
+        const rows = parseNotificationRows(payload).map(normalizeAdviseeNotification);
         setRequests(rows);
         setSelectedRequestId((current) => (
           rows.some((entry) => entry.id === current) ? current : rows[0]?.id || null
@@ -123,7 +175,7 @@ export default function ProfessorAdvisorRequestsPage() {
   useEffect(() => {
     let active = true;
     let timeoutId;
-    const token = window.localStorage.getItem('professorToken') || window.localStorage.getItem('authToken');
+    const token = getProfessorToken();
 
     async function loadTransfers() {
       try {
@@ -145,7 +197,7 @@ export default function ProfessorAdvisorRequestsPage() {
           setTransferLoadError('Group transfer notifications could not be loaded.');
           setTransferNotifications([]);
         } else {
-          const rows = Array.isArray(payload) ? payload : payload.notifications || [];
+          const rows = parseNotificationRows(payload).map(normalizeTransferNotification);
           setTransferNotifications(rows);
           setTransferLoadError('');
         }
@@ -191,7 +243,7 @@ export default function ProfessorAdvisorRequestsPage() {
     setFeedback({ type: '', message: '' });
 
     try {
-      const token = window.localStorage.getItem('professorToken') || window.localStorage.getItem('authToken');
+      const token = getProfessorToken();
       const response = await fetch(`/api/v1/advisor-requests/${selectedRequest.requestId}/decision`, {
         method: 'PATCH',
         headers: {
