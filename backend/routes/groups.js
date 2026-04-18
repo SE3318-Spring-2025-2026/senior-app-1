@@ -1,3 +1,20 @@
+// Advisor release endpoint (only assigned advisor can release themselves)
+router.patch(
+	'/:groupId/advisor-release',
+	authenticate,
+	authorize(['PROFESSOR']),
+	groupController.advisorReleaseValidation,
+	groupController.advisorRelease
+);
+
+// Advisor assignment removal endpoint (admin/coordinator/system)
+router.delete(
+	'/group-database/groups/:groupId/advisor-assignment',
+	authenticate,
+	authorize(['ADMIN', 'COORDINATOR']),
+	groupController.removeAdvisorAssignmentValidation,
+	groupController.removeAdvisorAssignment
+);
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const groupController = require('../controllers/groupController');
@@ -23,6 +40,16 @@ router.patch('/:groupId/advisor-release', authenticate, groupController.releaseA
 
 router.patch('/:groupId', authenticate, groupController.renameGroupValidation, groupController.renameGroup);
 
+
+// Orphan group cleanup endpoint (admin/coordinator only)
+router.delete(
+	'/group-database/groups/:groupId',
+	authenticate,
+	authorize(['ADMIN', 'COORDINATOR']),
+	groupController.deleteOrphanGroupValidation,
+	groupController.deleteOrphanGroup
+);
+// Existing group delete (student leader)
 router.delete('/:groupId', authenticate, groupController.deleteGroupValidation, groupController.deleteGroup);
 
 router.post('/:groupId/leave', authenticate, groupController.leaveGroupValidation, groupController.leaveGroup);
