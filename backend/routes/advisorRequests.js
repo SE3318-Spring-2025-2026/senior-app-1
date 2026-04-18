@@ -1,7 +1,10 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { authenticate, authorize } = require('../middleware/auth');
-const { getPendingAdvisorRequest } = require('../controllers/advisorRequestController');
+const {
+  getPendingAdvisorRequest,
+  updatePendingAdvisorRequestStatus,
+} = require('../controllers/advisorRequestController');
 const { AdvisorRequest, AuditLog, Group } = require('../models');
 
 const router = express.Router();
@@ -13,6 +16,23 @@ router.get(
   authenticate,
   authorize(['PROFESSOR']),
   getPendingAdvisorRequest,
+);
+
+router.patch(
+  '/pending-advisor-requests/:requestId/status',
+  authenticate,
+  authorize(['PROFESSOR']),
+  body('status').isString().trim().notEmpty(),
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json(
+        buildErrorResponse('Status is required.', 'INVALID_STATUS_TRANSITION'),
+      );
+    }
+
+    return updatePendingAdvisorRequestStatus(req, res, next);
+  },
 );
 
 router.patch(
