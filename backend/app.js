@@ -9,6 +9,7 @@ const studentRoutes = require('./routes/students');
 const passwordSetupTokenStoreRoutes = require('./routes/passwordSetupTokenStore');
 const userDatabaseRoutes = require('./routes/userDatabase');
 const aiRoutes = require('./routes/ai');
+const advisorRequestsRoutes = require('./routes/advisorRequests');
 
 const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
@@ -24,6 +25,7 @@ app.use('/api/v1', studentRoutes);
 app.use('/api/v1/password-setup-token-store', passwordSetupTokenStoreRoutes);
 app.use('/api/v1/user-database', userDatabaseRoutes);
 app.use('/api/v1/ai', aiRoutes);
+app.use('/api/v1/advisor-requests', advisorRequestsRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
