@@ -6,6 +6,7 @@ import AdminProfessorCreatePage from './AdminProfessorCreatePage';
 import AuthPage from './AuthPage';
 import CoordinatorGroupMembershipPage from './CoordinatorGroupMembershipPage';
 import CoordinatorAdvisorTransferPage from './CoordinatorAdvisorTransferPage';
+import GroupCleanupPage from './GroupCleanupPage';
 import CoordinatorHomePage from './CoordinatorHomePage';
 import CoordinatorLoginPage from './CoordinatorLoginPage';
 import CoordinatorStudentIdUploadPage from './CoordinatorStudentIdUploadPage';
@@ -39,6 +40,7 @@ export default function App() {
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/students/register" element={<AuthPage />} />
               <Route path="/students/login" element={<AuthPage />} />
+              <Route path="/students/groups/manage" element={<StudentGroupShellPage />} />
               <Route path="/students/groups/new" element={<StudentGroupShellPage />} />
               <Route path="/students/notifications" element={<StudentInvitationsPage />} />
               <Route path="/team-leader/advisor-requests/new" element={<SubmitAdvisorRequestPage />} />
@@ -50,11 +52,13 @@ export default function App() {
               <Route path="/admin" element={<AdminHomePage />} />
               <Route path="/admin/professors/new" element={<AdminProfessorCreatePage />} />
               <Route path="/admin/coordinators/new" element={<AdminCoordinatorCreatePage />} />
+              <Route path="/admin/groups/cleanup" element={<GroupCleanupPage role="ADMIN" />} />
               <Route path="/coordinator/login" element={<AuthPage />} />
               <Route path="/coordinator" element={<CoordinatorHomePage />} />
               <Route path="/coordinator/student-id-registry/import" element={<CoordinatorStudentIdUploadPage />} />
               <Route path="/coordinator/groups/manage" element={<CoordinatorGroupMembershipPage />} />
               <Route path="/coordinator/groups/transfer" element={<CoordinatorAdvisorTransferPage />} />
+              <Route path="/coordinator/groups/cleanup" element={<GroupCleanupPage role="COORDINATOR" />} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="/advisor/requests" element={<AdvisorRequestsPage />} />
               <Route path="*" element={<HomePage />} />

@@ -41,6 +41,14 @@ const coordinatorTools = [
     cta: 'Open Transfer Tool',
     status: 'Ready',
   },
+  {
+    eyebrow: 'Groups',
+    title: 'Group Cleanup',
+    description: 'Delete orphan groups from the group database when they no longer have an assigned advisor.',
+    href: '/coordinator/groups/cleanup',
+    cta: 'Open Cleanup Tool',
+    status: 'Ready',
+  },
 ];
 
 export default function CoordinatorHomePage() {

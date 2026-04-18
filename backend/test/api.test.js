@@ -584,25 +584,30 @@ test('orphan group cleanup works after advisor removal', async () => {
     role: 'PROFESSOR',
     status: 'ACTIVE',
   });
-
-  await Professor.create({
-    userId: usedProfessorUser.id,
-    department: 'Software Engineering',
+  
+  const group = await Group.create({
+    name: 'Cleanup Group',
+    maxMembers: 4,
+    leaderId: null,
+    memberIds: [],
+    advisorId: advisor.id,
   });
-
-  const usedResult = await request('/api/v1/password-setup-token-store/verify', {
-    method: 'POST',
+  
+  const headers = await authHeaderFor(admin);
+  await request(`/api/v1/group-database/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
     headers,
-    body: JSON.stringify({
-      setupToken: usedSetupToken,
-    }),
   });
-
-  assert.equal(usedResult.response.status, 200);
-  assert.deepEqual(usedResult.json, {
-    valid: false,
-    message: 'Setup token is invalid, expired, or already used',
+  
+  const res = await request(`/api/v1/group-database/groups/${group.id}`, {
+    method: 'DELETE',
+    headers,
   });
+  assert.equal(res.response.status, 200);
+  assert.equal(res.json.code, 'SUCCESS');
+  
+  const deleted = await Group.findByPk(group.id);
+  assert.equal(deleted, null);
 });
 
 test('internal professor record endpoint requires admin auth, persists record, and rejects duplicates', async () => {
@@ -1932,30 +1937,14 @@ test('[E2E NOTIFICATIONS] leader receives notification after invitee accepts', a
   const emittedEventLines = allNotifications.filter((log) =>
     log.includes('[NotificationService] Event emitted')
   );
-  
-  const group = await Group.create({
-    name: 'Cleanup Group',
-    maxMembers: 4,
-    leaderId: null,
-    memberIds: [],
-    advisorId: advisor.id,
-  });
-  
-  const headers = await authHeaderFor(admin);
-  await request(`/api/v1/group-database/groups/${group.id}/advisor-assignment`, {
-    method: 'DELETE',
-    headers,
-  });
-  
-  const res = await request(`/api/v1/group-database/groups/${group.id}`, {
-    method: 'DELETE',
-    headers,
-  });
-  assert.equal(res.response.status, 200);
-  assert.equal(res.json.code, 'SUCCESS');
-  
-  const deleted = await Group.findByPk(group.id);
-  assert.equal(deleted, null);
+
+  assert.equal(emittedEventLines.length, 2);
+  assert.ok(
+    emittedEventLines.every((line) => line.includes('GROUP_MEMBERSHIP_ACCEPTED')),
+    'Expected membership acceptance notifications to be emitted for the leader',
+  );
+
+  console.log = originalLog;
 });
 
 test('advisor notification endpoints filter by authenticated advisor and support mark-as-read', async () => {
@@ -2100,4 +2089,54 @@ test('team leader can view their advisor request details but others cannot', asy
     headers: await authHeaderFor(outsider),
   });
   assert.equal(forbiddenResponse.response.status, 403);
+});
+
+test('team leader can submit a new request to the same advisor after advisor release', async () => {
+  const leader = await createStudent({
+    studentId: '11070001002',
+    email: 'leader-rerequest@example.edu',
+    fullName: 'Leader Rerequest',
+    password: 'StrongPass1!',
+  });
+  const advisor = await createProfessorUser({
+    email: 'advisor-rerequest@example.edu',
+    fullName: 'Advisor Rerequest',
+  });
+  const group = await Group.create({
+    name: 'Rerequest Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    advisorId: advisor.id,
+    status: 'HAS_ADVISOR',
+    maxMembers: 4,
+  });
+
+  await AdvisorRequest.create({
+    id: '33333333-3333-3333-3333-333333333333',
+    groupId: group.id,
+    advisorId: advisor.id,
+    teamLeaderId: leader.id,
+    status: 'APPROVED',
+  });
+
+  await request(`/api/v1/groups/${group.id}/advisor-release`, {
+    method: 'PATCH',
+    headers: await authHeaderFor(advisor),
+  });
+
+  const retryResponse = await request('/api/v1/advisor-requests', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      groupId: group.id,
+      professorId: advisor.id,
+    }),
+  });
+
+  assert.equal(retryResponse.response.status, 201);
+  assert.equal(retryResponse.json.status, 'PENDING');
+  assert.equal(retryResponse.json.advisorId, advisor.id);
 });

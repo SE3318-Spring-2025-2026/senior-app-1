@@ -9,7 +9,7 @@ const ROLE_CONFIG = {
     loginRoute: '/students/login',
     tokenKey: 'studentToken',
     userKey: 'studentUser',
-    actionHref: '/students/groups/new',
+    actionHref: '/students/groups/manage',
     actionLabel: 'Manage Group',
   },
   professor: {

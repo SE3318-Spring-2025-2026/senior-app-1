@@ -247,6 +247,40 @@ exports.getGroupMembership = async (req, res) => {
 
     const { groupId } = req.params;
     const groupData = await GroupService.getGroupMembership(groupId);
+    const leaderId = groupData.leaderId ? String(groupData.leaderId) : null;
+    const memberIds = Array.isArray(groupData.memberIds) ? groupData.memberIds.map((id) => String(id)) : [];
+    const participantIds = [...new Set([leaderId, ...memberIds].filter(Boolean))];
+
+    const users = participantIds.length > 0
+      ? await User.findAll({
+        where: { id: { [Op.in]: participantIds } },
+        attributes: ['id', 'fullName', 'studentId', 'email'],
+      })
+      : [];
+
+    const usersById = new Map(users.map((user) => [String(user.id), user]));
+
+    const advisorUser = groupData.advisorId
+      ? await User.findByPk(groupData.advisorId, { attributes: ['id', 'fullName', 'email'] })
+      : null;
+
+    const advisorProfessor = groupData.advisorId
+      ? await Professor.findOne({
+        where: { userId: groupData.advisorId },
+        attributes: ['userId', 'department', 'fullName'],
+      })
+      : null;
+
+    const members = participantIds.map((id) => {
+      const user = usersById.get(String(id));
+      return {
+        id: String(id),
+        fullName: user?.fullName || 'Unknown Student',
+        studentId: user?.studentId || null,
+        email: user?.email || null,
+        isLeader: String(id) === leaderId,
+      };
+    });
 
     res.status(200).json({
       code: 'SUCCESS',
@@ -256,10 +290,20 @@ exports.getGroupMembership = async (req, res) => {
         groupName: groupData.name,
         status: groupData.status,
         advisorId: groupData.advisorId || null,
+        advisor: advisorUser
+          ? {
+            id: advisorUser.id,
+            fullName: advisorProfessor?.fullName || advisorUser.fullName,
+            email: advisorUser.email,
+            department: advisorProfessor?.department || null,
+          }
+          : null,
+        leaderId,
         maxMembers: groupData.maxMembers,
-        members: groupData.memberIds,
-        currentMemberCount: groupData.memberIds.length,
-        availableSlots: groupData.maxMembers - groupData.memberIds.length,
+        memberIds: members.map((member) => member.id),
+        members,
+        currentMemberCount: members.length,
+        availableSlots: Math.max(groupData.maxMembers - members.length, 0),
       },
     });
   } catch (error) {
