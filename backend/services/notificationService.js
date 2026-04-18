@@ -125,6 +125,46 @@ class NotificationService {
     });
   }
 
+  static async notifyTeamLeaderAdvisorReleased({
+    leaderId,
+    groupId,
+    groupName,
+    previousAdvisorId,
+    previousAdvisorName,
+    previousAdvisorEmail,
+    message = 'Your group advisor has been released from the group.',
+  }) {
+    let row;
+
+    try {
+      row = await Notification.create({
+        userId: leaderId,
+        type: 'ADVISOR_RELEASE',
+        payload: JSON.stringify({
+          groupId,
+          groupName,
+          previousAdvisorId,
+          previousAdvisorName,
+          previousAdvisorEmail,
+          message,
+        }),
+        status: 'PENDING',
+      });
+    } catch (error) {
+      console.error('[NotificationService] Failed to persist team leader advisor release notification', error);
+      return;
+    }
+
+    await NotificationService.#pushAndMark(row, `user:${leaderId}`, {
+      groupId,
+      groupName,
+      previousAdvisorId,
+      previousAdvisorName,
+      previousAdvisorEmail,
+      message,
+    });
+  }
+
   static async queueInviteAlert(targetId, groupId, invitationId) {
     let row;
 

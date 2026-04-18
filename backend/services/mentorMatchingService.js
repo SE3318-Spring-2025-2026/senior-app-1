@@ -209,7 +209,7 @@ async function transferAdvisorByCoordinator({ groupId, newAdvisorId }) {
 }
 
 async function removeAdvisorAssignmentFromGroup({ groupId }) {
-  return sequelize.transaction(async (transaction) => {
+  const result = await sequelize.transaction(async (transaction) => {
     const group = await loadGroupForTransfer(groupId, { transaction });
 
     const removedAssignmentCount = await GroupAdvisorAssignment.destroy({
@@ -227,6 +227,8 @@ async function removeAdvisorAssignmentFromGroup({ groupId }) {
 
     return {
       groupId: group.id,
+      leaderId: group.leaderId || null,
+      groupName: group.name || null,
       advisorId: group.advisorId,
       previousAdvisorId: previousAdvisorId || null,
       removed: true,
@@ -234,6 +236,36 @@ async function removeAdvisorAssignmentFromGroup({ groupId }) {
       updatedAt: group.updatedAt,
     };
   });
+
+  const normalizedPreviousAdvisorId = Number.parseInt(String(result.previousAdvisorId || ''), 10);
+  const previousAdvisorUser = Number.isInteger(normalizedPreviousAdvisorId) && normalizedPreviousAdvisorId > 0
+    ? await User.findByPk(normalizedPreviousAdvisorId, {
+      attributes: ['id', 'fullName', 'email'],
+    })
+    : null;
+
+  if (result.leaderId) {
+    await NotificationService.notifyTeamLeaderAdvisorReleased({
+      leaderId: Number.parseInt(String(result.leaderId), 10),
+      groupId: result.groupId,
+      groupName: result.groupName,
+      previousAdvisorId: previousAdvisorUser?.id ?? result.previousAdvisorId,
+      previousAdvisorName: previousAdvisorUser?.fullName ?? null,
+      previousAdvisorEmail: previousAdvisorUser?.email ?? null,
+      message: result.groupName
+        ? `${result.groupName} is no longer assigned to advisor ${previousAdvisorUser?.fullName || 'the previous advisor'}.`
+        : 'Your group advisor has been released from the group.',
+    });
+  }
+
+  return {
+    groupId: result.groupId,
+    advisorId: result.advisorId,
+    previousAdvisorId: result.previousAdvisorId,
+    removed: result.removed,
+    removedAssignmentCount: result.removedAssignmentCount,
+    updatedAt: result.updatedAt,
+  };
 }
 
 async function listActiveAdvisors() {
