@@ -21,6 +21,8 @@ const userDatabaseRoutes = require('./routes/userDatabase');
 const groupRoutes = require('./routes/groups');
 const groupDatabaseRoutes = require('./routes/groupDatabase');
 
+const advisorRequestsRoutes = require('./routes/advisorRequests');
+
 const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 
@@ -49,6 +51,8 @@ app.use('/api/v1/password-setup-token-store', passwordSetupTokenStoreRoutes);
 app.use('/api/v1/user-database', userDatabaseRoutes);
 app.use('/api/v1/group-database', groupDatabaseRoutes);
 app.use('/api/v1/groups', groupRoutes);
+
+app.use('/api/v1', advisorRequestsRoutes);
 
 // Global error handler
 app.use((err, req, res, _next) => {

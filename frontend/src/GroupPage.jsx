@@ -12,14 +12,50 @@ export default function GroupPage() {
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [userStudentId, setUserStudentId] = useState(null);
+  const [userAdvisorId, setUserAdvisorId] = useState(null);
   const [error, setError] = useState(null);
   const [removingAdvisor, setRemovingAdvisor] = useState(false);
+  const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
 
   // Get current user's student ID from auth token or localStorage
   useEffect(() => {
     const studentId = window.localStorage.getItem('studentId');
     setUserStudentId(studentId);
+    const advisorId = window.localStorage.getItem('advisorId');
+    setUserAdvisorId(advisorId);
   }, []);
+
+  // Advisor release handler with confirmation
+  const handleAdvisorRelease = async () => {
+    setShowReleaseConfirm(true);
+  };
+
+  const confirmAdvisorRelease = async () => {
+    setShowReleaseConfirm(false);
+    if (!userAdvisorId) {
+      notify({
+        type: 'error',
+        title: 'Not authenticated',
+        message: 'Please log in as advisor',
+      });
+      return;
+    }
+    try {
+      await apiClient.patch(`/v1/groups/${groupId}/advisor-release`);
+      setGroup((prev) => ({ ...prev, advisorId: null, status: 'LOOKING_FOR_ADVISOR' }));
+      notify({
+        type: 'success',
+        title: 'Advisor released',
+        message: 'You have released your advisor assignment.',
+      });
+    } catch (err) {
+      notify({
+        type: 'error',
+        title: 'Release failed',
+        message: err.response?.data?.error || 'Could not release advisor assignment.',
+      });
+    }
+  };
 
   // Fetch group membership details
   useEffect(() => {
@@ -156,6 +192,8 @@ export default function GroupPage() {
   const isFull = group.currentMemberCount >= group.maxMembers;
   const isFinalized = group.status === 'COMPLETED' || group.status === 'DISBANDED';
 
+  const isAdvisor = userAdvisorId && group.advisorId && String(group.advisorId) === String(userAdvisorId);
+
   return (
     <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
       {/* Group Header */}
@@ -230,7 +268,7 @@ export default function GroupPage() {
       </div>
 
       {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '1rem' }}>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         {isAlreadyMember ? (
           <div style={{ 
             padding: '1rem', 
@@ -280,6 +318,78 @@ export default function GroupPage() {
           </button>
         )}
 
+        {isAdvisor && (
+          <>
+            <button
+              onClick={handleAdvisorRelease}
+              style={{
+                padding: '0.75rem 1.5rem',
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              Release Advisor Assignment
+            </button>
+            {showReleaseConfirm && (
+              <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100vw',
+                height: '100vh',
+                background: 'rgba(0,0,0,0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1000,
+              }}>
+                <div style={{
+                  background: 'white',
+                  padding: '2rem',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                  maxWidth: '90vw',
+                  width: '400px',
+                  textAlign: 'center',
+                }}>
+                  <h2>Confirm Release</h2>
+                  <p>Are you sure you want to release your advisor assignment from this group? This action cannot be undone.</p>
+                  <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '2rem' }}>
+                    <button
+                      onClick={confirmAdvisorRelease}
+                      style={{
+                        padding: '0.5rem 1.5rem',
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Yes, Release
+                    </button>
+                    <button
+                      onClick={() => setShowReleaseConfirm(false)}
+                      style={{
+                        padding: '0.5rem 1.5rem',
+                        backgroundColor: '#6c757d',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
         <button
           onClick={() => navigate('/')}
           style={{
