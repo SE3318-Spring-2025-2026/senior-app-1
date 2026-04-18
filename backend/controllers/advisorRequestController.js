@@ -1,219 +1,131 @@
-const { body, param, validationResult } = require('express-validator');
-const advisorRequestService = require('../services/advisorRequestService');
+const { AdvisorRequest } = require('../models');
+const { processDecision } = require('../services/advisorRequestService');
 
-function buildErrorResponse(field) {
-  switch (field) {
-    case 'groupId':
-      return { code: 'INVALID_GROUP_ID', message: 'Group ID must be a positive integer.' };
-    case 'professorId':
-      return { code: 'INVALID_PROFESSOR_ID', message: 'Professor ID must be a positive integer.' };
-    case 'status':
-      return { code: 'INVALID_STATUS', message: 'Status must be APPROVED or REJECTED.' };
-    default:
-      return { code: 'INVALID_INPUT', message: 'Input validation failed.' };
+const buildErrorResponse = (message, code) => ({
+  message,
+  code,
+});
+
+// 1. Tekil İstek Getirme (Ana daldan gelen güvenlikli yapı)
+async function getPendingAdvisorRequest(req, res) {
+  try {
+    const advisorRequest = await AdvisorRequest.findByPk(req.params.requestId);
+
+    if (!advisorRequest) {
+      return res.status(404).json(
+        buildErrorResponse('Advisor request not found.', 'REQUEST_NOT_FOUND')
+      );
+    }
+
+    if (String(advisorRequest.advisorId) !== String(req.user.id)) {
+      return res.status(403).json(
+        buildErrorResponse('Only the assigned advisor can access this request.', 'FORBIDDEN')
+      );
+    }
+
+    if (advisorRequest.status !== 'PENDING') {
+      return res.status(400).json(
+        buildErrorResponse('Advisor request is not pending.', 'REQUEST_NOT_PENDING')
+      );
+    }
+
+    return res.status(200).json({
+      id: advisorRequest.id,
+      groupId: advisorRequest.groupId,
+      advisorId: advisorRequest.advisorId,
+      teamLeaderId: advisorRequest.teamLeaderId,
+      status: advisorRequest.status,
+      note: advisorRequest.note,
+      decidedAt: advisorRequest.decidedAt,
+      createdAt: advisorRequest.createdAt,
+      updatedAt: advisorRequest.updatedAt,
+    });
+  } catch (error) {
+    console.error('Error fetching pending advisor request:', error);
+    return res.status(500).json(
+      buildErrorResponse('Internal Server Error', 'INTERNAL_SERVER_ERROR')
+    );
   }
 }
 
-function getValidationError(req) {
-  const errors = validationResult(req);
-  if (errors.isEmpty()) {
-    return null;
+// 2. Çoğul İstekleri Listeleme (Senin dalından gelen)
+async function listAdvisorRequests(req, res) {
+  try {
+    const status = req.query.status || 'PENDING';
+    const advisorId = req.user.id;
+    const requests = await AdvisorRequest.findAll({
+      where: { status, advisorId },
+      order: [['createdAt', 'DESC']],
+    });
+    return res.status(200).json(requests);
+  } catch (error) {
+    console.error('Error fetching list of advisor requests:', error);
+    return res.status(500).json(
+      buildErrorResponse('Internal Server Error', 'INTERNAL_SERVER_ERROR')
+    );
   }
-  return buildErrorResponse(errors.array()[0].path);
 }
 
-const validateAdvisorRequest = [
-  body('groupId').isInt({ min: 1 }),
-  body('professorId').isInt({ min: 1 }),
-];
-
-const createAdvisorRequest = [
-  ...validateAdvisorRequest,
-  async (req, res) => {
-    const validationError = getValidationError(req);
-    if (validationError) {
-      return res.status(400).json(validationError);
-    }
-
-    const { groupId, professorId } = req.body;
-    const teamLeaderId = req.user.id;
-
-    try {
-      const request = await advisorRequestService.createAdvisorRequest({
-        groupId,
-        professorId,
-        teamLeaderId,
-      });
-
-      return res.status(201).json({
-        id: request.id,
-        groupId: request.groupId,
-        professorId: request.professorId,
-        teamLeaderId: request.teamLeaderId,
-        status: request.status,
-        createdAt: request.createdAt,
-      });
-    } catch (error) {
-      if (error.code) {
-        return res.status(error.status).json({
-          code: error.code,
-          message: error.message,
-        });
-      }
-      console.error('Error creating advisor request:', error);
-      return res.status(500).json({
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-      });
-    }
-  },
-];
-
-const getAdvisorRequestsByGroup = [
-  param('groupId').isInt({ min: 1 }),
-  async (req, res) => {
-    const validationError = getValidationError(req);
-    if (validationError) {
-      return res.status(400).json(validationError);
-    }
-
-    const { groupId } = req.params;
-
-    try {
-      const requests = await advisorRequestService.getGroupAdvisorRequests({
-        groupId: parseInt(groupId, 10),
-      });
-
-      return res.status(200).json(requests);
-    } catch (error) {
-      if (error.code) {
-        return res.status(error.status).json({
-          code: error.code,
-          message: error.message,
-        });
-      }
-      console.error('Error fetching advisor requests:', error);
-      return res.status(500).json({
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-      });
-    }
-  },
-];
-
-const getIncomingRequests = [
-  async (req, res) => {
-    const professorId = req.user.id;
-
-    try {
-      const requests = await advisorRequestService.getProfessorIncomingRequests({
-        professorId,
-      });
-
-      return res.status(200).json(requests);
-    } catch (error) {
-      if (error.code) {
-        return res.status(error.status).json({
-          code: error.code,
-          message: error.message,
-        });
-      }
-      console.error('Error fetching incoming requests:', error);
-      return res.status(500).json({
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-      });
-    }
-  },
-];
-
-const updateAdvisorRequestStatus = [
-  param('requestId').isInt({ min: 1 }),
-  body('status').isIn(['APPROVED', 'REJECTED']),
-  body('decisionNote').optional().isString().trim(),
-  async (req, res) => {
-    const validationError = getValidationError(req);
-    if (validationError) {
-      return res.status(400).json(validationError);
-    }
-
+// 3. Güncelleme İşlemi (Ana dalın güvenlik kontrolleri + Senin Transaction servisin)
+async function updatePendingAdvisorRequestStatus(req, res) {
+  try {
     const { requestId } = req.params;
-    const { status, decisionNote } = req.body;
-    const professorId = req.user.id;
+    const advisorRequest = await AdvisorRequest.findByPk(requestId);
 
-    try {
-      const request = await advisorRequestService.updateAdvisorRequestStatus({
-        requestId: parseInt(requestId, 10),
-        status,
-        decisionNote,
-        professorId,
-      });
-
-      return res.status(200).json({
-        id: request.id,
-        groupId: request.groupId,
-        status: request.status,
-        decisionNote: request.decisionNote,
-        updatedAt: request.updatedAt,
-      });
-    } catch (error) {
-      if (error.code) {
-        return res.status(error.status).json({
-          code: error.code,
-          message: error.message,
-        });
-      }
-      console.error('Error updating advisor request:', error);
-      return res.status(500).json({
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-      });
-    }
-  },
-];
-
-const cancelAdvisorRequest = [
-  param('requestId').isInt({ min: 1 }),
-  async (req, res) => {
-    const validationError = getValidationError(req);
-    if (validationError) {
-      return res.status(400).json(validationError);
+    if (!advisorRequest) {
+      return res.status(404).json(
+        buildErrorResponse('Advisor request not found.', 'REQUEST_NOT_FOUND')
+      );
     }
 
-    const { requestId } = req.params;
-    const teamLeaderId = req.user.id;
-
-    try {
-      const request = await advisorRequestService.cancelAdvisorRequest({
-        requestId: parseInt(requestId, 10),
-        teamLeaderId,
-      });
-
-      return res.status(200).json({
-        id: request.id,
-        status: request.status,
-      });
-    } catch (error) {
-      if (error.code) {
-        return res.status(error.status).json({
-          code: error.code,
-          message: error.message,
-        });
-      }
-      console.error('Error cancelling advisor request:', error);
-      return res.status(500).json({
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-      });
+    if (String(advisorRequest.advisorId) !== String(req.user.id)) {
+      return res.status(403).json(
+        buildErrorResponse('Only the assigned advisor can update this request.', 'FORBIDDEN')
+      );
     }
-  },
-];
 
-module.exports = {
-  validateAdvisorRequest,
-  createAdvisorRequest,
-  getAdvisorRequestsByGroup,
-  getIncomingRequests,
-  updateAdvisorRequestStatus,
-  cancelAdvisorRequest,
+    if (advisorRequest.status !== 'PENDING') {
+      return res.status(400).json(
+        buildErrorResponse('Advisor request is not pending.', 'REQUEST_NOT_PENDING')
+      );
+    }
+
+    // Hem senin 'decision' hem de ana dalın 'status' isimlendirmesini destekler
+    const rawDecision = req.body.status || req.body.decision;
+    if (!rawDecision) {
+      return res.status(400).json(
+        buildErrorResponse('Decision/Status is required.', 'MISSING_FIELD')
+      );
+    }
+
+    const nextStatus = String(rawDecision).toUpperCase();
+    if (!['APPROVED', 'REJECTED'].includes(nextStatus)) {
+      return res.status(400).json(
+        buildErrorResponse('Only APPROVED or REJECTED transitions are allowed.', 'INVALID_STATUS_TRANSITION')
+      );
+    }
+
+    // Transaction ve Service mantığın burada çalışıyor
+    const result = await processDecision({
+      requestId: requestId,
+      decision: nextStatus,
+      note: req.body.note, 
+      userId: req.user.id
+    });
+
+    return res.status(200).json({ success: true, advisorRequest: result });
+
+  } catch (error) {
+    console.error('Error updating pending advisor request status:', error);
+    return res.status(500).json(
+      buildErrorResponse(error.message || 'Internal Server Error', 'INTERNAL_SERVER_ERROR')
+    );
+  }
+}
+
+// Tüm fonksiyonlar temiz bir şekilde tek bir yerden dışa aktarılıyor
+module.exports = { 
+  getPendingAdvisorRequest, 
+  listAdvisorRequests, 
+  updatePendingAdvisorRequestStatus 
 };

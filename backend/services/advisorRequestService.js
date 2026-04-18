@@ -1,142 +1,92 @@
-const { Group, AdvisorRequest, User } = require('../models');
+const AdvisorRequest = require('../models/AdvisorRequest');
+const Group = require('../models/Group');
+const AuditLog = require('../models/AuditLog');
+const sequelize = require('../db');
+const NotificationService = require('./notificationService');
+const { syncAdvisorAssignmentsForGroup } = require('./mentorMatchingService');
+const { User } = require('../models');
 
-class StudentRegistrationError extends Error {
-  constructor(code, message, status = 400) {
-    super(message);
-    this.code = code;
-    this.status = status;
-  }
-}
+const processDecision = async ({ requestId, decision, note, userId }) => {
+  return sequelize.transaction(async (transaction) => {
+    const advisorRequest = await AdvisorRequest.findOne({
+      where: { id: requestId },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
 
-async function createAdvisorRequest({ groupId, professorId, teamLeaderId }) {
-  // Verify group exists and user is the leader
-  const group = await Group.findByPk(groupId);
-  if (!group) {
-    throw new StudentRegistrationError('GROUP_NOT_FOUND', 'Group not found', 404);
-  }
-
-  if (String(group.leaderId) !== String(teamLeaderId)) {
-    throw new StudentRegistrationError('UNAUTHORIZED_GROUP', 'Only group leader can submit requests', 403);
-  }
-
-  // Verify professor exists
-  const professor = await User.findByPk(professorId);
-  if (!professor || professor.role !== 'PROFESSOR') {
-    throw new StudentRegistrationError('PROFESSOR_NOT_FOUND', 'Professor not found', 404);
-  }
-
-  // Check for existing active request
-  const existingRequest = await AdvisorRequest.findOne({
-    where: {
-      groupId,
-      professorId,
-      status: ['PENDING', 'APPROVED'],
-    },
-  });
-
-  if (existingRequest) {
-    throw new StudentRegistrationError('DUPLICATE_REQUEST', 'Request already exists for this professor', 409);
-  }
-
-  // Create request
-  const request = await AdvisorRequest.create({
-    groupId,
-    professorId,
-    teamLeaderId,
-    status: 'PENDING',
-  });
-
-  return request;
-}
-
-async function getGroupAdvisorRequests({ groupId }) {
-  const group = await Group.findByPk(groupId);
-  if (!group) {
-    throw new StudentRegistrationError('GROUP_NOT_FOUND', 'Group not found', 404);
-  }
-
-  const requests = await AdvisorRequest.findAll({
-    where: { groupId },
-    order: [['createdAt', 'DESC']],
-  });
-
-  return requests;
-}
-
-async function getProfessorIncomingRequests({ professorId }) {
-  const professor = await User.findByPk(professorId);
-  if (!professor || professor.role !== 'PROFESSOR') {
-    throw new StudentRegistrationError('PROFESSOR_NOT_FOUND', 'Professor not found', 404);
-  }
-
-  const requests = await AdvisorRequest.findAll({
-    where: {
-      professorId,
-      status: 'PENDING',
-    },
-    order: [['createdAt', 'DESC']],
-  });
-
-  return requests;
-}
-
-async function updateAdvisorRequestStatus({ requestId, status, decisionNote, professorId }) {
-  const request = await AdvisorRequest.findByPk(requestId);
-  if (!request) {
-    throw new StudentRegistrationError('REQUEST_NOT_FOUND', 'Request not found', 404);
-  }
-
-  if (String(request.professorId) !== String(professorId)) {
-    throw new StudentRegistrationError('UNAUTHORIZED_REQUEST', 'Only assigned professor can decide', 403);
-  }
-
-  if (request.status !== 'PENDING') {
-    throw new StudentRegistrationError('REQUEST_NOT_PENDING', 'Request already decided', 409);
-  }
-
-  request.status = status;
-  if (decisionNote) {
-    request.decisionNote = decisionNote;
-  }
-  await request.save();
-
-  // If approved, update group advisor
-  if (status === 'APPROVED') {
-    const group = await Group.findByPk(request.groupId);
-    if (group) {
-      group.advisorId = professorId;
-      await group.save();
+    if (!advisorRequest) {
+      throw new Error('Advisor request not found');
     }
-  }
+    if (advisorRequest.status !== 'PENDING') {
+      throw new Error('Request already decided');
+    }
+    if (String(advisorRequest.advisorId) !== String(userId)) {
+      throw new Error('Unauthorized: Not assigned advisor');
+    }
 
-  return request;
-}
+    advisorRequest.status = decision;
+    advisorRequest.note = note || null;
+    advisorRequest.decidedAt = new Date();
+    await advisorRequest.save({ transaction });
 
-async function cancelAdvisorRequest({ requestId, teamLeaderId }) {
-  const request = await AdvisorRequest.findByPk(requestId);
-  if (!request) {
-    throw new StudentRegistrationError('REQUEST_NOT_FOUND', 'Request not found', 404);
-  }
+    let group = null;
+    if (decision === 'APPROVED') {
+      group = await Group.findOne({
+        where: { id: advisorRequest.groupId },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!group) {
+        throw new Error('Group not found');
+      }
 
-  if (String(request.teamLeaderId) !== String(teamLeaderId)) {
-    throw new StudentRegistrationError('UNAUTHORIZED_REQUEST', 'Only team leader can cancel', 403);
-  }
+      group.advisorId = String(advisorRequest.advisorId);
+      group.status = 'HAS_ADVISOR';
+      await group.save({ transaction });
 
-  if (request.status !== 'PENDING') {
-    throw new StudentRegistrationError('REQUEST_NOT_PENDING', 'Only pending requests can be cancelled', 409);
-  }
+      await syncAdvisorAssignmentsForGroup({
+        groupId: advisorRequest.groupId,
+        advisorId: advisorRequest.advisorId,
+        transaction,
+      });
+    }
 
-  request.status = 'CANCELLED';
-  await request.save();
+    await AuditLog.create({
+      action: decision === 'APPROVED' ? 'ADVISOR_REQUEST_APPROVED' : 'ADVISOR_REQUEST_REJECTED',
+      actorId: userId,
+      targetType: 'ADVISOR_REQUEST',
+      targetId: advisorRequest.id,
+      metadata: {
+        groupId: advisorRequest.groupId,
+        advisorId: advisorRequest.advisorId,
+        decision,
+        note: note || null,
+      },
+    }, { transaction });
 
-  return request;
-}
+    if (advisorRequest.teamLeaderId) {
+      const advisorUser = await User.findByPk(userId, {
+        transaction,
+        attributes: ['id', 'fullName', 'email'],
+      });
 
-module.exports = {
-  StudentRegistrationError,
-  createAdvisorRequest,
-  getGroupAdvisorRequests,
-  getProfessorIncomingRequests,
-  updateAdvisorRequestStatus,
-  cancelAdvisorRequest,
+      await NotificationService.notifyTeamLeaderAdvisorDecision({
+        leaderId: advisorRequest.teamLeaderId,
+        requestId: advisorRequest.id,
+        groupId: advisorRequest.groupId,
+        groupName: group?.name || null,
+        advisorDecision: decision,
+        advisorId: advisorUser?.id ?? userId,
+        advisorName: advisorUser?.fullName ?? null,
+        advisorEmail: advisorUser?.email ?? null,
+        message: group?.name
+          ? `Advisor request for ${group.name} was ${decision.toLowerCase()}.`
+          : `Your advisor request was ${decision.toLowerCase()}.`,
+      });
+    }
+
+    return advisorRequest;
+  });
 };
+
+module.exports = { processDecision };

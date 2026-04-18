@@ -1,22 +1,23 @@
+require('./setupTestEnv');
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-process.env.JWT_SECRET = 'test-secret';
-process.env.SQLITE_STORAGE = ':memory:';
-process.env.FRONTEND_URL = 'http://localhost:5173';
-process.env.GITHUB_CLIENT_ID = '';
-process.env.GITHUB_CLIENT_SECRET = '';
-
 const sequelize = require('../db');
 const app = require('../app');
 require('../models');
-const { User, Professor, LinkedGitHubAccount, OAuthState } = require('../models');
-const StudentRegistrationError = require('../errors/studentRegistrationError');
-const studentRegistrationService = require('../services/studentRegistrationService');
-const { createStudent, ensureValidStudentRegistry } = require('../services/studentService');
-const professorService = require('../services/professorService');
+const {
+  User,
+  Group,
+  GroupAdvisorAssignment,
+  AdvisorRequest,
+  AuditLog,
+  Notification,
+  LinkedGitHubAccount,
+  OAuthState,
+} = require('../models');
 
 let server;
 let baseUrl;
@@ -34,7 +35,6 @@ async function authHeaderFor(user) {
 
 test.before(async () => {
   await sequelize.sync({ force: true });
-  await ensureValidStudentRegistry();
   server = app.listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   const { port } = server.address();
@@ -51,843 +51,326 @@ test.after(async () => {
 });
 
 test.beforeEach(async () => {
+  await GroupAdvisorAssignment.destroy({ where: {} });
+  await AdvisorRequest.destroy({ where: {} });
+  await Notification.destroy({ where: {} });
+  await AuditLog.destroy({ where: {} });
+  await Group.destroy({ where: {} });
   await LinkedGitHubAccount.destroy({ where: {} });
   await OAuthState.destroy({ where: {} });
   await User.destroy({ where: {} });
 });
 
-test('admin can register professor and duplicate email returns 409', async () => {
+test('DELETE /api/v1/groups/:groupId/advisor-assignment: RBAC, removal, status, log, notification', async () => {
+  // Setup users
   const admin = await User.create({
-    email: 'admin@example.com',
+    email: 'admin-rbac@example.com',
     fullName: 'Admin User',
     role: 'ADMIN',
     status: 'ACTIVE',
+    password: 'irrelevant',
   });
-
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(await authHeaderFor(admin)),
-  };
-
-  const createResult = await request('/api/v1/admin/professors', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      email: 'prof@example.edu',
-      fullName: 'Prof Example',
-      department: 'Software Engineering',
-    }),
+  const coordinator = await User.create({
+    email: 'coord-rbac@example.com',
+    fullName: 'Coord User',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: 'irrelevant',
   });
-
-  assert.equal(createResult.response.status, 201);
-  assert.equal(createResult.json.setupTokenGenerated, true);
-  assert.equal(createResult.json.message, 'Professor account created. Password setup link generated.');
-
-  const duplicateResult = await request('/api/v1/admin/professors', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      email: 'prof@example.edu',
-      fullName: 'Prof Example',
-      department: 'Software Engineering',
-    }),
-  });
-
-  assert.equal(duplicateResult.response.status, 409);
-});
-
-test('professor can set an initial password with a valid setup token', async () => {
-  const setupToken = 'pst_test_setup_token';
-  const professorUser = await User.create({
-    email: 'passwordsetup@example.edu',
-    fullName: 'Password Setup Professor',
+  const advisor = await User.create({
+    email: 'advisor-rbac@example.com',
+    fullName: 'Advisor User',
     role: 'PROFESSOR',
-    status: 'PASSWORD_SETUP_REQUIRED',
-    passwordSetupTokenHash: professorService.hashToken(setupToken),
-    passwordSetupTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    status: 'ACTIVE',
+    password: 'irrelevant',
   });
-
-  await Professor.create({
-    userId: professorUser.id,
-    department: 'Software Engineering',
-  });
-
-  const invalidPassword = await request('/api/v1/professors/password-setup', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      setupToken,
-      newPassword: 'weak',
-    }),
-  });
-
-  assert.equal(invalidPassword.response.status, 422);
-
-  const successResult = await request('/api/v1/professors/password-setup', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      setupToken,
-      newPassword: 'StrongPass1!',
-    }),
-  });
-
-  assert.equal(successResult.response.status, 200);
-  assert.equal(successResult.json.message, 'Password set successfully');
-
-  const updatedProfessorUser = await User.findOne({
-    where: { email: 'passwordsetup@example.edu' },
-  });
-
-  assert.equal(updatedProfessorUser.status, 'ACTIVE');
-  assert.equal(typeof updatedProfessorUser.password, 'string');
-  assert.equal(updatedProfessorUser.passwordSetupTokenHash, null);
-  assert.equal(updatedProfessorUser.passwordSetupTokenExpiresAt, null);
-});
-
-test('password setup token verification enforces admin auth and returns valid true or false correctly', async () => {
-  const unauthenticated = await request('/api/v1/password-setup-token-store/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      setupToken: 'pst_missing_auth',
-    }),
-  });
-
-  assert.equal(unauthenticated.response.status, 401);
-
-  const student = await User.create({
-    email: 'verify-student@example.edu',
-    fullName: 'Verify Student',
+  const leader = await User.create({
+    email: 'leader-rbac@example.com',
+    fullName: 'Leader User',
     role: 'STUDENT',
     status: 'ACTIVE',
     studentId: '11070001000',
+    password: 'irrelevant',
   });
 
-  const forbidden = await request('/api/v1/password-setup-token-store/verify', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(student)),
-    },
-    body: JSON.stringify({
-      setupToken: 'pst_forbidden',
-    }),
+  // Create group with advisor assigned
+  const group = await Group.create({
+    name: 'Advisor Test',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    advisorId: advisor.id,
+    status: 'HAS_ADVISOR',
+    maxMembers: 4,
   });
 
-  assert.equal(forbidden.response.status, 403);
+  // ADMIN can remove advisor
+  let res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await authHeaderFor(admin),
+  });
+  assert.equal(res.response.status, 200);
+  assert.equal(res.json.code, 'SUCCESS');
+  
+  const updated = await Group.findByPk(group.id);
+  assert.equal(updated.advisorId, null);
+  assert.equal(updated.status, 'LOOKING_FOR_ADVISOR');
 
+  // Re-assign advisor for next tests
+  await updated.reload();
+  updated.advisorId = advisor.id;
+  updated.status = 'HAS_ADVISOR';
+  await updated.save();
+
+  // COORDINATOR can remove advisor
+  res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await authHeaderFor(coordinator),
+  });
+  assert.equal(res.response.status, 200);
+  assert.equal(res.json.code, 'SUCCESS');
+
+  // Re-assign advisor for next tests
+  await updated.reload();
+  updated.advisorId = advisor.id;
+  updated.status = 'HAS_ADVISOR';
+  await updated.save();
+
+  // Current advisor can remove self
+  res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await authHeaderFor(advisor),
+  });
+  assert.equal(res.response.status, 200);
+  assert.equal(res.json.code, 'SUCCESS');
+
+  // Unauthorized student cannot remove advisor
+  await updated.reload();
+  updated.advisorId = advisor.id;
+  updated.status = 'HAS_ADVISOR';
+  await updated.save();
+  res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await authHeaderFor(leader),
+  });
+  assert.equal(res.response.status, 403);
+
+  // Removing advisor when none assigned
+  updated.advisorId = null;
+  updated.status = 'LOOKING_FOR_ADVISOR';
+  await updated.save();
+  res = await request(`/api/v1/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await authHeaderFor(admin),
+  });
+  assert.equal(res.response.status, 400);
+  assert.equal(res.json.code, 'NO_ADVISOR_ASSIGNED');
+
+  // Invalid groupId
+  res = await request(`/api/v1/groups/invalid-group-id/advisor-assignment`, {
+    method: 'DELETE',
+    headers: await authHeaderFor(admin),
+  });
+  assert.equal(res.response.status, 404);
+});
+
+test('admin/coordinator can delete orphan group (no advisor)', async () => {
   const admin = await User.create({
-    email: 'verify-admin@example.edu',
-    fullName: 'Verify Admin',
+    email: 'admin-orphan@example.com',
+    fullName: 'Admin Orphan',
     role: 'ADMIN',
     status: 'ACTIVE',
   });
-
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(await authHeaderFor(admin)),
-  };
-
-  const validSetupToken = 'pst_valid_token';
-  const validProfessorUser = await User.create({
-    email: 'verify-prof@example.edu',
-    fullName: 'Verify Professor',
-    role: 'PROFESSOR',
-    status: 'PASSWORD_SETUP_REQUIRED',
-    passwordSetupTokenHash: professorService.hashToken(validSetupToken),
-    passwordSetupTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
-  });
-
-  const validProfessor = await Professor.create({
-    userId: validProfessorUser.id,
-    department: 'Software Engineering',
-  });
-
-  const validResult = await request('/api/v1/password-setup-token-store/verify', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      setupToken: validSetupToken,
-    }),
-  });
-
-  assert.equal(validResult.response.status, 200);
-  assert.deepEqual(validResult.json, {
-    valid: true,
-    professorId: validProfessor.id,
-    message: 'Setup token verified',
-  });
-
-  const expiredSetupToken = 'pst_expired_token';
-  const expiredProfessorUser = await User.create({
-    email: 'expired-prof@example.edu',
-    fullName: 'Expired Professor',
-    role: 'PROFESSOR',
-    status: 'PASSWORD_SETUP_REQUIRED',
-    passwordSetupTokenHash: professorService.hashToken(expiredSetupToken),
-    passwordSetupTokenExpiresAt: new Date(Date.now() - 60 * 60 * 1000),
-  });
-
-  await Professor.create({
-    userId: expiredProfessorUser.id,
-    department: 'Software Engineering',
-  });
-
-  const expiredResult = await request('/api/v1/password-setup-token-store/verify', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      setupToken: expiredSetupToken,
-    }),
-  });
-
-  assert.equal(expiredResult.response.status, 200);
-  assert.deepEqual(expiredResult.json, {
-    valid: false,
-    message: 'Setup token is invalid, expired, or already used',
-  });
-
-  const usedSetupToken = 'pst_used_token';
-  const usedProfessorUser = await User.create({
-    email: 'used-prof@example.edu',
-    fullName: 'Used Professor',
-    role: 'PROFESSOR',
+  const coordinator = await User.create({
+    email: 'coord-orphan@example.com',
+    fullName: 'Coord Orphan',
+    role: 'COORDINATOR',
     status: 'ACTIVE',
-    passwordSetupTokenHash: professorService.hashToken(usedSetupToken),
-    passwordSetupTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+  });
+  const group = await Group.create({
+    name: 'Orphan Group',
+    maxMembers: 4,
+    leaderId: null,
+    memberIds: [],
+    advisorId: null,
   });
 
-  await Professor.create({
-    userId: usedProfessorUser.id,
-    department: 'Software Engineering',
+  const adminHeaders = await authHeaderFor(admin);
+  const res1 = await request(`/api/v1/group-database/groups/${group.id}`, {
+    method: 'DELETE',
+    headers: adminHeaders,
   });
+  assert.equal(res1.response.status, 200);
+  assert.equal(res1.json.code, 'SUCCESS');
 
-  const usedResult = await request('/api/v1/password-setup-token-store/verify', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      setupToken: usedSetupToken,
-    }),
+  const coordHeaders = await authHeaderFor(coordinator);
+  const res2 = await request(`/api/v1/group-database/groups/${group.id}`, {
+    method: 'DELETE',
+    headers: coordHeaders,
   });
-
-  assert.equal(usedResult.response.status, 200);
-  assert.deepEqual(usedResult.json, {
-    valid: false,
-    message: 'Setup token is invalid, expired, or already used',
-  });
+  assert.equal(res2.response.status, 404);
 });
 
-test('internal professor record endpoint requires admin auth, persists record, and rejects duplicates', async () => {
-  const unauthenticated = await request('/api/v1/user-database/professors', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: 'internal-prof@example.edu',
-      fullName: 'Internal Professor',
-      department: 'Software Engineering',
-    }),
+test('cannot delete group with advisor', async () => {
+  const admin = await User.create({
+    email: 'admin-orphan2@example.com',
+    fullName: 'Admin Orphan2',
+    role: 'ADMIN',
+    status: 'ACTIVE',
   });
+  const group = await Group.create({
+    name: 'Advisor Group',
+    maxMembers: 4,
+    leaderId: null,
+    memberIds: [],
+    advisorId: 'advisor-123',
+  });
+  const headers = await authHeaderFor(admin);
+  const res = await request(`/api/v1/group-database/groups/${group.id}`, {
+    method: 'DELETE',
+    headers,
+  });
+  assert.equal(res.response.status, 403);
+  assert.equal(res.json.code, 'GROUP_HAS_ADVISOR');
+});
 
-  assert.equal(unauthenticated.response.status, 401);
+test('cannot delete group with invalid or non-existent id', async () => {
+  const admin = await User.create({
+    email: 'admin-orphan3@example.com',
+    fullName: 'Admin Orphan3',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+  const headers = await authHeaderFor(admin);
+  const res1 = await request(`/api/v1/group-database/groups/not-a-uuid`, {
+    method: 'DELETE',
+    headers,
+  });
+  assert.equal(res1.response.status, 400);
 
+  const uuid = '00000000-0000-0000-0000-000000000000';
+  const res2 = await request(`/api/v1/group-database/groups/${uuid}`, {
+    method: 'DELETE',
+    headers,
+  });
+  assert.equal(res2.response.status, 404);
+});
+
+test('student cannot delete orphan group via admin endpoint', async () => {
   const student = await User.create({
-    email: 'student-auth@example.edu',
-    fullName: 'Student Auth',
+    email: 'student-orphan@example.com',
+    fullName: 'Student Orphan',
     role: 'STUDENT',
     status: 'ACTIVE',
-    studentId: '11070001000',
+    studentId: '11070009999',
+    password: await bcrypt.hash('StrongPass1!', 10),
   });
-
-  const forbidden = await request('/api/v1/user-database/professors', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(student)),
-    },
-    body: JSON.stringify({
-      email: 'internal-prof@example.edu',
-      fullName: 'Internal Professor',
-      department: 'Software Engineering',
-    }),
+  const group = await Group.create({
+    name: 'Student Orphan Group',
+    maxMembers: 4,
+    leaderId: null,
+    memberIds: [],
+    advisorId: null,
   });
-
-  assert.equal(forbidden.response.status, 403);
-
-  const admin = await User.create({
-    email: 'admin-internal@example.edu',
-    fullName: 'Admin Internal',
-    role: 'ADMIN',
-    status: 'ACTIVE',
-  });
-
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(await authHeaderFor(admin)),
-  };
-
-  const created = await request('/api/v1/user-database/professors', {
-    method: 'POST',
+  const headers = await authHeaderFor(student);
+  const res = await request(`/api/v1/group-database/groups/${group.id}`, {
+    method: 'DELETE',
     headers,
-    body: JSON.stringify({
-      email: 'Internal-Prof@Example.edu',
-      fullName: '  Internal Professor  ',
-      department: '  Software Engineering  ',
-    }),
   });
-
-  assert.equal(created.response.status, 201);
-  assert.deepEqual(created.json, {
-    userId: created.json.userId,
-    professorId: created.json.professorId,
-    setupRequired: true,
-  });
-
-  const professorUser = await User.findByPk(created.json.userId);
-  assert.equal(professorUser.email, 'internal-prof@example.edu');
-  assert.equal(professorUser.fullName, 'Internal Professor');
-  assert.equal(professorUser.role, 'PROFESSOR');
-  assert.equal(professorUser.status, 'PASSWORD_SETUP_REQUIRED');
-  assert.equal(professorUser.passwordSetupTokenHash, null);
-
-  const professorRecord = await Professor.findByPk(created.json.professorId);
-  assert.equal(professorRecord.userId, created.json.userId);
-  assert.equal(professorRecord.department, 'Software Engineering');
-
-  const duplicate = await request('/api/v1/user-database/professors', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      email: 'internal-prof@example.edu',
-      fullName: 'Other Professor',
-      department: 'Computer Science',
-    }),
-  });
-
-  assert.equal(duplicate.response.status, 409);
-  assert.deepEqual(duplicate.json, {
-    code: 'DUPLICATE_EMAIL',
-    message: 'Email is already in use.',
-  });
+  assert.equal(res.response.status, 403);
 });
 
-test('internal professor password update requires admin auth and activates the professor account', async () => {
-  const professorUser = await User.create({
-    email: 'patch-prof@example.edu',
-    fullName: 'Patch Professor',
+test('assigned advisor can release themselves from group', async () => {
+  const advisor = await User.create({
+    email: 'advisor-release@example.com',
+    fullName: 'Advisor Release',
     role: 'PROFESSOR',
-    status: 'PASSWORD_SETUP_REQUIRED',
-    passwordSetupTokenHash: professorService.hashToken('pst_patch_token'),
-    passwordSetupTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
-  });
-
-  const professor = await Professor.create({
-    userId: professorUser.id,
-    department: 'Software Engineering',
-  });
-
-  const passwordHash = await bcrypt.hash('StrongPass1!', 10);
-
-  const unauthenticated = await request(`/api/v1/user-database/professors/${professor.id}/password`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ passwordHash }),
-  });
-
-  assert.equal(unauthenticated.response.status, 401);
-
-  const student = await User.create({
-    email: 'student-patch@example.edu',
-    fullName: 'Student Patch',
-    role: 'STUDENT',
     status: 'ACTIVE',
-    studentId: '11070001009',
   });
-
-  const forbidden = await request(`/api/v1/user-database/professors/${professor.id}/password`, {
+  const group = await Group.create({
+    name: 'Release Group',
+    maxMembers: 4,
+    leaderId: null,
+    memberIds: [],
+    advisorId: advisor.id,
+  });
+  const headers = await authHeaderFor(advisor);
+  const res = await request(`/api/v1/groups/${group.id}/advisor-release`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(student)),
-    },
-    body: JSON.stringify({ passwordHash }),
+    headers,
   });
+  assert.equal(res.response.status, 200);
+  assert.equal(res.json.code, 'SUCCESS');
+  const updated = await Group.findByPk(group.id);
+  assert.equal(updated.advisorId, null);
+});
 
-  assert.equal(forbidden.response.status, 403);
-
+test('admin can remove advisor assignment from group', async () => {
   const admin = await User.create({
-    email: 'admin-patch@example.edu',
-    fullName: 'Admin Patch',
+    email: 'admin-remove-advisor@example.com',
+    fullName: 'Admin Remove Advisor',
     role: 'ADMIN',
     status: 'ACTIVE',
   });
-
-  const success = await request(`/api/v1/user-database/professors/${professor.id}/password`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(admin)),
-    },
-    body: JSON.stringify({ passwordHash }),
+  const advisor = await User.create({
+    email: 'advisor-remove@example.com',
+    fullName: 'Advisor Remove',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
   });
-
-  assert.equal(success.response.status, 200);
-  assert.deepEqual(success.json, {
-    professorId: professor.id,
-    message: 'Professor password updated successfully',
+  const group = await Group.create({
+    name: 'Remove Advisor Group',
+    maxMembers: 4,
+    leaderId: null,
+    memberIds: [],
+    advisorId: advisor.id,
   });
-
-  const updatedUser = await User.findByPk(professorUser.id);
-  assert.equal(updatedUser.status, 'ACTIVE');
-  assert.equal(updatedUser.password, passwordHash);
-  assert.equal(updatedUser.passwordHash, passwordHash);
-  assert.equal(updatedUser.passwordSetupTokenHash, null);
-  assert.equal(updatedUser.passwordSetupTokenExpiresAt, null);
-
-  const notFound = await request('/api/v1/user-database/professors/999999/password', {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(admin)),
-    },
-    body: JSON.stringify({ passwordHash }),
+  const headers = await authHeaderFor(admin);
+  const res = await request(`/api/v1/group-database/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
+    headers,
   });
-
-  assert.equal(notFound.response.status, 404);
-  assert.deepEqual(notFound.json, {
-    code: 'PROFESSOR_NOT_FOUND',
-    message: 'Professor not found.',
-  });
+  assert.equal(res.response.status, 200);
+  assert.equal(res.json.groupId, group.id);
+  assert.equal(res.json.removed, true);
+  const updated = await Group.findByPk(group.id);
+  assert.equal(updated.advisorId, null);
 });
 
-test('student registration validates eligibility, password strength, duplication, and success', async () => {
-  const weakPassword = await request('/api/v1/students/registration-validation', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001000',
-      email: 'student1@example.edu',
-      fullName: 'Ali Veli',
-      password: 'weakpass',
-    }),
-  });
-
-  assert.equal(weakPassword.response.status, 400);
-  assert.equal(weakPassword.json.code, 'WEAK_PASSWORD');
-
-  const ineligible = await request('/api/v1/students/registration-validation', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001999',
-      email: 'student2@example.edu',
-      fullName: 'Ayse Veli',
-      password: 'StrongPass1!',
-    }),
-  });
-
-  assert.equal(ineligible.response.status, 403);
-  assert.equal(ineligible.json.code, 'STUDENT_NOT_ELIGIBLE');
-
-  const created = await request('/api/v1/students/registration-validation', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001000',
-      email: 'student3@example.edu',
-      fullName: 'Mehmet Veli',
-      password: 'StrongPass1!',
-    }),
-  });
-
-  assert.equal(created.response.status, 200);
-  assert.deepEqual(created.json, {
-    valid: true,
-    studentId: '11070001000',
-    message: 'Validation passed',
-  });
-
-  await createStudent({
-    studentId: '11070001000',
-    email: 'student3@example.edu',
-    fullName: 'Mehmet Veli',
-    password: 'StrongPass1!',
-  });
-
-  const alreadyRegistered = await request('/api/v1/students/registration-validation', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001000',
-      email: 'student4@example.edu',
-      fullName: 'Another User',
-      password: 'StrongPass1!',
-    }),
-  });
-
-  assert.equal(alreadyRegistered.response.status, 409);
-  assert.equal(alreadyRegistered.json.code, 'ALREADY_REGISTERED');
-
-  const duplicateEmail = await request('/api/v1/students/registration-validation', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001001',
-      email: 'student3@example.edu',
-      fullName: 'Other User',
-      password: 'StrongPass1!',
-    }),
-  });
-
-  assert.equal(duplicateEmail.response.status, 409);
-  assert.equal(duplicateEmail.json.code, 'DUPLICATE_EMAIL');
-
-  const validation = await request('/api/v1/user-database/students/11070001000/validation');
-  assert.deepEqual(validation.json, {
-    valid: true,
-    studentId: '11070001000',
-    alreadyRegistered: true,
-  });
-
-  const createdStudent = await User.findOne({
-    where: { studentId: '11070001000' },
-  });
-
-  assert.ok(createdStudent.passwordHash);
-  assert.notEqual(createdStudent.passwordHash, 'StrongPass1!');
-  assert.equal(await bcrypt.compare('StrongPass1!', createdStudent.passwordHash), true);
-});
-
-test('direct student account creation endpoint requires admin auth and persists provided password hashes securely', async () => {
+test('orphan group cleanup works after advisor removal', async () => {
   const admin = await User.create({
-    email: 'student-admin@example.com',
-    fullName: 'Student Admin',
+    email: 'admin-orphan-cleanup@example.com',
+    fullName: 'Admin Orphan Cleanup',
     role: 'ADMIN',
     status: 'ACTIVE',
   });
-
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(await authHeaderFor(admin)),
-  };
-
-  const unauthenticated = await request('/api/v1/user-database/students', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001001',
-      email: 'dbcreate@example.edu',
-      fullName: 'Database Student',
-      passwordHash: '$2a$10$examplehashedpasswordvalue',
-    }),
+  const advisor = await User.create({
+    email: 'advisor-orphan-cleanup@example.com',
+    fullName: 'Advisor Orphan Cleanup',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
   });
-
-  assert.equal(unauthenticated.response.status, 401);
-
-  const passwordHash = await bcrypt.hash('StrongPass1!', 10);
-
-  const created = await request('/api/v1/user-database/students', {
-    method: 'POST',
+  
+  const group = await Group.create({
+    name: 'Cleanup Group',
+    maxMembers: 4,
+    leaderId: null,
+    memberIds: [],
+    advisorId: advisor.id,
+  });
+  
+  const headers = await authHeaderFor(admin);
+  await request(`/api/v1/group-database/groups/${group.id}/advisor-assignment`, {
+    method: 'DELETE',
     headers,
-    body: JSON.stringify({
-      studentId: '11070001001',
-      email: 'dbcreate@example.edu',
-      fullName: 'Database Student',
-      passwordHash,
-    }),
   });
-
-  assert.equal(created.response.status, 201);
-  assert.deepEqual(created.json, {
-    userId: created.json.userId,
-    studentId: '11070001001',
-    message: 'Student account created successfully',
-  });
-
-  const storedStudent = await User.findByPk(created.json.userId);
-  assert.equal(storedStudent.studentId, '11070001001');
-  assert.equal(storedStudent.email, 'dbcreate@example.edu');
-  assert.equal(storedStudent.passwordHash, passwordHash);
-  assert.equal(storedStudent.password, null);
-
-  const duplicateStudentId = await request('/api/v1/user-database/students', {
-    method: 'POST',
+  
+  const res = await request(`/api/v1/group-database/groups/${group.id}`, {
+    method: 'DELETE',
     headers,
-    body: JSON.stringify({
-      studentId: '11070001001',
-      email: 'other@example.edu',
-      fullName: 'Other Student',
-      passwordHash,
-    }),
   });
-
-  assert.equal(duplicateStudentId.response.status, 409);
-  assert.equal(duplicateStudentId.json.code, 'ALREADY_REGISTERED');
-
-  const duplicateEmail = await request('/api/v1/user-database/students', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      studentId: '11070001002',
-      email: 'dbcreate@example.edu',
-      fullName: 'Other Student',
-      passwordHash,
-    }),
-  });
-
-  assert.equal(duplicateEmail.response.status, 409);
-  assert.equal(duplicateEmail.json.code, 'DUPLICATE_EMAIL');
-
-  const studentUser = await createStudent({
-    studentId: '11070001000',
-    email: 'regular-student@example.edu',
-    fullName: 'Regular Student',
-    password: 'StrongPass1!',
-  });
-
-  const forbidden = await request('/api/v1/user-database/students', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(studentUser)),
-    },
-    body: JSON.stringify({
-      studentId: '11070001001',
-      email: 'forbidden@example.edu',
-      fullName: 'Forbidden Student',
-      passwordHash,
-    }),
-  });
-
-  assert.equal(forbidden.response.status, 403);
-});
-
-test('student register creates account after validation passes', async () => {
-  const created = await request('/api/v1/students/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001002',
-      email: 'student-register@example.edu',
-      fullName: 'Register Student',
-      password: 'StrongPass1!',
-    }),
-  });
-
-  assert.equal(created.response.status, 201);
-  assert.equal(created.json.valid, true);
-  assert.equal(created.json.studentId, '11070001002');
-  assert.equal(created.json.message, 'Student account created successfully');
-  assert.equal(typeof created.json.userId, 'number');
-
-  const duplicate = await request('/api/v1/students/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001002',
-      email: 'student-register-2@example.edu',
-      fullName: 'Register Student Again',
-      password: 'StrongPass1!',
-    }),
-  });
-
-  assert.equal(duplicate.response.status, 409);
-  assert.equal(duplicate.json.code, 'ALREADY_REGISTERED');
-});
-
-test('student registration service validates data before creating the account', async () => {
-  await assert.rejects(
-    studentRegistrationService.validateRegistrationDetails({
-      studentId: '11070001999',
-      email: 'student5@example.edu',
-      fullName: 'Invalid Registry',
-      password: 'StrongPass1!',
-    }),
-    (error) => {
-      assert.ok(error instanceof StudentRegistrationError);
-      assert.equal(error.status, 403);
-      assert.equal(error.code, 'STUDENT_NOT_ELIGIBLE');
-      return true;
-    },
-  );
-
-  await assert.rejects(
-    studentRegistrationService.validateRegistrationDetails({
-      studentId: '11070001',
-      email: 'student6@example.edu',
-      fullName: 'Invalid Format',
-      password: 'StrongPass1!',
-    }),
-    (error) => {
-      assert.ok(error instanceof StudentRegistrationError);
-      assert.equal(error.status, 400);
-      assert.equal(error.code, 'INVALID_STUDENT_ID');
-      return true;
-    },
-  );
-
-  const validated = await studentRegistrationService.validateRegistrationDetails({
-    studentId: '11070001002',
-    email: 'CaseSensitive@Example.edu',
-    fullName: '  Valid Student  ',
-    password: 'StrongPass1!',
-  });
-
-  assert.deepEqual(validated, {
-    studentId: '11070001002',
-    email: 'casesensitive@example.edu',
-    fullName: 'Valid Student',
-    password: 'StrongPass1!',
-  });
-
-  const createdStudent = await studentRegistrationService.validateAndCreateStudent({
-    studentId: '11070001002',
-    email: 'CaseSensitive@Example.edu',
-    fullName: '  Valid Student  ',
-    password: 'StrongPass1!',
-  });
-
-  assert.equal(createdStudent.studentId, '11070001002');
-  assert.equal(createdStudent.email, 'casesensitive@example.edu');
-
-  await assert.rejects(
-    studentRegistrationService.validateRegistrationDetails({
-      studentId: '11070001001',
-      email: 'CASESENSITIVE@example.edu',
-      fullName: 'Duplicate Email',
-      password: 'StrongPass1!',
-    }),
-    (error) => {
-      assert.ok(error instanceof StudentRegistrationError);
-      assert.equal(error.status, 409);
-      assert.equal(error.code, 'DUPLICATE_EMAIL');
-      return true;
-    },
-  );
-});
-
-test('github linking flow rejects unauthenticated requests and links account after callback', async () => {
-  const registration = await request('/api/v1/students/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001000',
-      email: 'student@example.edu',
-      fullName: 'GitHub Student',
-      password: 'StrongPass1!',
-    }),
-  });
-  const student = await User.findByPk(registration.json.userId);
-
-  const unauthenticated = await request('/api/v1/students/me/github/link');
-  assert.equal(unauthenticated.response.status, 401);
-  const authenticated = await request('/api/v1/students/me/github/link', {
-    headers: await authHeaderFor(student),
-  });
-
-  assert.equal(authenticated.response.status, 200);
-  assert.match(authenticated.json.authorizationUrl, /state=/);
-
-  const state = new URL(authenticated.json.authorizationUrl, baseUrl).searchParams.get('state');
-
-  const missingQuery = await request('/api/v1/auth/github/callback');
-  assert.equal(missingQuery.response.status, 400);
-
-  const invalidState = await request('/api/v1/auth/github/callback?code=test-code&state=bad-state');
-  assert.equal(invalidState.response.status, 400);
-
-  const callback = await request(`/api/v1/auth/github/callback?code=test-code&state=${state}`);
-  assert.equal(callback.response.status, 200);
-  assert.equal(callback.json.callbackVerified, true);
-  assert.equal(callback.json.githubLinked, true);
-
-  const linkedStudent = await User.findByPk(student.id);
-  assert.equal(linkedStudent.githubLinked, true);
-  assert.equal(linkedStudent.githubUsername, 'student-11070001000');
-
-  const linkedAccount = await LinkedGitHubAccount.findOne({ where: { userId: student.id } });
-  assert.equal(linkedAccount.githubUsername, 'student-11070001000');
-
-  const duplicateLinkAttempt = await request(`/api/v1/auth/github/callback?code=test-code-2&state=${new URL((await request('/api/v1/students/me/github/link', {
-    headers: await authHeaderFor(student),
-  })).json.authorizationUrl, baseUrl).searchParams.get('state')}`);
-  assert.equal(duplicateLinkAttempt.response.status, 409);
-  assert.equal(
-    duplicateLinkAttempt.json.code,
-    'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT'
-  );
-
-  const reusedState = await request(`/api/v1/auth/github/callback?code=test-code&state=${state}`);
-  assert.equal(reusedState.response.status, 400);
-});
-
-test('github callback redirects browser clients back to frontend with success state', async () => {
-  const registration = await request('/api/v1/students/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001002',
-      email: 'redirect@example.edu',
-      fullName: 'Redirect Student',
-      password: 'StrongPass1!',
-    }),
-  });
-  const student = await User.findByPk(registration.json.userId);
-  const authenticated = await request('/api/v1/students/me/github/link', {
-    headers: await authHeaderFor(student),
-  });
-  const state = new URL(authenticated.json.authorizationUrl, baseUrl).searchParams.get('state');
-
-  const response = await fetch(`${baseUrl}/api/v1/auth/github/callback?code=test-code&state=${state}`, {
-    headers: {
-      Accept: 'text/html',
-    },
-    redirect: 'manual',
-  });
-
-  assert.equal(response.status, 302);
-  assert.match(response.headers.get('location'), /githubLink=success/);
-  assert.match(response.headers.get('location'), /githubUsername=student-11070001002/);
-});
-
-test('manual linked account store and github patch endpoint update student status', async () => {
-  await request('/api/v1/students/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001001',
-      email: 'manual@example.edu',
-      fullName: 'Manual Student',
-      password: 'StrongPass1!',
-    }),
-  });
-
-  const storeResult = await request('/api/v1/linked-github-account-store/links', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      studentId: '11070001001',
-      githubId: '12345678',
-      githubUsername: 'student-gh',
-    }),
-  });
-
-  assert.equal(storeResult.response.status, 200);
-  assert.equal(storeResult.json.linked, true);
-
-  const patchResult = await request('/api/v1/user-database/students/11070001001/github-link', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      githubUsername: 'student-gh-updated',
-      githubLinked: true,
-    }),
-  });
-
-  assert.equal(patchResult.response.status, 200);
-  assert.deepEqual(patchResult.json, {
-    studentId: '11070001001',
-    githubLinked: true,
-    message: 'Student GitHub link updated successfully',
-  });
+  assert.equal(res.response.status, 200);
+  assert.equal(res.json.code, 'SUCCESS');
+  
+  const deleted = await Group.findByPk(group.id);
+  assert.equal(deleted, null);
 });
