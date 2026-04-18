@@ -1,6 +1,9 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
-const { transferInGroupDatabase } = require('../controllers/mentorMatchingController');
+const {
+  transferInGroupDatabase,
+  removeAdvisorAssignment,
+} = require('../controllers/mentorMatchingController');
 
 const router = express.Router();
 
@@ -9,6 +12,12 @@ router.patch(
   authenticate,
   authorize(['COORDINATOR']),
   transferInGroupDatabase,
+);
+router.delete(
+  '/groups/:groupId/advisor-assignment',
+  authenticate,
+  authorize(['COORDINATOR']),
+  removeAdvisorAssignment,
 );
 
 module.exports = router;

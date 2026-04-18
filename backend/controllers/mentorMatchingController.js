@@ -107,6 +107,39 @@ const transferByCoordinator = [
   },
 ];
 
+const removeAdvisorAssignment = [
+  param('groupId').isString().trim().notEmpty(),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        code: 'INVALID_GROUP_ID',
+        message: 'groupId is required.',
+      });
+    }
+
+    try {
+      const result = await mentorMatchingService.removeAdvisorAssignmentFromGroup({
+        groupId: req.params.groupId,
+      });
+
+      return res.status(200).json(result);
+    } catch (error) {
+      if (error.status && error.code) {
+        return res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
+      return res.status(500).json({
+        code: 'GROUP_ADVISOR_REMOVAL_FAILED',
+        message: 'Advisor assignment could not be removed from Group DB.',
+      });
+    }
+  },
+];
+
 const listCoordinatorAdvisors = async (_req, res) => {
   try {
     const advisors = await mentorMatchingService.listActiveAdvisors();
@@ -121,6 +154,7 @@ const listCoordinatorAdvisors = async (_req, res) => {
 
 module.exports = {
   listCoordinatorAdvisors,
+  removeAdvisorAssignment,
   syncUserDatabaseAssignment,
   transferByCoordinator,
   transferInGroupDatabase,
