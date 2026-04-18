@@ -15,6 +15,7 @@ const {
   LinkedGitHubAccount,
   OAuthState,
   Group,
+  GroupAdvisorAssignment,
   AdvisorRequest,
   AuditLog,
   Notification,
@@ -57,6 +58,7 @@ test.after(async () => {
 });
 
 test.beforeEach(async () => {
+  await GroupAdvisorAssignment.destroy({ where: {} });
   await AdvisorRequest.destroy({ where: {} });
   await Notification.destroy({ where: {} });
   await AuditLog.destroy({ where: {} });
@@ -297,6 +299,111 @@ test('pending advisor request status update rejects non-pending requests', async
 
   assert.equal(result.response.status, 400);
   assert.equal(result.json.code, 'REQUEST_NOT_PENDING');
+});
+
+test('coordinator can remove advisor assignment from a group record', async () => {
+  const coordinator = await User.create({
+    email: 'group-db-coordinator@example.edu',
+    fullName: 'Group DB Coordinator',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+  });
+
+  const advisor = await User.create({
+    email: 'group-db-advisor@example.edu',
+    fullName: 'Group DB Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+  });
+
+  const student = await User.create({
+    email: 'group-db-student@example.edu',
+    fullName: 'Group DB Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001337',
+  });
+
+  const group = await Group.create({
+    id: 'group-remove-1',
+    name: 'Cleanup Team',
+    leaderId: String(student.id),
+    memberIds: [String(student.id)],
+    advisorId: String(advisor.id),
+  });
+
+  await GroupAdvisorAssignment.create({
+    groupId: group.id,
+    studentUserId: student.id,
+    advisorUserId: advisor.id,
+  });
+
+  const result = await request('/api/v1/group-database/groups/group-remove-1/advisor-assignment', {
+    method: 'DELETE',
+    headers: {
+      ...(await authHeaderFor(coordinator)),
+    },
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.groupId, 'group-remove-1');
+  assert.equal(result.json.advisorId, null);
+  assert.equal(result.json.previousAdvisorId, String(advisor.id));
+  assert.equal(result.json.removed, true);
+  assert.equal(result.json.removedAssignmentCount, 1);
+
+  const updatedGroup = await Group.findByPk(group.id);
+  const remainingAssignments = await GroupAdvisorAssignment.count({
+    where: { groupId: group.id },
+  });
+
+  assert.equal(updatedGroup.advisorId, null);
+  assert.equal(remainingAssignments, 0);
+});
+
+test('group advisor assignment removal returns 404 for unknown group ids', async () => {
+  const coordinator = await User.create({
+    email: 'missing-group-coordinator@example.edu',
+    fullName: 'Missing Group Coordinator',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+  });
+
+  const result = await request('/api/v1/group-database/groups/group-missing/advisor-assignment', {
+    method: 'DELETE',
+    headers: {
+      ...(await authHeaderFor(coordinator)),
+    },
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'GROUP_NOT_FOUND');
+});
+
+test('group advisor assignment removal rejects groups without an assignment', async () => {
+  const coordinator = await User.create({
+    email: 'no-assignment-coordinator@example.edu',
+    fullName: 'No Assignment Coordinator',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+  });
+
+  await Group.create({
+    id: 'group-remove-2',
+    name: 'No Advisor Team',
+    memberIds: [],
+    advisorId: null,
+  });
+
+  const result = await request('/api/v1/group-database/groups/group-remove-2/advisor-assignment', {
+    method: 'DELETE',
+    headers: {
+      ...(await authHeaderFor(coordinator)),
+    },
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'GROUP_HAS_NO_ADVISOR');
 });
 
 test('admin can log in with email and password', async () => {

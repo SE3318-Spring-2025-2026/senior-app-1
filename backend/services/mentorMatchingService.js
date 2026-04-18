@@ -171,6 +171,34 @@ async function transferAdvisorByCoordinator({ groupId, newAdvisorId }) {
   });
 }
 
+async function removeAdvisorAssignmentFromGroup({ groupId }) {
+  return sequelize.transaction(async (transaction) => {
+    const group = await loadGroupForTransfer(groupId, { transaction });
+
+    const removedAssignmentCount = await GroupAdvisorAssignment.destroy({
+      where: { groupId: group.id },
+      transaction,
+    });
+
+    if (!group.advisorId && removedAssignmentCount === 0) {
+      throw createServiceError(400, 'GROUP_HAS_NO_ADVISOR', 'Group does not currently have an advisor assignment.');
+    }
+
+    const previousAdvisorId = group.advisorId;
+    group.advisorId = null;
+    await group.save({ transaction });
+
+    return {
+      groupId: group.id,
+      advisorId: group.advisorId,
+      previousAdvisorId: previousAdvisorId || null,
+      removed: true,
+      removedAssignmentCount,
+      updatedAt: group.updatedAt,
+    };
+  });
+}
+
 async function listActiveAdvisors() {
   const professors = await Professor.findAll({
     include: [
@@ -201,6 +229,7 @@ module.exports = {
   ensureGroupHasValidCurrentAdvisor,
   findActiveProfessorUser,
   listActiveAdvisors,
+  removeAdvisorAssignmentFromGroup,
   serializeAdvisorAssignment,
   syncAdvisorAssignmentsForGroup,
   transferAdvisorByCoordinator,
