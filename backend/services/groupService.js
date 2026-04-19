@@ -9,6 +9,20 @@ const sequelize = require('../db');
 const NotificationService = require('./notificationService');
 const mentorMatchingService = require('./mentorMatchingService');
 
+function getParticipantSet(group) {
+  const participantIds = new Set();
+
+  if (group?.leaderId) {
+    participantIds.add(String(group.leaderId));
+  }
+
+  (Array.isArray(group?.memberIds) ? group.memberIds : []).forEach((memberId) => {
+    participantIds.add(String(memberId));
+  });
+
+  return participantIds;
+}
+
 class GroupService {
 
   /**
@@ -135,7 +149,7 @@ class GroupService {
 
       const leaderMatches = String(group.leaderId || '') === normalizedUserId;
       const memberMatches = Array.isArray(group.memberIds)
-        && group.memberIds.map((id) => String(id)).includes(normalizedUserId);
+        && group.memberIds.map(String).includes(normalizedUserId);
 
       return leaderMatches || memberMatches;
     }) || null;
@@ -155,7 +169,7 @@ class GroupService {
         }
 
         return Array.isArray(group.memberIds)
-          && group.memberIds.map((id) => String(id)).includes(userId);
+          && group.memberIds.map(String).includes(userId);
       });
 
       if (isMemberInAnotherGroup) {
@@ -217,7 +231,8 @@ class GroupService {
         throw error;
       }
 
-      const currentMembers = group.memberIds || [];
+      const currentMembers = Array.isArray(group.memberIds) ? group.memberIds.map(String) : [];
+      const currentParticipants = getParticipantSet(group);
 
       const existingGroup = await GroupService.findAnyGroupForUser(studentId, {
         excludeGroupId: group.id,
@@ -229,19 +244,20 @@ class GroupService {
         throw error;
       }
 
-      if (currentMembers.includes(studentId)) {
+      if (currentMembers.includes(String(studentId))) {
         const error = new Error('Student is already a member of this group');
         error.code = 'DUPLICATE_MEMBER';
         throw error;
       }
 
-      if (currentMembers.length >= group.maxMembers) {
+      if (currentParticipants.size >= group.maxMembers) {
         const error = new Error('Group has reached maximum member capacity');
         error.code = 'MAX_MEMBERS_REACHED';
         throw error;
       }
 
-      const updatedMembers = [...currentMembers, studentId];
+      const updatedMembers = [...currentMembers, String(studentId)];
+      const updatedTotalMembers = currentParticipants.size + 1;
       await group.update({ memberIds: updatedMembers }, { transaction });
       await transaction.commit();
 
@@ -250,7 +266,7 @@ class GroupService {
           groupId: group.id,
           leaderId: group.leaderId,
           studentId,
-          totalMembers: updatedMembers.length,
+          totalMembers: updatedTotalMembers,
           maxMembers: group.maxMembers,
         });
       }
@@ -258,7 +274,7 @@ class GroupService {
       return {
         groupId: group.id,
         studentId,
-        totalMembers: updatedMembers.length,
+        totalMembers: updatedTotalMembers,
         maxMembers: group.maxMembers,
         success: true,
       };
@@ -409,11 +425,11 @@ class GroupService {
   static async _writeAuditLog({ invitationId, groupId, actorId, action }) {
     try {
       await AuditLog.create({
-        entityType: 'INVITATION',
-        entityId: invitationId,
+        targetType: 'INVITATION',
+        targetId: invitationId,
         actorId,
         action,
-        metadata: JSON.stringify({ groupId }),
+        metadata: { groupId },
       });
     } catch (err) {
       console.error('[GroupService] _writeAuditLog failed', { invitationId, action }, err);

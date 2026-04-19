@@ -23,9 +23,11 @@ function assertCoordinatorActor(actor) {
 }
 
 function computeMemberUpdate(memberIds, action, userId) {
-  const current = Array.isArray(memberIds) ? [...memberIds] : [];
+  const current = Array.from(
+    new Set((Array.isArray(memberIds) ? memberIds : []).map((memberId) => String(memberId))),
+  );
   const normalizedUserId = String(userId);
-  const hasStudent = current.map((memberId) => String(memberId)).includes(normalizedUserId);
+  const hasStudent = current.includes(normalizedUserId);
 
   if (action === 'ADD') {
     if (hasStudent) {
@@ -43,6 +45,20 @@ function computeMemberUpdate(memberIds, action, userId) {
 
 function getAuditAction(action) {
   return action === 'ADD' ? 'COORDINATOR_MEMBER_ADDED' : 'COORDINATOR_MEMBER_REMOVED';
+}
+
+function buildParticipantSet(group) {
+  const participantIds = new Set();
+
+  if (group?.leaderId) {
+    participantIds.add(String(group.leaderId));
+  }
+
+  (Array.isArray(group?.memberIds) ? group.memberIds : []).forEach((memberId) => {
+    participantIds.add(String(memberId));
+  });
+
+  return participantIds;
 }
 
 async function updateGroupMembershipByCoordinator({ groupId, action, studentId, actor }) {
@@ -76,6 +92,10 @@ async function updateGroupMembershipByCoordinator({ groupId, action, studentId, 
     }
 
     if (normalizedAction === 'ADD') {
+      if (String(group.leaderId || '') === String(student.id)) {
+        throw createServiceError(400, 'MEMBERSHIP_NO_CHANGE', 'Student already belongs to this group as its leader.');
+      }
+
       const allGroups = await Group.findAll({
         attributes: ['id', 'leaderId', 'memberIds'],
         transaction,
@@ -96,6 +116,12 @@ async function updateGroupMembershipByCoordinator({ groupId, action, studentId, 
       if (alreadyInOtherGroup) {
         throw createServiceError(409, 'STUDENT_ALREADY_IN_OTHER_GROUP', 'Student already belongs to another group.');
       }
+
+      const participantIds = buildParticipantSet(group);
+      participantIds.add(String(student.id));
+      if (participantIds.size > Number(group.maxMembers || 0)) {
+        throw createServiceError(409, 'GROUP_FULL', 'This group has reached maximum member capacity.');
+      }
     }
 
     const previousMemberIds = Array.isArray(group.memberIds) ? [...group.memberIds] : [];
@@ -105,10 +131,10 @@ async function updateGroupMembershipByCoordinator({ groupId, action, studentId, 
     await group.save({ transaction });
 
     const auditPayload = {
-      actorId: String(actor.id),
+      actorId: actor.id,
       action: getAuditAction(normalizedAction),
+      targetType: 'GROUP',
       targetId: group.id,
-      timestamp: new Date(),
       metadata: {
         groupId: group.id,
         targetUserId: student.id,

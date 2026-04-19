@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import AdminHomePage from './AdminHomePage';
 import AdminCoordinatorCreatePage from './AdminCoordinatorCreatePage';
+import AdminAuditLogPage from './AdminAuditLogPage';
 import AdminLoginPage from './AdminLoginPage';
 import AdminProfessorCreatePage from './AdminProfessorCreatePage';
 import AuthPage from './AuthPage';
@@ -50,6 +51,7 @@ export default function App() {
               <Route path="/professors/password-setup" element={<ProfessorPasswordSetupPage />} />
               <Route path="/admin/login" element={<AuthPage />} />
               <Route path="/admin" element={<AdminHomePage />} />
+              <Route path="/admin/audit-logs" element={<AdminAuditLogPage />} />
               <Route path="/admin/professors/new" element={<AdminProfessorCreatePage />} />
               <Route path="/admin/coordinators/new" element={<AdminCoordinatorCreatePage />} />
               <Route path="/admin/groups/cleanup" element={<GroupCleanupPage role="ADMIN" />} />

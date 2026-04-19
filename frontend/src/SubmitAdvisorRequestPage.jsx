@@ -26,6 +26,10 @@ export default function SubmitAdvisorRequestPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const selectedGroup = groups.find((group) => String(group.id) === String(form.groupId)) || null;
+  const selectedGroupHasAdvisor = Boolean(selectedGroup?.advisorId);
+  const eligibleGroups = groups.filter((group) => !group.advisorId);
+
   useEffect(() => {
     async function loadData() {
       try {
@@ -132,12 +136,17 @@ export default function SubmitAdvisorRequestPage() {
             >
               <option value="">-- Select a group --</option>
               {groups.map((group) => (
-                <option key={group.id} value={group.id}>
+                <option key={group.id} value={group.id} disabled={Boolean(group.advisorId)}>
                   {group.name}
                   {group.advisorId ? ' (Already has advisor)' : ''}
                 </option>
               ))}
             </select>
+            {groups.length > 0 && eligibleGroups.length === 0 && (
+              <div className="field-help" role="note">
+                All of your groups already have advisors, so no new advisor request can be created.
+              </div>
+            )}
             {fieldErrors.groupId.length > 0 && (
               <div className="field-error" role="alert">
                 {fieldErrors.groupId.map((error) => (
@@ -153,7 +162,7 @@ export default function SubmitAdvisorRequestPage() {
               name="professorId"
               value={form.professorId}
               onChange={handleChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !form.groupId || selectedGroupHasAdvisor}
               aria-invalid={fieldErrors.professorId.length > 0}
               required
             >
@@ -165,6 +174,11 @@ export default function SubmitAdvisorRequestPage() {
                 </option>
               ))}
             </select>
+            {selectedGroupHasAdvisor && (
+              <div className="field-help" role="note">
+                This group already has an assigned advisor. Choose a different group to submit a new request.
+              </div>
+            )}
             {fieldErrors.professorId.length > 0 && (
               <div className="field-error" role="alert">
                 {fieldErrors.professorId.map((error) => (
@@ -181,7 +195,9 @@ export default function SubmitAdvisorRequestPage() {
               || !form.groupId
               || !form.professorId
               || groups.length === 0
+              || eligibleGroups.length === 0
               || professors.length === 0
+              || selectedGroupHasAdvisor
             }
           >
             {isSubmitting ? 'Submitting...' : 'Submit Request'}

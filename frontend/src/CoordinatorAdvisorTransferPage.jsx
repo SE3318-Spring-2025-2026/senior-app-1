@@ -104,6 +104,25 @@ export default function CoordinatorAdvisorTransferPage() {
     [groups, selectedGroupId],
   );
 
+  const totalMembers = useMemo(() => {
+    if (!selectedGroup) {
+      return 0;
+    }
+
+    const participantIds = new Set();
+    const leaderId = String(selectedGroup.leader?.id || selectedGroup.leaderId || '');
+
+    if (leaderId) {
+      participantIds.add(leaderId);
+    }
+
+    (selectedGroup.members || []).forEach((member) => {
+      participantIds.add(String(member.id));
+    });
+
+    return participantIds.size;
+  }, [selectedGroup]);
+
   useEffect(() => {
     if (!selectedGroup) {
       setSelectedAdvisorId('');
@@ -289,7 +308,7 @@ export default function CoordinatorAdvisorTransferPage() {
               Current Advisor: {selectedGroup?.advisor?.fullName || selectedGroup?.advisor?.email || 'Unassigned'}
             </p>
             <p className="token-copy">
-              Members: {(selectedGroup?.members || []).length}
+              Members: {totalMembers}
             </p>
           </section>
 

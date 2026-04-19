@@ -14,6 +14,7 @@ const {
   Professor,
   GroupAdvisorAssignment,
   AdvisorRequest,
+  Invitation,
   AuditLog,
   Notification,
   ValidStudentId,
@@ -122,6 +123,43 @@ test('admin can log in with email and password', async () => {
 
   assert.equal(invalidResult.response.status, 401);
   assert.equal(invalidResult.json.code, 'INVALID_CREDENTIALS');
+});
+
+test('audit log feed is admin-only', async () => {
+  const admin = await User.create({
+    email: 'audit-admin@example.com',
+    fullName: 'Audit Admin',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+  const student = await createStudent({
+    studentId: '11070001011',
+    email: 'audit-student@example.edu',
+    fullName: 'Audit Student',
+    password: 'StrongPass1!',
+  });
+
+  await AuditLog.create({
+    action: 'GROUP_CREATED',
+    actorId: admin.id,
+    targetType: 'GROUP',
+    targetId: 'group-audit-1',
+    metadata: { groupName: 'Audit Group' },
+  });
+
+  const forbidden = await request('/api/v1/admin/audit-logs', {
+    headers: await authHeaderFor(student),
+  });
+  assert.equal(forbidden.response.status, 403);
+
+  const success = await request('/api/v1/admin/audit-logs', {
+    headers: await authHeaderFor(admin),
+  });
+  assert.equal(success.response.status, 200);
+  assert.equal(success.json.count, 1);
+  assert.equal(success.json.data[0].action, 'GROUP_CREATED');
+  assert.equal(success.json.data[0].actor.email, 'audit-admin@example.com');
 });
 
 test('coordinator can log in with email and password', async () => {
@@ -1480,6 +1518,68 @@ test('group database advisor transfer enforces role checks and updates the persi
   assert.equal(staleAdvisor.json.code, 'GROUP_HAS_INVALID_ADVISOR');
 });
 
+test('coordinator can add a student to a group and the membership audit log is written', async () => {
+  const coordinator = await User.create({
+    email: 'membership-coordinator@example.edu',
+    fullName: 'Membership Coordinator',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+  const leader = await createStudent({
+    studentId: '11070001110',
+    email: 'membership-leader@example.edu',
+    fullName: 'Membership Leader',
+    password: 'StrongPass1!',
+  });
+  const member = await createStudent({
+    studentId: '11070001002',
+    email: 'membership-target@example.edu',
+    fullName: 'Membership Target',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    id: 'group-membership-coordinator-1',
+    name: 'baba',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+    maxMembers: 4,
+    status: 'FORMATION',
+  });
+
+  const response = await request(`/api/v1/coordinator/groups/${group.id}/members`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({
+      action: 'ADD',
+      studentId: '11070001002',
+    }),
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.equal(response.json.id, group.id);
+  assert.ok(response.json.memberIds.includes(String(member.id)));
+
+  const updatedGroup = await Group.findByPk(group.id);
+  assert.ok(updatedGroup.memberIds.includes(String(member.id)));
+
+  const auditLog = await AuditLog.findOne({
+    where: {
+      action: 'COORDINATOR_MEMBER_ADDED',
+      actorId: coordinator.id,
+      targetType: 'GROUP',
+      targetId: group.id,
+    },
+  });
+  assert.ok(auditLog);
+  assert.equal(auditLog.metadata.studentId, '11070001002');
+  assert.equal(auditLog.metadata.membershipAction, 'ADD');
+});
+
 test('user database advisor assignment sync validates membership and rewrites mirrored rows', async () => {
   const coordinator = await User.create({
     email: 'sync-coordinator@example.edu',
@@ -1909,42 +2009,79 @@ test('[E2E NOTIFICATIONS] leader receives notification after invitee accepts', a
   // Capture logs for notification verification
   const originalLog = console.log;
   const allNotifications = [];
-  console.log = (...args) => {
-    const logEntry = args.join(' ');
-    allNotifications.push(logEntry);
-    originalLog(...args);
-  };
+  try {
+    console.log = (...args) => {
+      const logEntry = args.join(' ');
+      allNotifications.push(logEntry);
+      originalLog(...args);
+    };
 
-  // Invitee 1 accepts (first member)
-  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
-    body: JSON.stringify({ studentId: '11070020000' }),
+    // Invitee 1 accepts (first member)
+    await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+      body: JSON.stringify({ studentId: '11070020000' }),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    // Invitee 2 accepts (second member)
+    await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+      body: JSON.stringify({ studentId: '11070020001' }),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    // Verify leader received 2 notifications by checking all logs
+    const emittedEventLines = allNotifications.filter((log) =>
+      log.includes('[NotificationService] Event emitted')
+    );
+
+    assert.equal(emittedEventLines.length, 2);
+    assert.ok(
+      emittedEventLines.every((line) => line.includes('GROUP_MEMBERSHIP_ACCEPTED')),
+      'Expected membership acceptance notifications to be emitted for the leader',
+    );
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test('finalize membership counts the leader toward maxMembers', async () => {
+  const leader = await createStudent({
+    studentId: '11070030000',
+    email: 'finalize-capacity-leader@example.edu',
+    fullName: 'Finalize Capacity Leader',
+    password: 'StrongPass1!',
+  });
+  const invitee = await createStudent({
+    studentId: '11070030001',
+    email: 'finalize-capacity-invitee@example.edu',
+    fullName: 'Finalize Capacity Invitee',
+    password: 'StrongPass1!',
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 150));
-
-  // Invitee 2 accepts (second member)
-  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+  const groupResult = await request('/api/v1/groups', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
-    body: JSON.stringify({ studentId: '11070020001' }),
+    headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(leader)) },
+    body: JSON.stringify({
+      groupName: 'Finalize Capacity Group',
+      maxMembers: 1,
+    }),
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.equal(groupResult.response.status, 201);
 
-  // Verify leader received 2 notifications by checking all logs
-  const emittedEventLines = allNotifications.filter((log) =>
-    log.includes('[NotificationService] Event emitted')
-  );
+  const finalizeResponse = await request(`/api/v1/groups/${groupResult.json.data.groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ studentId: invitee.studentId }),
+  });
 
-  assert.equal(emittedEventLines.length, 2);
-  assert.ok(
-    emittedEventLines.every((line) => line.includes('GROUP_MEMBERSHIP_ACCEPTED')),
-    'Expected membership acceptance notifications to be emitted for the leader',
-  );
-
-  console.log = originalLog;
+  assert.equal(finalizeResponse.response.status, 400);
+  assert.equal(finalizeResponse.json.code, 'MAX_MEMBERS_REACHED');
 });
 
 test('advisor notification endpoints filter by authenticated advisor and support mark-as-read', async () => {
@@ -2029,6 +2166,272 @@ test('advisor notification endpoints filter by authenticated advisor and support
     headers: await authHeaderFor(advisorB),
   });
   assert.equal(forbiddenRead.response.status, 404);
+});
+
+test('legacy invitation response route writes a compatible audit log entry', async () => {
+  const leader = await createStudent({
+    studentId: '11070001141',
+    email: 'legacy-invite-leader@example.edu',
+    fullName: 'Legacy Invite Leader',
+    password: 'StrongPass1!',
+  });
+  const invitee = await createStudent({
+    studentId: '11070001142',
+    email: 'legacy-invite-student@example.edu',
+    fullName: 'Legacy Invite Student',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Legacy Invitation Group',
+    leaderId: leader.id,
+    memberIds: [String(leader.id)],
+    advisorId: null,
+    status: 'FORMATION',
+    maxMembers: 4,
+  });
+
+  const invitation = await Invitation.create({
+    id: '44444444-4444-4444-4444-444444444444',
+    groupId: group.id,
+    inviteeId: invitee.id,
+    status: 'PENDING',
+  });
+
+  const response = await request(`/api/v1/invitations/${invitation.id}/response`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(invitee)),
+    },
+    body: JSON.stringify({ response: 'REJECT' }),
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.equal(response.json.invitation.status, 'REJECTED');
+
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const auditLog = await AuditLog.findOne({
+    where: {
+      action: 'INVITATION_REJECTED',
+      targetType: 'INVITATION',
+      targetId: invitation.id,
+      actorId: invitee.id,
+    },
+  });
+
+  assert.ok(auditLog);
+  assert.equal(auditLog.metadata.groupId, group.id);
+});
+
+test('team leader cannot submit an advisor request for a group that already has an advisor', async () => {
+  const leader = await createStudent({
+    studentId: '11070001121',
+    email: 'leader-has-advisor@example.edu',
+    fullName: 'Leader Has Advisor',
+    password: 'StrongPass1!',
+  });
+  const currentAdvisor = await createProfessorUser({
+    email: 'current-advisor-has-group@example.edu',
+    fullName: 'Current Advisor Has Group',
+  });
+  const requestedAdvisor = await createProfessorUser({
+    email: 'requested-advisor-has-group@example.edu',
+    fullName: 'Requested Advisor Has Group',
+  });
+  const group = await Group.create({
+    name: 'Already Assigned Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    advisorId: currentAdvisor.id,
+    status: 'HAS_ADVISOR',
+    maxMembers: 4,
+  });
+
+  const response = await request('/api/v1/advisor-requests', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      groupId: group.id,
+      professorId: requestedAdvisor.id,
+    }),
+  });
+
+  assert.equal(response.response.status, 409);
+  assert.equal(response.json.code, 'GROUP_ALREADY_HAS_ADVISOR');
+});
+
+test('team leader cannot submit advisor requests to multiple advisors while one request is pending', async () => {
+  const leader = await createStudent({
+    studentId: '11070001131',
+    email: 'leader-pending-request@example.edu',
+    fullName: 'Leader Pending Request',
+    password: 'StrongPass1!',
+  });
+  const firstAdvisor = await createProfessorUser({
+    email: 'pending-first-advisor@example.edu',
+    fullName: 'Pending First Advisor',
+  });
+  const secondAdvisor = await createProfessorUser({
+    email: 'pending-second-advisor@example.edu',
+    fullName: 'Pending Second Advisor',
+  });
+
+  const group = await Group.create({
+    name: 'Pending Request Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    advisorId: null,
+    status: 'FORMATION',
+    maxMembers: 4,
+  });
+
+  const firstResponse = await request('/api/v1/advisor-requests', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      groupId: group.id,
+      professorId: firstAdvisor.id,
+    }),
+  });
+
+  assert.equal(firstResponse.response.status, 201);
+
+  const secondResponse = await request('/api/v1/advisor-requests', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      groupId: group.id,
+      professorId: secondAdvisor.id,
+    }),
+  });
+
+  assert.equal(secondResponse.response.status, 409);
+  assert.equal(secondResponse.json.code, 'GROUP_ALREADY_HAS_PENDING_REQUEST');
+});
+
+test('coordinator membership edit blocks adding the leader and enforces group max capacity', async () => {
+  const coordinator = await User.create({
+    email: 'coordinator-capacity@example.edu',
+    fullName: 'Coordinator Capacity',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+  const leader = await createStudent({
+    studentId: '11070001122',
+    email: 'coordinator-capacity-leader@example.edu',
+    fullName: 'Coordinator Capacity Leader',
+    password: 'StrongPass1!',
+  });
+  const member = await createStudent({
+    studentId: '11070001123',
+    email: 'coordinator-capacity-member@example.edu',
+    fullName: 'Coordinator Capacity Member',
+    password: 'StrongPass1!',
+  });
+  const extraStudent = await createStudent({
+    studentId: '11070001124',
+    email: 'coordinator-capacity-extra@example.edu',
+    fullName: 'Coordinator Capacity Extra',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    id: 'group-membership-capacity-1',
+    name: 'Capacity Group',
+    leaderId: String(leader.id),
+    memberIds: [String(member.id)],
+    maxMembers: 2,
+    status: 'FORMATION',
+  });
+
+  const leaderAddResponse = await request(`/api/v1/coordinator/groups/${group.id}/members`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({
+      action: 'ADD',
+      studentId: leader.studentId,
+    }),
+  });
+
+  assert.equal(leaderAddResponse.response.status, 400);
+  assert.equal(leaderAddResponse.json.code, 'MEMBERSHIP_NO_CHANGE');
+
+  const overCapacityResponse = await request(`/api/v1/coordinator/groups/${group.id}/members`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({
+      action: 'ADD',
+      studentId: extraStudent.studentId,
+    }),
+  });
+
+  assert.equal(overCapacityResponse.response.status, 409);
+  assert.equal(overCapacityResponse.json.code, 'GROUP_FULL');
+});
+
+test('group leader cannot lower maxMembers below current participant count', async () => {
+  const leader = await createStudent({
+    studentId: '11070001125',
+    email: 'rename-max-leader@example.edu',
+    fullName: 'Rename Max Leader',
+    password: 'StrongPass1!',
+  });
+  const memberOne = await createStudent({
+    studentId: '11070001126',
+    email: 'rename-max-member-one@example.edu',
+    fullName: 'Rename Max Member One',
+    password: 'StrongPass1!',
+  });
+  const memberTwo = await createStudent({
+    studentId: '11070001127',
+    email: 'rename-max-member-two@example.edu',
+    fullName: 'Rename Max Member Two',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    id: 'group-rename-max-1',
+    name: 'Rename Max Group',
+    leaderId: String(leader.id),
+    memberIds: [String(memberOne.id), String(memberTwo.id)],
+    maxMembers: 5,
+    status: 'FORMATION',
+  });
+
+  const response = await request(`/api/v1/groups/${group.id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      maxMembers: 2,
+    }),
+  });
+
+  assert.equal(response.response.status, 400);
+  assert.equal(response.json.code, 'INVALID_MAX_MEMBERS');
+
+  const unchangedGroup = await Group.findByPk(group.id);
+  assert.equal(unchangedGroup.maxMembers, 5);
 });
 
 test('team leader can view their advisor request details but others cannot', async () => {

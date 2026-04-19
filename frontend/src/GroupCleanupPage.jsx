@@ -108,7 +108,24 @@ export default function GroupCleanupPage({ role = 'COORDINATOR' }) {
   );
 
   const hasAdvisor = Boolean(selectedGroup?.advisor?.id);
-  const totalMembers = (selectedGroup?.members || []).length + (selectedGroup?.leader ? 1 : 0);
+  const totalMembers = useMemo(() => {
+    if (!selectedGroup) {
+      return 0;
+    }
+
+    const participantIds = new Set();
+    const leaderId = String(selectedGroup.leader?.id || selectedGroup.leaderId || '');
+
+    if (leaderId) {
+      participantIds.add(leaderId);
+    }
+
+    (selectedGroup.members || []).forEach((member) => {
+      participantIds.add(String(member.id));
+    });
+
+    return participantIds.size;
+  }, [selectedGroup]);
 
   async function handleDelete() {
     if (!selectedGroup) {

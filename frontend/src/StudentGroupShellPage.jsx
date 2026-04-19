@@ -58,6 +58,15 @@ export default function StudentGroupShellPage() {
     return rows;
   })();
 
+  const kickableMembers = (() => {
+    if (!selectedGroup) {
+      return [];
+    }
+
+    const leaderId = String(selectedGroup.leader?.id || selectedGroup.leaderId || '');
+    return (selectedGroup.members || []).filter((member) => String(member.id) !== leaderId);
+  })();
+
   async function loadGroupDirectory() {
     setGroupsLoading(true);
 
@@ -101,7 +110,8 @@ export default function StudentGroupShellPage() {
     setEditGroupMaxMembers(selectedGroup?.maxMembers || 4);
     setInviteIds([]);
     setSelectedInviteIds([]);
-    const firstKickable = (selectedGroup?.members || [])[0];
+    const leaderId = String(selectedGroup?.leader?.id || selectedGroup?.leaderId || '');
+    const firstKickable = (selectedGroup?.members || []).find((member) => String(member.id) !== leaderId);
     setSelectedKickMemberId(firstKickable ? String(firstKickable.id) : '');
   }, [selectedGroup]);
 
@@ -447,8 +457,8 @@ export default function StudentGroupShellPage() {
                         value={selectedKickMemberId}
                         onChange={(event) => setSelectedKickMemberId(event.target.value)}
                       >
-                        {!selectedGroup.members?.length && <option value="">No members to kick</option>}
-                        {(selectedGroup.members || []).map((member) => (
+                        {kickableMembers.length === 0 && <option value="">No members to kick</option>}
+                        {kickableMembers.map((member) => (
                           <option key={member.id} value={member.id}>{member.fullName || member.studentId || member.id}</option>
                         ))}
                       </select>

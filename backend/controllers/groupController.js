@@ -435,8 +435,15 @@ exports.renameGroup = async (req, res) => {
 
     if (maxMembers !== undefined) {
       const nextMax = Number(maxMembers);
-      const memberCount = Array.isArray(group.memberIds) ? group.memberIds.length : 0;
-      if (nextMax < memberCount) {
+      const participantIds = new Set();
+      if (group.leaderId) {
+        participantIds.add(String(group.leaderId));
+      }
+      (Array.isArray(group.memberIds) ? group.memberIds : []).forEach((memberId) => {
+        participantIds.add(String(memberId));
+      });
+
+      if (nextMax < participantIds.size) {
         return res.status(400).json({ code: 'INVALID_MAX_MEMBERS', message: 'Max members cannot be lower than current member count.' });
       }
       group.maxMembers = nextMax;
