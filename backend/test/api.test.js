@@ -2009,41 +2009,45 @@ test('[E2E NOTIFICATIONS] leader receives notification after invitee accepts', a
   // Capture logs for notification verification
   const originalLog = console.log;
   const allNotifications = [];
-  console.log = (...args) => {
-    const logEntry = args.join(' ');
-    allNotifications.push(logEntry);
-    originalLog(...args);
-  };
+  try {
+    console.log = (...args) => {
+      const logEntry = args.join(' ');
+      allNotifications.push(logEntry);
+      originalLog(...args);
+    };
 
-  // Invitee 1 accepts (first member)
-  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
-    body: JSON.stringify({ studentId: '11070020000' }),
-  });
+    // Invitee 1 accepts (first member)
+    await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+      body: JSON.stringify({ studentId: '11070020000' }),
+    });
 
-  await new Promise((resolve) => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
-  // Invitee 2 accepts (second member)
-  await request(`/api/v1/groups/${groupId}/membership/finalize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...leaderHeaders },
-    body: JSON.stringify({ studentId: '11070020001' }),
-  });
+    // Invitee 2 accepts (second member)
+    await request(`/api/v1/groups/${groupId}/membership/finalize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...leaderHeaders },
+      body: JSON.stringify({ studentId: '11070020001' }),
+    });
 
-  await new Promise((resolve) => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
-  // Verify leader received 2 notifications by checking all logs
-  const emittedEventLines = allNotifications.filter((log) =>
-    log.includes('[NotificationService] Event emitted')
-  );
+    // Verify leader received 2 notifications by checking all logs
+    const emittedEventLines = allNotifications.filter((log) =>
+      log.includes('[NotificationService] Event emitted')
+    );
 
-  assert.equal(emittedEventLines.length, 2);
-  assert.ok(
-    emittedEventLines.every((line) => line.includes('GROUP_MEMBERSHIP_ACCEPTED')),
-    'Expected membership acceptance notifications to be emitted for the leader',
-  );
-
+    assert.equal(emittedEventLines.length, 2);
+    assert.ok(
+      emittedEventLines.every((line) => line.includes('GROUP_MEMBERSHIP_ACCEPTED')),
+      'Expected membership acceptance notifications to be emitted for the leader',
+    );
+  } finally {
+    console.log = originalLog;
+  }
+});
 
 test('finalize membership counts the leader toward maxMembers', async () => {
   const leader = await createStudent({
@@ -2078,8 +2082,6 @@ test('finalize membership counts the leader toward maxMembers', async () => {
 
   assert.equal(finalizeResponse.response.status, 400);
   assert.equal(finalizeResponse.json.code, 'MAX_MEMBERS_REACHED');
-});
-  console.log = originalLog;
 });
 
 test('advisor notification endpoints filter by authenticated advisor and support mark-as-read', async () => {
