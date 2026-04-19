@@ -2044,6 +2044,41 @@ test('[E2E NOTIFICATIONS] leader receives notification after invitee accepts', a
     'Expected membership acceptance notifications to be emitted for the leader',
   );
 
+
+test('finalize membership counts the leader toward maxMembers', async () => {
+  const leader = await createStudent({
+    studentId: '11070030000',
+    email: 'finalize-capacity-leader@example.edu',
+    fullName: 'Finalize Capacity Leader',
+    password: 'StrongPass1!',
+  });
+  const invitee = await createStudent({
+    studentId: '11070030001',
+    email: 'finalize-capacity-invitee@example.edu',
+    fullName: 'Finalize Capacity Invitee',
+    password: 'StrongPass1!',
+  });
+
+  const groupResult = await request('/api/v1/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(leader)) },
+    body: JSON.stringify({
+      groupName: 'Finalize Capacity Group',
+      maxMembers: 1,
+    }),
+  });
+
+  assert.equal(groupResult.response.status, 201);
+
+  const finalizeResponse = await request(`/api/v1/groups/${groupResult.json.data.groupId}/membership/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ studentId: invitee.studentId }),
+  });
+
+  assert.equal(finalizeResponse.response.status, 400);
+  assert.equal(finalizeResponse.json.code, 'MAX_MEMBERS_REACHED');
+});
   console.log = originalLog;
 });
 
@@ -2348,6 +2383,53 @@ test('coordinator membership edit blocks adding the leader and enforces group ma
 
   assert.equal(overCapacityResponse.response.status, 409);
   assert.equal(overCapacityResponse.json.code, 'GROUP_FULL');
+});
+
+test('group leader cannot lower maxMembers below current participant count', async () => {
+  const leader = await createStudent({
+    studentId: '11070001125',
+    email: 'rename-max-leader@example.edu',
+    fullName: 'Rename Max Leader',
+    password: 'StrongPass1!',
+  });
+  const memberOne = await createStudent({
+    studentId: '11070001126',
+    email: 'rename-max-member-one@example.edu',
+    fullName: 'Rename Max Member One',
+    password: 'StrongPass1!',
+  });
+  const memberTwo = await createStudent({
+    studentId: '11070001127',
+    email: 'rename-max-member-two@example.edu',
+    fullName: 'Rename Max Member Two',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    id: 'group-rename-max-1',
+    name: 'Rename Max Group',
+    leaderId: String(leader.id),
+    memberIds: [String(memberOne.id), String(memberTwo.id)],
+    maxMembers: 5,
+    status: 'FORMATION',
+  });
+
+  const response = await request(`/api/v1/groups/${group.id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      maxMembers: 2,
+    }),
+  });
+
+  assert.equal(response.response.status, 400);
+  assert.equal(response.json.code, 'INVALID_MAX_MEMBERS');
+
+  const unchangedGroup = await Group.findByPk(group.id);
+  assert.equal(unchangedGroup.maxMembers, 5);
 });
 
 test('team leader can view their advisor request details but others cannot', async () => {

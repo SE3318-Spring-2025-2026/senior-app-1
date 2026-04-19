@@ -90,6 +90,25 @@ export default function CoordinatorGroupMembershipPage() {
     [groups, selectedGroupId],
   );
 
+  const totalMembers = useMemo(() => {
+    if (!selectedGroup) {
+      return 0;
+    }
+
+    const participantIds = new Set();
+    const leaderId = String(selectedGroup.leader?.id || selectedGroup.leaderId || '');
+
+    if (leaderId) {
+      participantIds.add(leaderId);
+    }
+
+    (selectedGroup.members || []).forEach((member) => {
+      participantIds.add(String(member.id));
+    });
+
+    return participantIds.size;
+  }, [selectedGroup]);
+
   async function handleSubmit(event) {
     event.preventDefault();
 
@@ -233,7 +252,7 @@ export default function CoordinatorGroupMembershipPage() {
               Leader: {selectedGroup?.leader?.fullName || selectedGroup?.leader?.studentId || 'Unknown'}
             </p>
             <p className="token-copy">
-              Members: {(selectedGroup?.members || []).length}
+              Members: {totalMembers}
             </p>
           </section>
 
