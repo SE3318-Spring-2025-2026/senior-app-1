@@ -108,7 +108,7 @@ export default function GroupCleanupPage({ role = 'COORDINATOR' }) {
   );
 
   const hasAdvisor = Boolean(selectedGroup?.advisor?.id);
-  const totalMembers = (selectedGroup?.members || []).length + (selectedGroup?.leader ? 1 : 0);
+  const totalMembers = (selectedGroup?.members || []).length;
 
   async function handleDelete() {
     if (!selectedGroup) {

@@ -42,6 +42,14 @@ const adminTools = [
     cta: 'Open Cleanup Tool',
     status: 'Ready',
   },
+  {
+    eyebrow: 'Compliance',
+    title: 'Audit Logs',
+    description: 'Inspect recorded actions and trace actor, target, and metadata from the admin workspace.',
+    href: '/admin/audit-logs',
+    cta: 'Open Audit Logs',
+    status: 'Ready',
+  },
 ];
 
 export default function AdminHomePage() {

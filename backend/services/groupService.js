@@ -409,11 +409,11 @@ class GroupService {
   static async _writeAuditLog({ invitationId, groupId, actorId, action }) {
     try {
       await AuditLog.create({
-        entityType: 'INVITATION',
-        entityId: invitationId,
+        targetType: 'INVITATION',
+        targetId: invitationId,
         actorId,
         action,
-        metadata: JSON.stringify({ groupId }),
+        metadata: { groupId },
       });
     } catch (err) {
       console.error('[GroupService] _writeAuditLog failed', { invitationId, action }, err);

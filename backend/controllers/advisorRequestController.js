@@ -78,6 +78,16 @@ const createAdvisorRequest = [
         );
       }
 
+      if (group.advisorId) {
+        return res.status(409).json({
+          code: 'GROUP_ALREADY_HAS_ADVISOR',
+          message: 'This group already has an assigned advisor.',
+          errors: {
+            groupId: ['This group already has an assigned advisor'],
+          },
+        });
+      }
+
       const advisor = await Professor.findOne({
         where: { userId: advisorId },
         include: [{ model: User, attributes: ['id', 'fullName', 'email', 'role'] }],
@@ -89,6 +99,23 @@ const createAdvisorRequest = [
           message: 'Please check your input and try again',
           errors: {
             advisorId: ['The selected advisor does not exist'],
+          },
+        });
+      }
+
+      const existingPendingRequestForGroup = await AdvisorRequest.findOne({
+        where: {
+          groupId,
+          status: 'PENDING',
+        },
+      });
+
+      if (existingPendingRequestForGroup) {
+        return res.status(409).json({
+          code: 'GROUP_ALREADY_HAS_PENDING_REQUEST',
+          message: 'This group already has a pending advisor request.',
+          errors: {
+            groupId: ['This group already has a pending advisor request'],
           },
         });
       }

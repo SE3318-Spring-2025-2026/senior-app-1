@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import NotificationViewport from './NotificationViewport';
 
 const roleMenuSections = {
@@ -51,6 +51,7 @@ const roleMenuSections = {
         { to: '/admin/professors/new', label: 'Create Professor Account', icon: 'MG' },
         { to: '/admin/coordinators/new', label: 'Create Coordinator Account', icon: 'CG' },
         { to: '/admin/groups/cleanup', label: 'Group Cleanup', icon: 'GC' },
+        { to: '/admin/audit-logs', label: 'Audit Logs', icon: 'AL' },
       ],
     },
   ],
@@ -96,7 +97,13 @@ function readAuthenticatedUser() {
 export default function AppShell() {
   const [openMenu, setOpenMenu] = useState(false);
   const [openProfile, setOpenProfile] = useState(false);
-  const authenticatedUser = readAuthenticatedUser();
+  const location = useLocation();
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => readAuthenticatedUser());
+
+  useEffect(() => {
+    setAuthenticatedUser(readAuthenticatedUser());
+  }, [location.key]);
+
   const isAuthenticated = Boolean(authenticatedUser);
   const viewer = authenticatedUser || { label: 'Guest', role: 'Guest', initials: 'G' };
   const menuSections = isAuthenticated ? (roleMenuSections[authenticatedUser.role] || []) : [];
