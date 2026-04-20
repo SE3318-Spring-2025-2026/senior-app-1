@@ -2826,6 +2826,12 @@ test('group leader invite dispatch enforces current capacity and available slots
     fullName: 'Invite Capacity Two',
     password: 'StrongPass1!',
   });
+  const inviteeThree = await createStudent({
+    studentId: '11070001158',
+    email: 'invite-capacity-three@example.edu',
+    fullName: 'Invite Capacity Three',
+    password: 'StrongPass1!',
+  });
 
   const fullGroup = await Group.create({
     id: 'group-invite-capacity-full',
@@ -2866,12 +2872,83 @@ test('group leader invite dispatch enforces current capacity and available slots
       ...(await authHeaderFor(leader)),
     },
     body: JSON.stringify({
-      studentIds: [inviteeOne.studentId, inviteeTwo.studentId, member.studentId],
+      studentIds: [inviteeOne.studentId, inviteeTwo.studentId, inviteeThree.studentId],
     }),
   });
 
   assert.equal(overInviteResponse.response.status, 409);
   assert.equal(overInviteResponse.json.code, 'INVITE_CAPACITY_EXCEEDED');
+});
+
+test('group leader invite dispatch treats pending invitations as reserved capacity', async () => {
+  const leader = await createStudent({
+    studentId: '11070001154',
+    email: 'invite-pending-capacity-leader@example.edu',
+    fullName: 'Invite Pending Capacity Leader',
+    password: 'StrongPass1!',
+  });
+  const member = await createStudent({
+    studentId: '11070001155',
+    email: 'invite-pending-capacity-member@example.edu',
+    fullName: 'Invite Pending Capacity Member',
+    password: 'StrongPass1!',
+  });
+  const pendingInvitee = await createStudent({
+    studentId: '11070001156',
+    email: 'invite-pending-capacity-pending@example.edu',
+    fullName: 'Invite Pending Capacity Pending',
+    password: 'StrongPass1!',
+  });
+  const newInvitee = await createStudent({
+    studentId: '11070001157',
+    email: 'invite-pending-capacity-new@example.edu',
+    fullName: 'Invite Pending Capacity New',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    id: 'group-invite-pending-capacity',
+    name: 'Pending Capacity Group',
+    leaderId: String(leader.id),
+    memberIds: [String(member.id)],
+    maxMembers: 3,
+    status: 'FORMATION',
+  });
+
+  await Invitation.create({
+    groupId: group.id,
+    inviteeId: pendingInvitee.id,
+    status: 'PENDING',
+  });
+
+  const blockedResponse = await request(`/api/v1/groups/${group.id}/invitations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      studentIds: [newInvitee.studentId],
+    }),
+  });
+
+  assert.equal(blockedResponse.response.status, 409);
+  assert.equal(blockedResponse.json.code, 'GROUP_FULL');
+
+  const retryPendingResponse = await request(`/api/v1/groups/${group.id}/invitations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      studentIds: [pendingInvitee.studentId],
+    }),
+  });
+
+  assert.equal(retryPendingResponse.response.status, 201);
+  assert.equal(retryPendingResponse.json.created.length, 0);
+  assert.deepEqual(retryPendingResponse.json.skippedStudentIds, [pendingInvitee.studentId]);
 });
 
 test('group leader can re-invite a student after the previous invitation was rejected', async () => {

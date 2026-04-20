@@ -12,7 +12,8 @@ export default function GroupPage() {
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [releasing, setReleasing] = useState(false);
-  const [userStudentId, setUserStudentId] = useState(null);
+  const [studentUserId, setStudentUserId] = useState(null);
+  const [studentNumber, setStudentNumber] = useState(null);
   const [userAdvisorId, setUserAdvisorId] = useState(null);
   const [error, setError] = useState(null);
   const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
@@ -24,9 +25,18 @@ export default function GroupPage() {
   };
 
   useEffect(() => {
-    const studentId = window.localStorage.getItem('studentId');
-    setUserStudentId(studentId);
-    setIsStudentViewer(Boolean(window.localStorage.getItem('studentUser') || studentId));
+    const legacyStudentId = window.localStorage.getItem('studentId');
+
+    try {
+      const studentUser = JSON.parse(window.localStorage.getItem('studentUser') || '{}');
+      setStudentUserId(studentUser?.id ? String(studentUser.id) : null);
+      setStudentNumber(studentUser?.studentId || legacyStudentId || null);
+      setIsStudentViewer(Boolean(studentUser?.id || legacyStudentId));
+    } catch {
+      setStudentUserId(null);
+      setStudentNumber(legacyStudentId || null);
+      setIsStudentViewer(Boolean(legacyStudentId));
+    }
 
     try {
       const professorUser = JSON.parse(window.localStorage.getItem('professorUser') || '{}');
@@ -62,8 +72,6 @@ export default function GroupPage() {
   }, [groupId, notify]);
 
   async function confirmAdvisorRelease() {
-    setShowReleaseConfirm(false);
-
     if (!userAdvisorId) {
       notify({
         type: 'error',
@@ -82,6 +90,7 @@ export default function GroupPage() {
         advisor: null,
         status: response.data?.data?.status || 'LOOKING_FOR_ADVISOR',
       }));
+      setShowReleaseConfirm(false);
       notify({
         type: 'success',
         title: 'Advisor released',
@@ -99,7 +108,7 @@ export default function GroupPage() {
   }
 
   async function handleJoinGroup() {
-    if (!userStudentId) {
+    if (!studentNumber) {
       notify({
         type: 'error',
         title: 'Not authenticated',
@@ -113,7 +122,7 @@ export default function GroupPage() {
       setJoining(true);
 
       await apiClient.post(`/v1/groups/${groupId}/membership/finalize`, {
-        studentId: userStudentId,
+        studentId: studentNumber,
       });
 
       const refreshedGroup = await loadGroupData();
@@ -183,8 +192,8 @@ export default function GroupPage() {
   }
 
   const isAlreadyMember = Boolean(
-    userStudentId
-    && (group.memberIds || group.members?.map((member) => String(member.id)) || []).includes(String(userStudentId)),
+    studentUserId
+    && (group.memberIds || group.members?.map((member) => String(member.id)) || []).includes(String(studentUserId)),
   );
   const isFull = group.currentMemberCount >= group.maxMembers;
   const isFinalized = group.status === 'COMPLETED' || group.status === 'DISBANDED';
@@ -237,7 +246,7 @@ export default function GroupPage() {
                     {member.fullName || member.email || member.studentId || member.id}
                     {member.isLeader ? ' (Leader)' : ''}
                   </span>
-                  {String(member.id) === String(userStudentId) && (
+                  {String(member.id) === String(studentUserId) && (
                     <span className="group-member-you">(You)</span>
                   )}
                 </li>
@@ -292,7 +301,15 @@ export default function GroupPage() {
 
       {showReleaseConfirm && (
         <div className="dialog-overlay" role="dialog" aria-modal="true" aria-label="Release advisor assignment">
-          <button type="button" className="dialog-backdrop" onClick={() => setShowReleaseConfirm(false)} />
+          <div
+            className="dialog-backdrop"
+            aria-hidden="true"
+            onClick={() => {
+              if (!releasing) {
+                setShowReleaseConfirm(false);
+              }
+            }}
+          />
           <section className="dialog-card">
             <span className="mail-topic">Advisor Release</span>
             <h2>Confirm release</h2>
@@ -300,10 +317,15 @@ export default function GroupPage() {
               Release your advisor assignment from <strong>{group.groupName}</strong>? The group will return to the advisor search state.
             </p>
             <div className="dialog-actions">
-              <button type="button" className="cleanup-delete-button" onClick={confirmAdvisorRelease}>
-                Yes, Release
+              <button
+                type="button"
+                className="cleanup-delete-button"
+                onClick={confirmAdvisorRelease}
+                disabled={releasing}
+              >
+                {releasing ? 'Releasing...' : 'Yes, Release'}
               </button>
-              <button type="button" onClick={() => setShowReleaseConfirm(false)}>
+              <button type="button" onClick={() => setShowReleaseConfirm(false)} disabled={releasing}>
                 Cancel
               </button>
             </div>
