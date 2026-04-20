@@ -46,7 +46,10 @@ class GroupService {
       throw error;
     }
 
-    const result = await mentorMatchingService.removeAdvisorAssignmentFromGroup({ groupId });
+    const result = await mentorMatchingService.removeAdvisorAssignmentFromGroup({
+      groupId,
+      actorId: Number.parseInt(String(advisorId), 10),
+    });
     const updatedGroup = await Group.findByPk(groupId);
 
     return {
@@ -316,12 +319,19 @@ class GroupService {
 
     const existing = await Invitation.findAll({
       where: { groupId, inviteeId: uniqueInviteeIds },
-      attributes: ['inviteeId'],
+      attributes: ['id', 'groupId', 'inviteeId', 'status'],
     });
 
-    const alreadyInvited = new Set(existing.map((inv) => inv.inviteeId));
-    const toInsert = uniqueInviteeIds.filter((id) => !alreadyInvited.has(id));
-    const skipped = uniqueInviteeIds.filter((id) => alreadyInvited.has(id));
+    const pendingInviteeIds = new Set(
+      existing
+        .filter((invitation) => invitation.status === 'PENDING')
+        .map((invitation) => invitation.inviteeId),
+    );
+    const recyclableInvitations = existing.filter((invitation) => invitation.status !== 'PENDING');
+    const recyclableInviteeIds = new Set(recyclableInvitations.map((invitation) => invitation.inviteeId));
+
+    const toInsert = uniqueInviteeIds.filter((id) => !pendingInviteeIds.has(id) && !recyclableInviteeIds.has(id));
+    const skipped = uniqueInviteeIds.filter((id) => pendingInviteeIds.has(id));
 
     let created = [];
     if (toInsert.length > 0) {
@@ -330,6 +340,15 @@ class GroupService {
         { returning: true },
       );
     }
+
+    const requeued = await Promise.all(
+      recyclableInvitations.map(async (invitation) => {
+        await invitation.update({ status: 'PENDING' });
+        return invitation;
+      }),
+    );
+
+    created = [...created, ...requeued];
 
     for (const invitation of created) {
       NotificationService.queueInviteAlert(

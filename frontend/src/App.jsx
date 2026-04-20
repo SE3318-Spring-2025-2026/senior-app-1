@@ -13,6 +13,7 @@ import CoordinatorLoginPage from './CoordinatorLoginPage';
 import CoordinatorStudentIdUploadPage from './CoordinatorStudentIdUploadPage';
 import GroupPage from './GroupPage';
 import HomePage from './HomePage';
+import ProfessorHomePage from './ProfessorHomePage';
 import ProfessorAdvisorRequestsPage from './ProfessorAdvisorRequestsPage';
 import ProfessorLoginPage from './ProfessorLoginPage';
 import ProfessorPasswordSetupPage from './ProfessorPasswordSetupPage';
@@ -47,6 +48,8 @@ export default function App() {
               <Route path="/team-leader/advisor-requests/new" element={<SubmitAdvisorRequestPage />} />
               <Route path="/team-leader/advisor-requests/:requestId" element={<TeamLeaderAdvisorRequestDetailsPage />} />
               <Route path="/professors/login" element={<AuthPage />} />
+              <Route path="/professors" element={<ProfessorHomePage />} />
+              <Route path="/professor" element={<ProfessorHomePage />} />
               <Route path="/professors/notifications" element={<ProfessorAdvisorRequestsPage />} />
               <Route path="/professors/password-setup" element={<ProfessorPasswordSetupPage />} />
               <Route path="/admin/login" element={<AuthPage />} />

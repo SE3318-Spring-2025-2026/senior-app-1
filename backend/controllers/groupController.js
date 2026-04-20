@@ -594,6 +594,14 @@ exports.dispatchInvites = async (req, res) => {
     if (!group) return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
     if (String(group.leaderId || '') !== String(req.user.id)) return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the group leader can send invitations' });
 
+    const participantIds = new Set();
+    if (group.leaderId) {
+      participantIds.add(String(group.leaderId));
+    }
+    (Array.isArray(group.memberIds) ? group.memberIds : []).forEach((memberId) => {
+      participantIds.add(String(memberId));
+    });
+
     const users = await User.findAll({ where: { role: 'STUDENT', studentId: { [Op.in]: requestedStudentIds } } });
 
     const usersByStudentId = new Map(users.map((user) => [user.studentId, user]));
@@ -642,6 +650,43 @@ exports.dispatchInvites = async (req, res) => {
     }
 
     const inviteeIds = users.map((user) => user.id);
+    const existingInvitations = await Invitation.findAll({
+      where: { groupId, inviteeId: inviteeIds },
+      attributes: ['inviteeId', 'status'],
+    });
+    const existingPendingInviteeIds = new Set(
+      existingInvitations
+        .filter((invitation) => invitation.status === 'PENDING')
+        .map((invitation) => invitation.inviteeId),
+    );
+    const pendingInvitationCount = await Invitation.count({
+      where: {
+        groupId,
+        status: 'PENDING',
+      },
+    });
+    const availableSlots = Math.max(
+      Number(group.maxMembers || 0) - participantIds.size - pendingInvitationCount,
+      0,
+    );
+    const additionalPendingInvitesNeeded = inviteeIds.filter(
+      (inviteeId) => !existingPendingInviteeIds.has(inviteeId),
+    ).length;
+
+    if (additionalPendingInvitesNeeded > 0 && availableSlots <= 0) {
+      return res.status(409).json({
+        code: 'GROUP_FULL',
+        message: 'This group is already at full capacity.',
+      });
+    }
+
+    if (additionalPendingInvitesNeeded > availableSlots) {
+      return res.status(409).json({
+        code: 'INVITE_CAPACITY_EXCEEDED',
+        message: `Only ${availableSlots} slot${availableSlots === 1 ? '' : 's'} available for new invitations.`,
+      });
+    }
+
     const { created, skipped } = await GroupService.dispatchInvites(groupId, inviteeIds);
 
     const skippedStudentIds = skipped.map((inviteeId) => users.find((user) => user.id === inviteeId)?.studentId).filter(Boolean);

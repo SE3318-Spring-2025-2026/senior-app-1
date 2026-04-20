@@ -2691,6 +2691,420 @@ test('team leader cannot submit advisor requests to multiple advisors while one 
   assert.equal(secondResponse.json.code, 'GROUP_ALREADY_HAS_PENDING_REQUEST');
 });
 
+test('team leader submit flow creates advisor request and advisor inbox notification', async () => {
+  const leader = await createStudent({
+    studentId: '11070001170',
+    email: 'mentor-submit-leader@example.edu',
+    fullName: 'Mentor Submit Leader',
+    password: 'StrongPass1!',
+  });
+  const advisor = await createProfessorUser({
+    email: 'mentor-submit-advisor@example.edu',
+    fullName: 'Mentor Submit Advisor',
+  });
+  const group = await Group.create({
+    id: 'group-mentor-submit-1',
+    name: 'Mentor Submit Group',
+    leaderId: String(leader.id),
+    memberIds: [],
+    advisorId: null,
+    status: 'FORMATION',
+    maxMembers: 4,
+  });
+
+  const response = await request('/api/v1/advisor-requests', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      groupId: group.id,
+      advisorId: advisor.id,
+    }),
+  });
+
+  assert.equal(response.response.status, 201);
+  assert.equal(response.json.groupId, group.id);
+  assert.equal(response.json.advisorId, advisor.id);
+  assert.equal(response.json.teamLeaderId, leader.id);
+  assert.equal(response.json.status, 'PENDING');
+
+  const storedRequest = await AdvisorRequest.findByPk(response.json.id);
+  assert.ok(storedRequest);
+  assert.equal(storedRequest.status, 'PENDING');
+
+  const storedNotification = await Notification.findOne({
+    where: {
+      userId: advisor.id,
+      type: 'ADVISOR_REQUEST',
+    },
+    order: [['createdAt', 'DESC']],
+  });
+  assert.ok(storedNotification);
+
+  const advisorInbox = await request('/api/v1/advisors/notifications/advisee-requests', {
+    headers: await authHeaderFor(advisor),
+  });
+
+  assert.equal(advisorInbox.response.status, 200);
+  assert.equal(advisorInbox.json.count, 1);
+  assert.equal(advisorInbox.json.data[0].requestId, response.json.id);
+  assert.equal(advisorInbox.json.data[0].groupId, group.id);
+  assert.equal(advisorInbox.json.data[0].groupName, 'Mentor Submit Group');
+});
+
+test('advisor approval flow updates assignment, mirrors rows, writes audit log, and notifies the team leader', async () => {
+  const leader = await createStudent({
+    studentId: '11070001171',
+    email: 'mentor-approve-leader@example.edu',
+    fullName: 'Mentor Approve Leader',
+    password: 'StrongPass1!',
+  });
+  const advisor = await createProfessorUser({
+    email: 'mentor-approve-advisor@example.edu',
+    fullName: 'Mentor Approve Advisor',
+  });
+  const group = await Group.create({
+    id: 'group-mentor-approve-1',
+    name: 'Mentor Approve Group',
+    leaderId: String(leader.id),
+    memberIds: [],
+    advisorId: null,
+    status: 'FORMATION',
+    maxMembers: 4,
+  });
+
+  const submitResponse = await request('/api/v1/advisor-requests', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      groupId: group.id,
+      advisorId: advisor.id,
+    }),
+  });
+
+  assert.equal(submitResponse.response.status, 201);
+
+  const decisionResponse = await request(`/api/v1/advisor-requests/${submitResponse.json.id}/decision`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(advisor)),
+    },
+    body: JSON.stringify({
+      decision: 'APPROVE',
+      note: 'I can supervise this team.',
+    }),
+  });
+
+  assert.equal(decisionResponse.response.status, 200);
+  assert.equal(decisionResponse.json.status, 'APPROVED');
+
+  const updatedGroup = await Group.findByPk(group.id);
+  assert.equal(updatedGroup.advisorId, String(advisor.id));
+  assert.equal(updatedGroup.status, 'HAS_ADVISOR');
+
+  const mirroredRows = await GroupAdvisorAssignment.findAll({ where: { groupId: group.id } });
+  assert.equal(mirroredRows.length, 1);
+  assert.equal(mirroredRows[0].studentUserId, leader.id);
+  assert.equal(mirroredRows[0].advisorUserId, advisor.id);
+
+  const auditLog = await AuditLog.findOne({
+    where: {
+      action: 'ADVISOR_REQUEST_APPROVED',
+      targetType: 'ADVISOR_REQUEST',
+      targetId: submitResponse.json.id,
+      actorId: advisor.id,
+    },
+  });
+  assert.ok(auditLog);
+  assert.equal(auditLog.metadata.groupId, group.id);
+  assert.equal(auditLog.metadata.decision, 'APPROVE');
+
+  const leaderNotifications = await request('/api/v1/team-leader/notifications/advisor-decisions', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(leaderNotifications.response.status, 200);
+  assert.equal(leaderNotifications.json.length, 1);
+  assert.equal(leaderNotifications.json[0].requestId, submitResponse.json.id);
+  assert.equal(leaderNotifications.json[0].groupId, group.id);
+  assert.equal(leaderNotifications.json[0].advisorDecision, 'APPROVED');
+  assert.equal(leaderNotifications.json[0].advisor.id, advisor.id);
+});
+
+test('advisor rejection flow writes audit log and notifies the team leader without assigning the group', async () => {
+  const leader = await createStudent({
+    studentId: '11070001172',
+    email: 'mentor-reject-leader@example.edu',
+    fullName: 'Mentor Reject Leader',
+    password: 'StrongPass1!',
+  });
+  const advisor = await createProfessorUser({
+    email: 'mentor-reject-advisor@example.edu',
+    fullName: 'Mentor Reject Advisor',
+  });
+  const group = await Group.create({
+    id: 'group-mentor-reject-1',
+    name: 'Mentor Reject Group',
+    leaderId: String(leader.id),
+    memberIds: [],
+    advisorId: null,
+    status: 'FORMATION',
+    maxMembers: 4,
+  });
+
+  const submitResponse = await request('/api/v1/advisor-requests', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      groupId: group.id,
+      advisorId: advisor.id,
+    }),
+  });
+
+  assert.equal(submitResponse.response.status, 201);
+
+  const decisionResponse = await request(`/api/v1/advisor-requests/${submitResponse.json.id}/decision`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(advisor)),
+    },
+    body: JSON.stringify({
+      decision: 'REJECT',
+      note: 'I am not available this term.',
+    }),
+  });
+
+  assert.equal(decisionResponse.response.status, 200);
+  assert.equal(decisionResponse.json.status, 'REJECTED');
+
+  const refreshedGroup = await Group.findByPk(group.id);
+  assert.equal(refreshedGroup.advisorId, null);
+  assert.equal(refreshedGroup.status, 'FORMATION');
+
+  const mirroredRows = await GroupAdvisorAssignment.findAll({ where: { groupId: group.id } });
+  assert.equal(mirroredRows.length, 0);
+
+  const auditLog = await AuditLog.findOne({
+    where: {
+      action: 'ADVISOR_REQUEST_REJECTED',
+      targetType: 'ADVISOR_REQUEST',
+      targetId: submitResponse.json.id,
+      actorId: advisor.id,
+    },
+  });
+  assert.ok(auditLog);
+  assert.equal(auditLog.metadata.groupId, group.id);
+  assert.equal(auditLog.metadata.decision, 'REJECT');
+
+  const leaderNotifications = await request('/api/v1/team-leader/notifications/advisor-decisions', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(leaderNotifications.response.status, 200);
+  assert.equal(leaderNotifications.json.length, 1);
+  assert.equal(leaderNotifications.json[0].groupId, group.id);
+  assert.equal(leaderNotifications.json[0].advisorDecision, 'REJECTED');
+});
+
+test('advisor release flow clears assignment and notifies the team leader', async () => {
+  const leader = await createStudent({
+    studentId: '11070001173',
+    email: 'mentor-release-leader@example.edu',
+    fullName: 'Mentor Release Leader',
+    password: 'StrongPass1!',
+  });
+  const advisor = await createProfessorUser({
+    email: 'mentor-release-advisor@example.edu',
+    fullName: 'Mentor Release Advisor',
+  });
+  const group = await Group.create({
+    id: 'group-mentor-release-1',
+    name: 'Mentor Release Group',
+    leaderId: String(leader.id),
+    memberIds: [],
+    advisorId: String(advisor.id),
+    status: 'HAS_ADVISOR',
+    maxMembers: 4,
+  });
+
+  await GroupAdvisorAssignment.create({
+    groupId: group.id,
+    studentUserId: leader.id,
+    advisorUserId: advisor.id,
+  });
+
+  const releaseResponse = await request(`/api/v1/groups/${group.id}/advisor-release`, {
+    method: 'PATCH',
+    headers: await authHeaderFor(advisor),
+  });
+
+  assert.equal(releaseResponse.response.status, 200);
+  assert.equal(releaseResponse.json.code, 'SUCCESS');
+  assert.equal(releaseResponse.json.data.groupId, group.id);
+  assert.equal(releaseResponse.json.data.advisorId, null);
+
+  const updatedGroup = await Group.findByPk(group.id);
+  assert.equal(updatedGroup.advisorId, null);
+  assert.equal(updatedGroup.status, 'LOOKING_FOR_ADVISOR');
+
+  const mirroredRows = await GroupAdvisorAssignment.findAll({ where: { groupId: group.id } });
+  assert.equal(mirroredRows.length, 0);
+
+  const auditLog = await AuditLog.findOne({
+    where: {
+      action: 'ADVISOR_RELEASE',
+      targetType: 'GROUP',
+      targetId: group.id,
+      actorId: advisor.id,
+    },
+  });
+  assert.ok(auditLog);
+  assert.equal(auditLog.metadata.groupId, group.id);
+  assert.equal(auditLog.metadata.previousAdvisorId, String(advisor.id));
+
+  const leaderNotifications = await request('/api/v1/team-leader/notifications/advisor-releases', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(leaderNotifications.response.status, 200);
+  assert.equal(leaderNotifications.json.length, 1);
+  assert.equal(leaderNotifications.json[0].groupId, group.id);
+  assert.equal(leaderNotifications.json[0].previousAdvisor.id, advisor.id);
+});
+
+test('coordinator transfer flow updates both notification endpoints for the new advisor and the team leader', async () => {
+  const coordinator = await User.create({
+    email: 'mentor-transfer-coordinator@example.edu',
+    fullName: 'Mentor Transfer Coordinator',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+  const leader = await createStudent({
+    studentId: '11070001174',
+    email: 'mentor-transfer-leader@example.edu',
+    fullName: 'Mentor Transfer Leader',
+    password: 'StrongPass1!',
+  });
+  const currentAdvisor = await createProfessorUser({
+    email: 'mentor-transfer-current@example.edu',
+    fullName: 'Mentor Transfer Current',
+  });
+  const newAdvisor = await createProfessorUser({
+    email: 'mentor-transfer-new@example.edu',
+    fullName: 'Mentor Transfer New',
+  });
+  const group = await Group.create({
+    id: 'group-mentor-transfer-1',
+    name: 'Mentor Transfer Group',
+    leaderId: String(leader.id),
+    memberIds: [],
+    advisorId: String(currentAdvisor.id),
+    status: 'HAS_ADVISOR',
+    maxMembers: 4,
+  });
+
+  await GroupAdvisorAssignment.create({
+    groupId: group.id,
+    studentUserId: leader.id,
+    advisorUserId: currentAdvisor.id,
+  });
+
+  const transferResponse = await request(`/api/v1/coordinator/groups/${group.id}/advisor-transfer`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({
+      newAdvisorId: newAdvisor.id,
+      reason: 'Load balancing',
+    }),
+  });
+
+  assert.equal(transferResponse.response.status, 200);
+  assert.equal(transferResponse.json.groupId, group.id);
+  assert.equal(transferResponse.json.advisorId, String(newAdvisor.id));
+
+  const teamLeaderTransfers = await request('/api/v1/team-leader/notifications/advisor-transfers', {
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(teamLeaderTransfers.response.status, 200);
+  assert.equal(teamLeaderTransfers.json.length, 1);
+  assert.equal(teamLeaderTransfers.json[0].groupId, group.id);
+  assert.equal(teamLeaderTransfers.json[0].newAdvisor.id, newAdvisor.id);
+
+  const advisorTransfers = await request('/api/v1/advisors/notifications/group-transfers', {
+    headers: await authHeaderFor(newAdvisor),
+  });
+
+  assert.equal(advisorTransfers.response.status, 200);
+  assert.equal(advisorTransfers.json.count, 1);
+  assert.equal(advisorTransfers.json.data[0].groupId, group.id);
+  assert.equal(advisorTransfers.json.data[0].groupName, 'Mentor Transfer Group');
+
+  const auditLog = await AuditLog.findOne({
+    where: {
+      action: 'ADVISOR_TRANSFER',
+      targetType: 'GROUP',
+      targetId: group.id,
+      actorId: coordinator.id,
+    },
+  });
+  assert.ok(auditLog);
+  assert.equal(auditLog.metadata.groupId, group.id);
+  assert.equal(auditLog.metadata.previousAdvisorId, String(currentAdvisor.id));
+  assert.equal(auditLog.metadata.newAdvisorId, String(newAdvisor.id));
+});
+
+test('orphan cleanup flow writes the sanitization audit log', async () => {
+  const admin = await User.create({
+    email: 'mentor-orphan-admin@example.edu',
+    fullName: 'Mentor Orphan Admin',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+  const group = await Group.create({
+    name: 'Mentor Orphan Group',
+    leaderId: null,
+    memberIds: [],
+    advisorId: null,
+    status: 'LOOKING_FOR_ADVISOR',
+    maxMembers: 4,
+  });
+
+  const cleanupResponse = await request(`/api/v1/group-database/groups/${group.id}`, {
+    method: 'DELETE',
+    headers: await authHeaderFor(admin),
+  });
+
+  assert.equal(cleanupResponse.response.status, 200);
+
+  const auditLog = await AuditLog.findOne({
+    where: {
+      action: 'DELETE_ORPHAN_GROUP',
+      targetType: 'GROUP',
+      targetId: group.id,
+      actorId: admin.id,
+    },
+  });
+
+  assert.ok(auditLog);
+  assert.equal(auditLog.metadata.groupName, 'Mentor Orphan Group');
+});
+
 test('coordinator membership edit blocks adding the leader and enforces group max capacity', async () => {
   const coordinator = await User.create({
     email: 'coordinator-capacity@example.edu',
@@ -2756,6 +3170,301 @@ test('coordinator membership edit blocks adding the leader and enforces group ma
 
   assert.equal(overCapacityResponse.response.status, 409);
   assert.equal(overCapacityResponse.json.code, 'GROUP_FULL');
+});
+
+test('group leader invite dispatch enforces current capacity and available slots', async () => {
+  const leader = await createStudent({
+    studentId: '11070001150',
+    email: 'invite-capacity-leader@example.edu',
+    fullName: 'Invite Capacity Leader',
+    password: 'StrongPass1!',
+  });
+  const member = await createStudent({
+    studentId: '11070001151',
+    email: 'invite-capacity-member@example.edu',
+    fullName: 'Invite Capacity Member',
+    password: 'StrongPass1!',
+  });
+  const inviteeOne = await createStudent({
+    studentId: '11070001152',
+    email: 'invite-capacity-one@example.edu',
+    fullName: 'Invite Capacity One',
+    password: 'StrongPass1!',
+  });
+  const inviteeTwo = await createStudent({
+    studentId: '11070001153',
+    email: 'invite-capacity-two@example.edu',
+    fullName: 'Invite Capacity Two',
+    password: 'StrongPass1!',
+  });
+  const inviteeThree = await createStudent({
+    studentId: '11070001158',
+    email: 'invite-capacity-three@example.edu',
+    fullName: 'Invite Capacity Three',
+    password: 'StrongPass1!',
+  });
+
+  const fullGroup = await Group.create({
+    id: 'group-invite-capacity-full',
+    name: 'Full Invite Group',
+    leaderId: String(leader.id),
+    memberIds: [String(member.id)],
+    maxMembers: 2,
+    status: 'FORMATION',
+  });
+
+  const fullGroupResponse = await request(`/api/v1/groups/${fullGroup.id}/invitations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      studentIds: [inviteeOne.studentId],
+    }),
+  });
+
+  assert.equal(fullGroupResponse.response.status, 409);
+  assert.equal(fullGroupResponse.json.code, 'GROUP_FULL');
+
+  const limitedGroup = await Group.create({
+    id: 'group-invite-capacity-limited',
+    name: 'Limited Invite Group',
+    leaderId: String(leader.id),
+    memberIds: [],
+    maxMembers: 3,
+    status: 'FORMATION',
+  });
+
+  const overInviteResponse = await request(`/api/v1/groups/${limitedGroup.id}/invitations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      studentIds: [inviteeOne.studentId, inviteeTwo.studentId, inviteeThree.studentId],
+    }),
+  });
+
+  assert.equal(overInviteResponse.response.status, 409);
+  assert.equal(overInviteResponse.json.code, 'INVITE_CAPACITY_EXCEEDED');
+});
+
+test('group leader invite dispatch treats pending invitations as reserved capacity', async () => {
+  const leader = await createStudent({
+    studentId: '11070001154',
+    email: 'invite-pending-capacity-leader@example.edu',
+    fullName: 'Invite Pending Capacity Leader',
+    password: 'StrongPass1!',
+  });
+  const member = await createStudent({
+    studentId: '11070001155',
+    email: 'invite-pending-capacity-member@example.edu',
+    fullName: 'Invite Pending Capacity Member',
+    password: 'StrongPass1!',
+  });
+  const pendingInvitee = await createStudent({
+    studentId: '11070001156',
+    email: 'invite-pending-capacity-pending@example.edu',
+    fullName: 'Invite Pending Capacity Pending',
+    password: 'StrongPass1!',
+  });
+  const newInvitee = await createStudent({
+    studentId: '11070001157',
+    email: 'invite-pending-capacity-new@example.edu',
+    fullName: 'Invite Pending Capacity New',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    id: 'group-invite-pending-capacity',
+    name: 'Pending Capacity Group',
+    leaderId: String(leader.id),
+    memberIds: [String(member.id)],
+    maxMembers: 3,
+    status: 'FORMATION',
+  });
+
+  await Invitation.create({
+    groupId: group.id,
+    inviteeId: pendingInvitee.id,
+    status: 'PENDING',
+  });
+
+  const blockedResponse = await request(`/api/v1/groups/${group.id}/invitations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      studentIds: [newInvitee.studentId],
+    }),
+  });
+
+  assert.equal(blockedResponse.response.status, 409);
+  assert.equal(blockedResponse.json.code, 'GROUP_FULL');
+
+  const retryPendingResponse = await request(`/api/v1/groups/${group.id}/invitations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      studentIds: [pendingInvitee.studentId],
+    }),
+  });
+
+  assert.equal(retryPendingResponse.response.status, 201);
+  assert.equal(retryPendingResponse.json.created.length, 0);
+  assert.deepEqual(retryPendingResponse.json.skippedStudentIds, [pendingInvitee.studentId]);
+});
+
+test('group leader can re-invite a student after the previous invitation was rejected', async () => {
+  const leader = await createStudent({
+    studentId: '11070001160',
+    email: 'reinvite-leader@example.edu',
+    fullName: 'Reinvite Leader',
+    password: 'StrongPass1!',
+  });
+  const invitee = await createStudent({
+    studentId: '11070001161',
+    email: 'reinvite-invitee@example.edu',
+    fullName: 'Reinvite Invitee',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    id: 'group-reinvite-after-reject',
+    name: 'Reinvite Group',
+    leaderId: String(leader.id),
+    memberIds: [],
+    maxMembers: 4,
+    status: 'FORMATION',
+  });
+
+  const firstInvite = await request(`/api/v1/groups/${group.id}/invitations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      studentIds: [invitee.studentId],
+    }),
+  });
+
+  assert.equal(firstInvite.response.status, 201);
+  assert.equal(firstInvite.json.created.length, 1);
+
+  const invitationId = firstInvite.json.created[0].id;
+
+  const rejectResponse = await request(`/api/v1/invitations/${invitationId}/response`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(invitee)),
+    },
+    body: JSON.stringify({
+      response: 'REJECT',
+    }),
+  });
+
+  assert.equal(rejectResponse.response.status, 200);
+  assert.equal(rejectResponse.json.invitation.status, 'REJECTED');
+
+  const secondInvite = await request(`/api/v1/groups/${group.id}/invitations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      studentIds: [invitee.studentId],
+    }),
+  });
+
+  assert.equal(secondInvite.response.status, 201);
+  assert.equal(secondInvite.json.created.length, 1);
+  assert.equal(secondInvite.json.created[0].id, invitationId);
+  assert.equal(secondInvite.json.created[0].status, 'PENDING');
+
+  const refreshedInvitation = await Invitation.findByPk(invitationId);
+  assert.equal(refreshedInvitation.status, 'PENDING');
+});
+
+test('group leader can re-invite a student after the previous invitation was accepted and membership was cleared', async () => {
+  const leader = await createStudent({
+    studentId: '11070001162',
+    email: 'reinvite-accepted-leader@example.edu',
+    fullName: 'Reinvite Accepted Leader',
+    password: 'StrongPass1!',
+  });
+  const invitee = await createStudent({
+    studentId: '11070001163',
+    email: 'reinvite-accepted-invitee@example.edu',
+    fullName: 'Reinvite Accepted Invitee',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    id: 'group-reinvite-after-accept',
+    name: 'Reinvite Accepted Group',
+    leaderId: String(leader.id),
+    memberIds: [],
+    maxMembers: 4,
+    status: 'FORMATION',
+  });
+
+  const firstInvite = await request(`/api/v1/groups/${group.id}/invitations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      studentIds: [invitee.studentId],
+    }),
+  });
+
+  assert.equal(firstInvite.response.status, 201);
+  const invitationId = firstInvite.json.created[0].id;
+
+  const acceptResponse = await request(`/api/v1/invitations/${invitationId}/response`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(invitee)),
+    },
+    body: JSON.stringify({
+      response: 'ACCEPT',
+    }),
+  });
+
+  assert.equal(acceptResponse.response.status, 200);
+  assert.equal(acceptResponse.json.invitation.status, 'ACCEPTED');
+
+  const updatedGroup = await Group.findByPk(group.id);
+  updatedGroup.memberIds = [];
+  await updatedGroup.save();
+
+  const secondInvite = await request(`/api/v1/groups/${group.id}/invitations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      studentIds: [invitee.studentId],
+    }),
+  });
+
+  assert.equal(secondInvite.response.status, 201);
+  assert.equal(secondInvite.json.created.length, 1);
+  assert.equal(secondInvite.json.created[0].id, invitationId);
+  assert.equal(secondInvite.json.created[0].status, 'PENDING');
 });
 
 test('group leader cannot lower maxMembers below current participant count', async () => {

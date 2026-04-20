@@ -652,6 +652,11 @@ textarea {
   box-shadow: 0 12px 20px rgba(17, 94, 89, 0.16);
 }
 
+.workspace-button-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 .home-footer-note {
   border: 1px dashed rgba(31, 42, 31, 0.22);
   border-radius: 18px;
@@ -1558,6 +1563,17 @@ button:disabled {
   max-width: 1200px;
 }
 
+.mail-workspace {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.08fr);
+  align-items: start;
+}
+
+.professor-mail-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .mail-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1831,6 +1847,26 @@ button:disabled {
   min-width: 110px;
 }
 
+.professor-mail-detail {
+  min-height: 100%;
+}
+
+.professor-transfer-panel {
+  margin-top: 18px;
+  overflow: hidden;
+}
+
+.professor-transfer-list {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.professor-transfer-card {
+  display: grid;
+  gap: 12px;
+}
+
 .mail-overlay {
   position: fixed;
   inset: 0;
@@ -1919,6 +1955,11 @@ button:disabled {
   margin: 0 auto;
 }
 
+.page-group-view {
+  width: calc(100% - 32px);
+  max-width: 880px;
+}
+
 .group-page-header {
   margin-bottom: 2rem;
 }
@@ -1945,6 +1986,33 @@ button:disabled {
   margin-top: 0;
 }
 
+.group-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.group-summary-item {
+  border: 1px solid rgba(168, 183, 206, 0.16);
+  border-radius: 14px;
+  background: rgba(65, 79, 102, 0.16);
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.group-summary-item span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.group-summary-item strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
 .group-muted {
   color: var(--muted);
 }
@@ -1962,6 +2030,10 @@ button:disabled {
   background: rgba(65, 79, 102, 0.22);
   border-radius: 10px;
   border: 1px solid rgba(168, 183, 206, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .group-member-you {
@@ -1986,6 +2058,102 @@ button:disabled {
 
 .cleanup-hint {
   margin: 0;
+}
+
+.group-action-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.group-action-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.group-action-row button {
+  width: auto;
+  min-width: 140px;
+}
+
+.group-callout {
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  padding: 14px 16px;
+}
+
+.group-callout-success {
+  background: var(--success-bg);
+  border-color: var(--success-line);
+  color: var(--success-ink);
+}
+
+.group-callout-warning {
+  background: var(--warning-bg);
+  border-color: var(--warning-line);
+  color: var(--warning-ink);
+}
+
+.group-callout-error {
+  background: var(--error-bg);
+  border-color: var(--error-line);
+  color: var(--error-ink);
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  border-radius: 0;
+  background: rgba(8, 12, 20, 0.62);
+  box-shadow: none;
+}
+
+.dialog-backdrop:hover,
+.dialog-backdrop:focus-visible {
+  transform: none;
+  filter: none;
+  box-shadow: none;
+}
+
+.dialog-card {
+  position: relative;
+  z-index: 1;
+  width: min(460px, 92vw);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(56, 195, 204, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(27, 36, 50, 0.98), rgba(18, 26, 38, 0.98));
+  box-shadow: var(--shadow);
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+}
+
+.dialog-card h2,
+.dialog-card p {
+  margin: 0;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dialog-actions button {
+  width: auto;
+  min-width: 130px;
 }
 
 .audit-log-list {
@@ -2209,5 +2377,11 @@ button:disabled {
 
   .app-profile-trigger {
     min-width: 160px;
+  }
+
+  .mail-workspace,
+  .professor-mail-summary,
+  .group-summary-grid {
+    grid-template-columns: 1fr;
   }
 }

@@ -16,7 +16,7 @@ const roleMenuSections = {
     {
       title: 'Workspace',
       items: [
-        { to: '/home', label: 'Professor Home', icon: 'HM' },
+        { to: '/professors', label: 'Professor Home', icon: 'HM' },
         { to: '/professors/notifications', label: 'Advisor Requests', icon: 'AR' },
       ],
     },
@@ -25,7 +25,7 @@ const roleMenuSections = {
     {
       title: 'Workspace',
       items: [
-        { to: '/home', label: 'Coordinator Home', icon: 'HM' },
+        { to: '/coordinator', label: 'Coordinator Home', icon: 'HM' },
       ],
     },
     {
@@ -42,7 +42,7 @@ const roleMenuSections = {
     {
       title: 'Workspace',
       items: [
-        { to: '/home', label: 'Admin Home', icon: 'HM' },
+        { to: '/admin', label: 'Admin Home', icon: 'HM' },
       ],
     },
     {
@@ -92,6 +92,21 @@ function readAuthenticatedUser() {
   }
 
   return null;
+}
+
+function homeRouteForViewer(role) {
+  switch (role) {
+    case 'Admin':
+      return '/admin';
+    case 'Coordinator':
+      return '/coordinator';
+    case 'Professor':
+      return '/professors';
+    case 'Student':
+      return '/home';
+    default:
+      return '/';
+  }
 }
 
 export default function AppShell() {
@@ -144,7 +159,7 @@ export default function AppShell() {
             </div>
 
             <div className="app-brand-wrap">
-              <Link className="app-brand" to="/">
+              <Link className="app-brand" to={homeRouteForViewer(viewer.role)}>
                 Senior App
               </Link>
               <span className="app-brand-subtitle">Home</span>
