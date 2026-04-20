@@ -334,6 +334,377 @@ test('professor can log in with email and chosen password after setup', async ()
   assert.equal(successResult.json.user.role, 'PROFESSOR');
 });
 
+test('advisor notifications endpoint returns only advisee requests for the authenticated professor', async () => {
+  const professor = await User.create({
+    email: 'advisor@example.edu',
+    fullName: 'Advisor Inbox',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherProfessor = await User.create({
+    email: 'other-advisor@example.edu',
+    fullName: 'Other Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await Notification.create({
+    userId: professor.id,
+    type: 'ADVISEE_REQUEST',
+    payload: JSON.stringify({
+      requestId: 'req-1',
+      groupId: 'group-1',
+      groupName: 'Team Atlas',
+      requestStatus: 'PENDING',
+      message: 'Team Atlas requested you as advisor.',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: professor.id,
+    type: 'GROUP_INVITE',
+    payload: JSON.stringify({
+      groupId: 'group-ignore',
+    }),
+    status: 'SENT',
+  });
+
+  await Notification.create({
+    userId: otherProfessor.id,
+    type: 'ADVISEE_REQUEST',
+    payload: JSON.stringify({
+      requestId: 'req-2',
+      groupId: 'group-2',
+      groupName: 'Team Nova',
+      requestStatus: 'PENDING',
+      message: 'Team Nova requested you as advisor.',
+    }),
+    status: 'SENT',
+  });
+
+  const result = await request('/api/v1/advisors/notifications/advisee-requests', {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(Array.isArray(result.json), true);
+  assert.equal(result.json.length, 1);
+  assert.equal(result.json[0].type, 'ADVISEE_REQUEST');
+  assert.equal(result.json[0].requestId, 'req-1');
+  assert.equal(result.json[0].groupName, 'Team Atlas');
+  assert.equal(result.json[0].requestStatus, 'PENDING');
+});
+
+test('advisor notifications endpoint enriches notifications with advisor request status details', async () => {
+  const professor = await User.create({
+    email: 'advisor-enriched@example.edu',
+    fullName: 'Advisor Enriched',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await AdvisorRequest.create({
+    id: 'req-enriched-1',
+    groupId: 'group-enriched-1',
+    advisorId: professor.id,
+    teamLeaderId: 'leader-enriched-1',
+    status: 'APPROVED',
+    note: 'Approved with updated availability.',
+    decidedAt: new Date('2026-04-20T10:00:00.000Z'),
+  });
+
+  await Notification.create({
+    userId: professor.id,
+    type: 'ADVISEE_REQUEST',
+    payload: JSON.stringify({
+      requestId: 'req-enriched-1',
+      groupId: 'group-enriched-1',
+      groupName: 'Team Enriched',
+      requestStatus: 'PENDING',
+      message: 'Team Enriched requested you as advisor.',
+    }),
+    status: 'SENT',
+  });
+
+  const result = await request('/api/v1/advisors/notifications/advisee-requests', {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.length, 1);
+  assert.equal(result.json[0].requestId, 'req-enriched-1');
+  assert.equal(result.json[0].requestStatus, 'APPROVED');
+  assert.equal(result.json[0].note, 'Approved with updated availability.');
+  assert.equal(result.json[0].decidedAt, '2026-04-20T10:00:00.000Z');
+  assert.equal(result.json[0].status, 'SENT');
+});
+
+test('assigned advisor can approve a pending advisor request', async () => {
+  const professor = await User.create({
+    email: 'approve-advisor@example.edu',
+    fullName: 'Approve Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const leader = await User.create({
+    email: 'leader@example.edu',
+    fullName: 'Team Leader',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001235',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const group = await Group.create({
+    id: 'group-approve-1',
+    name: 'Team Atlas',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-1',
+    groupId: group.id,
+    advisorId: professor.id,
+    teamLeaderId: leader.id,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/advisor-requests/advisor-request-1/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      decision: 'APPROVE',
+      note: 'I can supervise this team.',
+    }),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.status, 'APPROVED');
+  assert.equal(result.json.note, 'I can supervise this team.');
+  assert.equal(result.json.message, 'Advisor request approved successfully.');
+
+  const updatedRequest = await AdvisorRequest.findByPk('advisor-request-1');
+  const updatedGroup = await Group.findByPk(group.id);
+  assert.equal(updatedRequest.status, 'APPROVED');
+  assert.equal(updatedGroup.advisorId, String(professor.id));
+});
+
+test('assigned advisor can reject a pending advisor request without changing group advisor assignment', async () => {
+  const professor = await User.create({
+    email: 'reject-advisor@example.edu',
+    fullName: 'Reject Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const leader = await User.create({
+    email: 'reject-leader@example.edu',
+    fullName: 'Reject Leader',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001236',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const group = await Group.create({
+    id: 'group-reject-1',
+    name: 'Team Borealis',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+    advisorId: null,
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-reject-1',
+    groupId: group.id,
+    advisorId: professor.id,
+    teamLeaderId: leader.id,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/advisor-requests/advisor-request-reject-1/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      decision: 'REJECT',
+      note: 'I do not have capacity this semester.',
+    }),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.status, 'REJECTED');
+  assert.equal(result.json.note, 'I do not have capacity this semester.');
+  assert.equal(result.json.message, 'Advisor request rejected successfully.');
+
+  const updatedRequest = await AdvisorRequest.findByPk('advisor-request-reject-1');
+  const updatedGroup = await Group.findByPk(group.id);
+  const auditLog = await AuditLog.findOne({
+    where: {
+      targetId: 'advisor-request-reject-1',
+      action: 'ADVISOR_REQUEST_REJECTED',
+    },
+  });
+
+  assert.equal(updatedRequest.status, 'REJECTED');
+  assert.equal(updatedGroup.advisorId, null);
+  assert.ok(auditLog);
+  assert.equal(auditLog.actorId, professor.id);
+});
+
+test('advisor request decision rejects invalid decision values', async () => {
+  const professor = await User.create({
+    email: 'invalid-decision-advisor@example.edu',
+    fullName: 'Invalid Decision Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/advisor-requests/invalid-decision-request/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      decision: 'MAYBE',
+    }),
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'INVALID_DECISION');
+  assert.equal(result.json.message, 'Decision must be APPROVE or REJECT.');
+});
+
+test('advisor request decision returns not found when the request does not exist', async () => {
+  const professor = await User.create({
+    email: 'missing-request-advisor@example.edu',
+    fullName: 'Missing Request Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/advisor-requests/non-existent-request/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      decision: 'APPROVE',
+    }),
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'REQUEST_NOT_FOUND');
+  assert.equal(result.json.message, 'Advisor request not found.');
+});
+
+test('advisor request cannot be decided twice', async () => {
+  const professor = await User.create({
+    email: 'resolved-advisor@example.edu',
+    fullName: 'Resolved Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-2',
+    groupId: 'group-resolved-1',
+    advisorId: professor.id,
+    status: 'APPROVED',
+  });
+
+  const result = await request('/api/v1/advisor-requests/advisor-request-2/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      decision: 'REJECT',
+    }),
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'REQUEST_ALREADY_RESOLVED');
+  assert.equal(result.json.message, 'Advisor request has already been decided.');
+});
+
+test('only the assigned advisor can decide an advisor request', async () => {
+  const professor = await User.create({
+    email: 'owner-advisor@example.edu',
+    fullName: 'Owner Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const otherProfessor = await User.create({
+    email: 'other-owner-advisor@example.edu',
+    fullName: 'Other Owner Advisor',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  await AdvisorRequest.create({
+    id: 'advisor-request-3',
+    groupId: 'group-owner-1',
+    advisorId: professor.id,
+    status: 'PENDING',
+  });
+
+  const result = await request('/api/v1/advisor-requests/advisor-request-3/decision', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(otherProfessor)),
+    },
+    body: JSON.stringify({
+      decision: 'APPROVE',
+    }),
+  });
+
+  assert.equal(result.response.status, 403);
+  assert.equal(result.json.code, 'FORBIDDEN');
+});
+
+test('advisor notifications endpoint rejects non-professor users', async () => {
+  const student = await User.create({
+    email: 'student-not-allowed@example.edu',
+    fullName: 'Student Viewer',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    studentId: '11070001234',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const result = await request('/api/v1/advisors/notifications/advisee-requests', {
+    headers: await authHeaderFor(student),
+  });
+
+  assert.equal(result.response.status, 403);
+  assert.equal(result.json.message, 'Forbidden');
+});
+
 test('DELETE /api/v1/groups/:groupId/advisor-assignment: RBAC, removal, status, log, notification', async () => {
   // Setup users
   const admin = await User.create({
