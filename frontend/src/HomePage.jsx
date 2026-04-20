@@ -9,6 +9,13 @@ const roleTitles = {
   ADMIN: 'Admin',
 };
 
+const roleHomeRoutes = {
+  STUDENT: '/home',
+  PROFESSOR: '/professors',
+  COORDINATOR: '/coordinator',
+  ADMIN: '/admin',
+};
+
 function detectSessionRole() {
   const checks = [
     ['adminUser', 'ADMIN'],
@@ -173,8 +180,16 @@ export default function HomePage() {
   useEffect(() => {
     if (!title) {
       navigate('/auth', { replace: true });
+      return;
     }
-  }, [title, navigate]);
+
+    if (role && role !== 'STUDENT') {
+      const target = roleHomeRoutes[role];
+      if (target && location.pathname !== target) {
+        navigate(target, { replace: true });
+      }
+    }
+  }, [location.pathname, navigate, role, title]);
 
   useEffect(() => {
     if (role === 'STUDENT') {

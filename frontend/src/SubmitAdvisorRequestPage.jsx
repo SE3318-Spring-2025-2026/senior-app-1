@@ -29,6 +29,8 @@ export default function SubmitAdvisorRequestPage() {
   const selectedGroup = groups.find((group) => String(group.id) === String(form.groupId)) || null;
   const selectedGroupHasAdvisor = Boolean(selectedGroup?.advisorId);
   const eligibleGroups = groups.filter((group) => !group.advisorId);
+  const hasLeaderGroup = groups.length > 0;
+  const canSubmit = hasLeaderGroup && eligibleGroups.length > 0 && professors.length > 0;
 
   useEffect(() => {
     async function loadData() {
@@ -124,13 +126,21 @@ export default function SubmitAdvisorRequestPage() {
 
       <div className="panel">
         <form className="form" onSubmit={handleSubmit}>
+          {!hasLeaderGroup && (
+            <div className="feedback feedback-warning" role="status" aria-live="polite">
+              <div className="feedback-label">restricted</div>
+              <h2>Team leader access required</h2>
+              <p>You can submit an advisor request only for a group that you lead.</p>
+            </div>
+          )}
+
           <label className="field">
             <span>Your Group *</span>
             <select
               name="groupId"
               value={form.groupId}
               onChange={handleChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !hasLeaderGroup}
               aria-invalid={fieldErrors.groupId.length > 0}
               required
             >
@@ -142,7 +152,12 @@ export default function SubmitAdvisorRequestPage() {
                 </option>
               ))}
             </select>
-            {groups.length > 0 && eligibleGroups.length === 0 && (
+            {!hasLeaderGroup && (
+              <div className="field-help" role="note">
+                No team-leader group was found for your account.
+              </div>
+            )}
+            {hasLeaderGroup && eligibleGroups.length === 0 && (
               <div className="field-help" role="note">
                 All of your groups already have advisors, so no new advisor request can be created.
               </div>
@@ -162,7 +177,7 @@ export default function SubmitAdvisorRequestPage() {
               name="professorId"
               value={form.professorId}
               onChange={handleChange}
-              disabled={isSubmitting || !form.groupId || selectedGroupHasAdvisor}
+              disabled={isSubmitting || !form.groupId || selectedGroupHasAdvisor || !hasLeaderGroup}
               aria-invalid={fieldErrors.professorId.length > 0}
               required
             >
@@ -194,9 +209,7 @@ export default function SubmitAdvisorRequestPage() {
               isSubmitting
               || !form.groupId
               || !form.professorId
-              || groups.length === 0
-              || eligibleGroups.length === 0
-              || professors.length === 0
+              || !canSubmit
               || selectedGroupHasAdvisor
             }
           >

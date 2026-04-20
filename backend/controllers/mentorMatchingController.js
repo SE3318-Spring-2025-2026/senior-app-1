@@ -1,3 +1,11 @@
+// Controller for mentor matching operations, including advisor transfers and synchronization
+// - POST /api/v1/mentor-matching/groups/:groupId/transfer: Transfer advisor in Group DB
+// - POST /api/v1/mentor-matching/groups/:groupId/sync: Sync advisor assignment to User DB
+// - POST /api/v1/mentor-matching/groups/:groupId/transfer-by-coordinator: Transfer advisor by coordinator action
+// - DELETE /api/v1/mentor-matching/groups/:groupId/advisor: Remove advisor assignment from group
+// - DELETE /api/v1/mentor-matching/groups/:groupId/orphan: Delete orphan group without advisor
+// - GET /api/v1/mentor-matching/coordinator-advisors: List advisors available for coordinator actions
+
 const { body, param, validationResult } = require('express-validator');
 const mentorMatchingService = require('../services/mentorMatchingService');
 const GroupService = require('../services/groupService');
@@ -89,6 +97,7 @@ const transferByCoordinator = [
       const assignment = await mentorMatchingService.transferAdvisorByCoordinator({
         groupId: req.params.groupId,
         newAdvisorId: req.body.newAdvisorId,
+        actorId: req.user.id,
       });
 
       return res.status(200).json(assignment);

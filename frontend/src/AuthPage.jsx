@@ -54,6 +54,21 @@ function tokenStorageKeyForRole(role) {
   }
 }
 
+function routeForRole(role) {
+  switch (role) {
+    case 'student':
+      return '/home';
+    case 'professor':
+      return '/professors';
+    case 'coordinator':
+      return '/coordinator';
+    case 'admin':
+      return '/admin';
+    default:
+      return '/home';
+  }
+}
+
 export default function AuthPage() {
   const [mode, setMode] = useState('login');
   const [role, setRole] = useState('student');
@@ -135,11 +150,11 @@ export default function AuthPage() {
       setFeedback({
         type: 'success',
         title: 'Signed in',
-        message: 'Welcome back. Redirecting to home.',
+        message: 'Welcome back. Redirecting to your workspace.',
       });
       notify({ type: 'success', title: 'Signed in', message: `${LOGIN_ROLES.find((r) => r.value === role)?.label || 'User'} login successful.` });
 
-      window.setTimeout(() => navigate('/home'), 400);
+      window.setTimeout(() => navigate(routeForRole(role), { replace: true }), 400);
     } catch {
       setFeedback({
         type: 'error',

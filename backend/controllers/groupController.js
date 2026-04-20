@@ -594,6 +594,29 @@ exports.dispatchInvites = async (req, res) => {
     if (!group) return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
     if (String(group.leaderId || '') !== String(req.user.id)) return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the group leader can send invitations' });
 
+    const participantIds = new Set();
+    if (group.leaderId) {
+      participantIds.add(String(group.leaderId));
+    }
+    (Array.isArray(group.memberIds) ? group.memberIds : []).forEach((memberId) => {
+      participantIds.add(String(memberId));
+    });
+
+    const availableSlots = Math.max(Number(group.maxMembers || 0) - participantIds.size, 0);
+    if (availableSlots <= 0) {
+      return res.status(409).json({
+        code: 'GROUP_FULL',
+        message: 'This group is already at full capacity.',
+      });
+    }
+
+    if (requestedStudentIds.length > availableSlots) {
+      return res.status(409).json({
+        code: 'INVITE_CAPACITY_EXCEEDED',
+        message: `Only ${availableSlots} slot${availableSlots === 1 ? '' : 's'} available for new invitations.`,
+      });
+    }
+
     const users = await User.findAll({ where: { role: 'STUDENT', studentId: { [Op.in]: requestedStudentIds } } });
 
     const usersByStudentId = new Map(users.map((user) => [user.studentId, user]));
