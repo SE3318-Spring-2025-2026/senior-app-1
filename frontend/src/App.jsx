@@ -29,6 +29,7 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import './styles.css';
 
 import AdvisorRequestsPage from './AdvisorRequestsPage';
+import SubmissionEditor from './components/SubmissionEditor';
 
 export default function App() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
               <Route path="/students/groups/manage" element={<StudentGroupShellPage />} />
               <Route path="/students/groups/new" element={<StudentGroupShellPage />} />
               <Route path="/students/notifications" element={<StudentInvitationsPage />} />
+              <Route path="/team-leader/submission" element={<SubmissionEditor />} />
               <Route path="/team-leader/advisor-requests/new" element={<SubmitAdvisorRequestPage />} />
               <Route path="/team-leader/advisor-requests/:requestId" element={<TeamLeaderAdvisorRequestDetailsPage />} />
               <Route path="/professors/login" element={<AuthPage />} />
