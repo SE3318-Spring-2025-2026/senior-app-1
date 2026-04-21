@@ -29,6 +29,7 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import './styles.css';
 
 import AdvisorRequestsPage from './AdvisorRequestsPage';
+import WeightConfiguration from './components/WeightConfiguration';
 
 export default function App() {
   return (
@@ -64,6 +65,7 @@ export default function App() {
               <Route path="/coordinator/groups/manage" element={<CoordinatorGroupMembershipPage />} />
               <Route path="/coordinator/groups/transfer" element={<CoordinatorAdvisorTransferPage />} />
               <Route path="/coordinator/groups/cleanup" element={<GroupCleanupPage role="COORDINATOR" />} />
+              <Route path="/coordinator/grading/weight-configuration" element={<WeightConfiguration />} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="/advisor/requests" element={<AdvisorRequestsPage />} />
               <Route path="*" element={<HomePage />} />
