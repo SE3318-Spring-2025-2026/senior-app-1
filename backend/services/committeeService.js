@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const sequelize = require('../db');
 const { DeliverableSubmission, RubricCriterion, CommitteeReview } = require('../models');
 
@@ -58,4 +59,16 @@ async function submitReview({ submissionId, reviewerId, scores, comments }) {
   }
 }
 
-module.exports = { submitReview };
+async function listRubricCriteria({ deliverableType } = {}) {
+  const where = deliverableType ? { deliverableType } : {};
+  return RubricCriterion.findAll({ where, order: [['weight', 'DESC']] });
+}
+
+async function listPendingSubmissions() {
+  return DeliverableSubmission.findAll({
+    where: { status: { [Op.ne]: 'GRADED' } },
+    order: [['submittedAt', 'DESC']],
+  });
+}
+
+module.exports = { submitReview, listRubricCriteria, listPendingSubmissions };

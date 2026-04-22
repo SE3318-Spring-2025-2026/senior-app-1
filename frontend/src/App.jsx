@@ -29,6 +29,8 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import './styles.css';
 
 import AdvisorRequestsPage from './AdvisorRequestsPage';
+import ProfessorCommitteeSubmissionsPage from './ProfessorCommitteeSubmissionsPage';
+import CommitteeGradingPage from './CommitteeGradingPage';
 
 export default function App() {
   return (
@@ -66,6 +68,8 @@ export default function App() {
               <Route path="/coordinator/groups/cleanup" element={<GroupCleanupPage role="COORDINATOR" />} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="/advisor/requests" element={<AdvisorRequestsPage />} />
+              <Route path="/professors/committee-submissions" element={<ProfessorCommitteeSubmissionsPage />} />
+              <Route path="/professors/committee-review/:submissionId" element={<CommitteeGradingPage />} />
               <Route path="*" element={<HomePage />} />
             </Route>
           </Routes>
