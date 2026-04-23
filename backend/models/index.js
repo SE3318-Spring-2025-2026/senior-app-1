@@ -20,6 +20,7 @@ const Notification = require('./Notification');
 const Deliverable = require('./Deliverable');
 const GradingRubric = require('./GradingRubric');
 const Grade = require('./Grade');
+const DeliverableWeightConfiguration = require('./DeliverableWeightConfiguration');
 
 module.exports = {
   User,
@@ -36,4 +37,5 @@ module.exports = {
   Deliverable,
   GradingRubric,
   Grade,
+  DeliverableWeightConfiguration,
 };

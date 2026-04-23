@@ -23,6 +23,7 @@ const {
   Deliverable,
   GradingRubric,
   Grade,
+  DeliverableWeightConfiguration,
 } = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
@@ -3791,4 +3792,195 @@ test('coordinator can fetch any submission (Issue #249)', async () => {
 
   assert.equal(response.response.status, 200);
   assert.equal(response.json.data.submission.groupId, group.id);
+});
+
+// --- Issue #251: Fetch Rubric Context (Connector f10) ---
+
+test('fetching submission includes rubric context with weight configuration (Issue #251)', async () => {
+  const professor = await createProfessorUser({
+    email: 'rubric-context-prof@example.edu',
+    fullName: 'Rubric Context Professor',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002005',
+    email: 'rubric-context-leader@example.edu',
+    fullName: 'Rubric Context Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Rubric Context Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  // Create rubric with criteria
+  const rubric = await GradingRubric.create({
+    deliverableType: 'PROPOSAL',
+    name: 'Proposal Rubric with Weights',
+    criteria: [
+      { id: '1', question: 'Problem statement clarity?', type: 'BINARY', weight: 0.3 },
+      { id: '2', question: 'Feasibility assessment?', type: 'SOFT', weight: 0.3 },
+      { id: '3', question: 'Timeline realism?', type: 'BINARY', weight: 0.4 },
+    ],
+    isActive: true,
+  });
+
+  // Create weight configuration for this deliverable type
+  const weightConfig = await DeliverableWeightConfiguration.create({
+    deliverableType: 'PROPOSAL',
+    weight: 0.25,
+    description: 'Proposal submission counts 25% towards final grade',
+    sprintNumber: null,
+    isActive: true,
+  });
+
+  // Create submission
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'PROPOSAL',
+    content: '# Proposal with Rubric Context',
+    images: [],
+    status: 'SUBMITTED',
+    version: 1,
+  });
+
+  // Fetch submission
+  const response = await request(`/api/v1/committee/submissions/${deliverable.id}`, {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.equal(response.json.code, 'SUCCESS');
+
+  // Verify rubric context is included
+  assert.ok(response.json.data.rubric, 'Rubric should be included');
+  assert.equal(response.json.data.rubric.name, 'Proposal Rubric with Weights');
+  assert.equal(response.json.data.rubric.criteria.length, 3);
+
+  // Verify weight configuration is included (Issue #251 requirement)
+  assert.ok(response.json.data.weightConfiguration, 'Weight configuration should be included');
+  assert.equal(response.json.data.weightConfiguration.weight, 0.25);
+  assert.equal(response.json.data.weightConfiguration.description, 'Proposal submission counts 25% towards final grade');
+  assert.equal(response.json.data.weightConfiguration.deliverableType, 'PROPOSAL');
+});
+
+test('submission response includes null weight config when not defined (Issue #251)', async () => {
+  const professor = await createProfessorUser({
+    email: 'no-weight-prof@example.edu',
+    fullName: 'No Weight Professor',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002006',
+    email: 'no-weight-leader@example.edu',
+    fullName: 'No Weight Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'No Weight Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  // Create rubric only (no weight config)
+  const rubric = await GradingRubric.create({
+    deliverableType: 'SOW',
+    name: 'SOW Rubric Without Weight',
+    criteria: [
+      { id: '1', question: 'Scope clarity?', type: 'BINARY', weight: 0.5 },
+    ],
+    isActive: true,
+  });
+
+  // Create submission without weight configuration
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'SOW',
+    content: '# SOW without weight config',
+    images: [],
+    status: 'SUBMITTED',
+    version: 1,
+  });
+
+  // Fetch submission
+  const response = await request(`/api/v1/committee/submissions/${deliverable.id}`, {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.ok(response.json.data.rubric, 'Rubric should be included');
+  assert.equal(response.json.data.weightConfiguration, null, 'Weight config should be null when not defined');
+});
+
+test('weight configuration respects sprint number filtering (Issue #251)', async () => {
+  const professor = await createProfessorUser({
+    email: 'sprint-weight-prof@example.edu',
+    fullName: 'Sprint Weight Professor',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002007',
+    email: 'sprint-weight-leader@example.edu',
+    fullName: 'Sprint Weight Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Sprint Weight Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  // Create rubric
+  const rubric = await GradingRubric.create({
+    deliverableType: 'PROPOSAL',
+    name: 'Sprint-specific Rubric',
+    criteria: [
+      { id: '1', question: 'Test?', type: 'BINARY', weight: 1 },
+    ],
+    isActive: true,
+  });
+
+  // Create weight configurations for different sprints
+  const sprint1Weight = await DeliverableWeightConfiguration.create({
+    deliverableType: 'PROPOSAL',
+    weight: 0.15,
+    description: 'Sprint 1 weight',
+    sprintNumber: 1,
+    isActive: true,
+  });
+
+  const generalWeight = await DeliverableWeightConfiguration.create({
+    deliverableType: 'PROPOSAL',
+    weight: 0.25,
+    description: 'General weight (all sprints)',
+    sprintNumber: null,
+    isActive: true,
+  });
+
+  // Create submission
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'PROPOSAL',
+    content: '# Multi-sprint submission',
+    images: [],
+    status: 'SUBMITTED',
+    version: 1,
+  });
+
+  // Fetch submission - should get most recent active config
+  const response = await request(`/api/v1/committee/submissions/${deliverable.id}`, {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.ok(response.json.data.weightConfiguration, 'Weight config should be fetched');
+  // Should get the most recent one (generalWeight was created after sprint1Weight)
+  assert.equal(response.json.data.weightConfiguration.weight, 0.25);
 });
