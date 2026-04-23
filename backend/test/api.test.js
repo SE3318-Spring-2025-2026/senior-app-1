@@ -3623,3 +3623,159 @@ test('team leader can submit a new request to the same advisor after advisor rel
   assert.equal(retryResponse.json.status, 'PENDING');
   assert.equal(retryResponse.json.advisorId, advisor.id);
 });
+
+// --- Issue #255: Log Configuration (Connector f12) ---
+
+test('coordinator creates rubric and audit log is generated (Issue #255)', async () => {
+  const coordinator = await createCoordinatorUser({
+    email: 'rubric-creation-coord@example.edu',
+    fullName: 'Rubric Creation Coordinator',
+  });
+
+  const createRubricRequest = {
+    deliverableType: 'PROPOSAL',
+    name: 'Project Proposal Evaluation Rubric',
+    criteria: [
+      { question: 'Is the problem statement clear?', type: 'BINARY', weight: 0.3 },
+      { question: 'Is the solution approach feasible?', type: 'SOFT', weight: 0.3 },
+      { question: 'Are timeline and milestones realistic?', type: 'BINARY', weight: 0.4 },
+    ],
+  };
+
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify(createRubricRequest),
+  });
+
+  assert.equal(response.response.status, 201);
+  assert.equal(response.json.code, 'SUCCESS');
+  assert.ok(response.json.data.id, 'Rubric should have an ID');
+  assert.equal(response.json.data.deliverableType, 'PROPOSAL');
+  assert.equal(response.json.data.name, 'Project Proposal Evaluation Rubric');
+  assert.equal(response.json.data.criteria.length, 3);
+  assert.equal(response.json.data.isActive, true);
+
+  // Verify audit log entry was created with correct metadata
+  // Fire-and-forget logging means we need a small delay to ensure it completes
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const auditLogs = await AuditLog.findAll({
+    where: {
+      targetId: response.json.data.id,
+      action: 'RUBRIC_CREATED',
+    },
+  });
+
+  assert.equal(auditLogs.length, 1, 'One audit log entry should exist');
+  const log = auditLogs[0];
+  assert.equal(log.action, 'RUBRIC_CREATED');
+  assert.equal(log.actorId, coordinator.id);
+  assert.equal(log.targetType, 'GRADING_RUBRIC');
+  assert.equal(log.metadata.eventType, 'RUBRIC_CONFIGURATION');
+  assert.equal(log.metadata.deliverableType, 'PROPOSAL');
+  assert.equal(log.metadata.rubricName, 'Project Proposal Evaluation Rubric');
+  assert.equal(log.metadata.criteriaCount, 3);
+});
+
+test('coordinator cannot create rubric without valid criteria (Issue #255)', async () => {
+  const coordinator = await createCoordinatorUser({
+    email: 'rubric-validation-coord@example.edu',
+    fullName: 'Rubric Validation Coordinator',
+  });
+
+  const invalidRubricRequest = {
+    deliverableType: 'PROPOSAL',
+    name: 'Invalid Rubric',
+    criteria: [
+      // Missing criterion (empty array)
+    ],
+  };
+
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify(invalidRubricRequest),
+  });
+
+  assert.equal(response.response.status, 400);
+  assert.equal(response.json.code, 'VALIDATION_ERROR');
+});
+
+test('non-coordinator cannot create rubric (Issue #255)', async () => {
+  const student = await createStudent({
+    studentId: '11070002006',
+    email: 'student-cannot-rubric@example.edu',
+    fullName: 'Student Cannot Create Rubric',
+    password: 'StrongPass1!',
+  });
+
+  const rubricRequest = {
+    deliverableType: 'PROPOSAL',
+    name: 'Unauthorized Rubric',
+    criteria: [
+      { question: 'Test criterion?', type: 'BINARY', weight: 1.0 },
+    ],
+  };
+
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(student)),
+    },
+    body: JSON.stringify(rubricRequest),
+  });
+
+  assert.equal(response.response.status, 403);
+});
+
+test('coordinator can list all rubrics (Issue #255)', async () => {
+  const coordinator = await createCoordinatorUser({
+    email: 'rubric-list-coord@example.edu',
+    fullName: 'Rubric List Coordinator',
+  });
+
+  // Create a few rubrics
+  await GradingRubric.create({
+    deliverableType: 'PROPOSAL',
+    name: 'Proposal Rubric 1',
+    criteria: [
+      { id: '1', question: 'Q1?', type: 'BINARY', weight: 1.0 },
+    ],
+    isActive: true,
+  });
+
+  await GradingRubric.create({
+    deliverableType: 'SOW',
+    name: 'SOW Rubric 1',
+    criteria: [
+      { id: '1', question: 'Q1?', type: 'SOFT', weight: 1.0 },
+    ],
+    isActive: true,
+  });
+
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'GET',
+    headers: await authHeaderFor(coordinator),
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.equal(response.json.code, 'SUCCESS');
+  assert.ok(Array.isArray(response.json.data), 'Response should be array');
+  assert.ok(response.json.data.length >= 2, 'Should have at least 2 rubrics');
+  
+  // Verify rubric structure
+  const firstRubric = response.json.data[0];
+  assert.ok(firstRubric.id, 'Rubric should have ID');
+  assert.ok(firstRubric.deliverableType, 'Rubric should have type');
+  assert.ok(firstRubric.name, 'Rubric should have name');
+  assert.ok(typeof firstRubric.criteriaCount === 'number', 'Rubric should have criterion count');
+  assert.equal(firstRubric.isActive, true, 'Rubric should show active status');
+});
