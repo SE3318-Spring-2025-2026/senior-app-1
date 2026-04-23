@@ -20,6 +20,9 @@ const {
   ValidStudentId,
   LinkedGitHubAccount,
   OAuthState,
+  Deliverable,
+  GradingRubric,
+  Grade,
 } = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
@@ -3622,4 +3625,170 @@ test('team leader can submit a new request to the same advisor after advisor rel
   assert.equal(retryResponse.response.status, 201);
   assert.equal(retryResponse.json.status, 'PENDING');
   assert.equal(retryResponse.json.advisorId, advisor.id);
+});
+
+test('committee member can fetch submission document with rubric and grades (Issue #249)', async () => {
+  const professor = await createProfessorUser({
+    email: 'committee-member@example.edu',
+    fullName: 'Committee Member',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002001',
+    email: 'submission-leader@example.edu',
+    fullName: 'Submission Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Submission Test Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  // Create rubric
+  const rubric = await GradingRubric.create({
+    deliverableType: 'PROPOSAL',
+    name: 'Proposal Evaluation',
+    criteria: [
+      { id: '1', question: 'Is proposal clear?', type: 'BINARY', weight: 0.5 },
+      { id: '2', question: 'Are objectives well-defined?', type: 'SOFT', weight: 0.5 },
+    ],
+    isActive: true,
+  });
+
+  // Create deliverable (submission)
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'PROPOSAL',
+    content: '# Proposal\n\nThis is our proposal document.',
+    images: ['https://example.com/image1.png'],
+    status: 'SUBMITTED',
+    version: 1,
+  });
+
+  // Add grade from committee member
+  const grade = await Grade.create({
+    deliverableId: deliverable.id,
+    gradedBy: professor.id,
+    gradeType: 'COMMITTEE_FINAL',
+    scores: [
+      { criterionId: '1', value: 'YES' },
+      { criterionId: '2', value: 'GOOD' },
+    ],
+    comments: 'Well-structured proposal with clear objectives.',
+  });
+
+  // Fetch submission as committee member
+  const response = await request(`/api/v1/committee/submissions/${deliverable.id}`, {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.equal(response.json.code, 'SUCCESS');
+  assert.equal(response.json.data.submission.id, deliverable.id);
+  assert.equal(response.json.data.submission.groupId, group.id);
+  assert.equal(response.json.data.submission.type, 'PROPOSAL');
+  assert.equal(response.json.data.submission.status, 'SUBMITTED');
+  assert.equal(response.json.data.document.content, deliverable.content);
+  assert.deepEqual(response.json.data.document.images, deliverable.images);
+  assert.equal(response.json.data.rubric.name, 'Proposal Evaluation');
+  assert.equal(response.json.data.previousGrades.length, 1);
+  assert.equal(response.json.data.previousGrades[0].scores.length, 2);
+});
+
+test('returns 404 when submission not found (Issue #249)', async () => {
+  const professor = await createProfessorUser({
+    email: 'missing-submission@example.edu',
+    fullName: 'Missing Submission Tester',
+  });
+
+  const fakeId = '00000000-0000-0000-0000-000000000000';
+  const response = await request(`/api/v1/committee/submissions/${fakeId}`, {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(response.response.status, 404);
+  assert.equal(response.json.code, 'SUBMISSION_NOT_FOUND');
+});
+
+test('student can only fetch submissions from own group (Issue #249)', async () => {
+  const leader = await createStudent({
+    studentId: '11070002002',
+    email: 'submission-leader-1@example.edu',
+    fullName: 'Leader 1',
+    password: 'StrongPass1!',
+  });
+
+  const otherStudent = await createStudent({
+    studentId: '11070002003',
+    email: 'other-student@example.edu',
+    fullName: 'Other Student',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Restricted Submission Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'SOW',
+    content: '# Statement of Work',
+    images: [],
+    status: 'SUBMITTED',
+    version: 1,
+  });
+
+  // Other student cannot access
+  const response = await request(`/api/v1/committee/submissions/${deliverable.id}`, {
+    headers: await authHeaderFor(otherStudent),
+  });
+
+  assert.equal(response.response.status, 403);
+  assert.equal(response.json.code, 'FORBIDDEN');
+});
+
+test('coordinator can fetch any submission (Issue #249)', async () => {
+  const coordinator = await User.create({
+    email: 'coordinator-fetch@example.edu',
+    fullName: 'Coordinator Fetch',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002004',
+    email: 'submission-leader-2@example.edu',
+    fullName: 'Leader 2',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Coordinator Fetch Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'PROPOSAL',
+    content: '# Proposal for Coordinator',
+    images: [],
+    status: 'SUBMITTED',
+    version: 2,
+  });
+
+  const response = await request(`/api/v1/committee/submissions/${deliverable.id}`, {
+    headers: await authHeaderFor(coordinator),
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.equal(response.json.data.submission.groupId, group.id);
 });
