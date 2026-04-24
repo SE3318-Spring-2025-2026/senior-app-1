@@ -20,6 +20,9 @@ const {
   ValidStudentId,
   LinkedGitHubAccount,
   OAuthState,
+  Deliverable,
+  GradingRubric,
+  Grade,
 } = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
@@ -3622,4 +3625,237 @@ test('team leader can submit a new request to the same advisor after advisor rel
   assert.equal(retryResponse.response.status, 201);
   assert.equal(retryResponse.json.status, 'PENDING');
   assert.equal(retryResponse.json.advisorId, advisor.id);
+});
+
+// --- Issue #257: Log Submission (Connector f13) ---
+
+test('team leader submits deliverable and audit log is generated (Issue #257)', async () => {
+  const leader = await createStudent({
+    studentId: '11070002100',
+    email: 'submission-leader@example.edu',
+    fullName: 'Submission Leader',
+    password: 'StrongPass1!',
+  });
+
+  const member = await createStudent({
+    studentId: '11070002101',
+    email: 'submission-member@example.edu',
+    fullName: 'Submission Member',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Submission Test Group',
+    leaderId: leader.id,
+    memberIds: [leader.id, member.id],
+    maxMembers: 4,
+  });
+
+  const submitRequest = {
+    type: 'PROPOSAL',
+    content: '# Project Proposal\n\nThis is our project proposal with detailed problem statement.',
+    images: ['https://example.com/image1.png'],
+  };
+
+  const response = await request(`/api/v1/groups/${group.id}/deliverables`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify(submitRequest),
+  });
+
+  assert.equal(response.response.status, 201);
+  assert.equal(response.json.code, 'SUCCESS');
+  assert.ok(response.json.data.id, 'Deliverable should have an ID');
+  assert.equal(response.json.data.groupId, group.id);
+  assert.equal(response.json.data.type, 'PROPOSAL');
+  assert.equal(response.json.data.status, 'SUBMITTED');
+  assert.equal(response.json.data.version, 1);
+
+  // Verify audit log entry was created with correct metadata
+  // Fire-and-forget logging means we need a small delay to ensure it completes
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const auditLogs = await AuditLog.findAll({
+    where: {
+      targetId: response.json.data.id,
+      action: 'DELIVERABLE_SUBMITTED',
+    },
+  });
+
+  assert.equal(auditLogs.length, 1, 'One audit log entry should exist');
+  const log = auditLogs[0];
+  assert.equal(log.action, 'DELIVERABLE_SUBMITTED');
+  assert.equal(log.actorId, leader.id);
+  assert.equal(log.targetType, 'DELIVERABLE');
+  assert.equal(log.metadata.eventType, 'SUBMISSION_EVENT');
+  assert.equal(log.metadata.deliverableType, 'PROPOSAL');
+  assert.equal(log.metadata.groupId, group.id);
+  assert.equal(log.metadata.submissionStatus, 'SUBMITTED');
+  assert.ok(log.metadata.documentRef.includes('PROPOSAL'), 'Document ref should include type');
+  assert.ok(log.metadata.documentRef.includes(group.id), 'Document ref should include group ID');
+});
+
+test('team leader updates existing deliverable submission (Issue #257)', async () => {
+  const leader = await createStudent({
+    studentId: '11070002102',
+    email: 'submission-update-leader@example.edu',
+    fullName: 'Submission Update Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Submission Update Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  // First submission
+  const firstSubmit = await request(`/api/v1/groups/${group.id}/deliverables`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      type: 'PROPOSAL',
+      content: '# Initial Proposal',
+      images: [],
+    }),
+  });
+
+  assert.equal(firstSubmit.response.status, 201);
+  const firstDeliverableId = firstSubmit.json.data.id;
+  assert.equal(firstSubmit.json.data.version, 1);
+
+  // Update submission
+  const secondSubmit = await request(`/api/v1/groups/${group.id}/deliverables`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      type: 'PROPOSAL',
+      content: '# Updated Proposal with more details',
+      images: ['https://example.com/updated.png'],
+    }),
+  });
+
+  assert.equal(secondSubmit.response.status, 201);
+  assert.equal(secondSubmit.json.data.id, firstDeliverableId, 'Should be same deliverable');
+  assert.equal(secondSubmit.json.data.version, 2, 'Version should increment');
+
+  // Verify two audit logs (one for each submission)
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const auditLogs = await AuditLog.findAll({
+    where: {
+      targetId: firstDeliverableId,
+      action: 'DELIVERABLE_SUBMITTED',
+    },
+  });
+
+  assert.equal(auditLogs.length, 2, 'Two audit log entries should exist for two submissions');
+});
+
+test('list deliverables returns all submissions for a group (Issue #257)', async () => {
+  const leader = await createStudent({
+    studentId: '11070002103',
+    email: 'submission-list-leader@example.edu',
+    fullName: 'Submission List Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Submission List Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  // Submit PROPOSAL
+  await request(`/api/v1/groups/${group.id}/deliverables`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      type: 'PROPOSAL',
+      content: '# Proposal content',
+      images: [],
+    }),
+  });
+
+  // Submit SOW
+  await request(`/api/v1/groups/${group.id}/deliverables`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      type: 'SOW',
+      content: '# SOW content',
+      images: [],
+    }),
+  });
+
+  // List deliverables
+  const listResponse = await request(`/api/v1/groups/${group.id}/deliverables`, {
+    method: 'GET',
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(listResponse.response.status, 200);
+  assert.equal(listResponse.json.code, 'SUCCESS');
+  assert.ok(Array.isArray(listResponse.json.data), 'Response should be array');
+  assert.equal(listResponse.json.data.length, 2, 'Should have 2 deliverables');
+
+  // Verify structure
+  const proposal = listResponse.json.data.find((d) => d.type === 'PROPOSAL');
+  assert.ok(proposal, 'Should have PROPOSAL');
+  assert.equal(proposal.status, 'SUBMITTED');
+  assert.ok(proposal.version, 'Should have version');
+
+  const sow = listResponse.json.data.find((d) => d.type === 'SOW');
+  assert.ok(sow, 'Should have SOW');
+  assert.equal(sow.status, 'SUBMITTED');
+});
+
+test('invalid submission data returns 400 error (Issue #257)', async () => {
+  const leader = await createStudent({
+    studentId: '11070002104',
+    email: 'submission-invalid-leader@example.edu',
+    fullName: 'Submission Invalid Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Submission Invalid Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  // Submit with too-short content
+  const response = await request(`/api/v1/groups/${group.id}/deliverables`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      type: 'PROPOSAL',
+      content: 'Too short', // Less than 10 characters
+      images: [],
+    }),
+  });
+
+  assert.equal(response.response.status, 400);
+  assert.equal(response.json.code, 'VALIDATION_ERROR');
 });
