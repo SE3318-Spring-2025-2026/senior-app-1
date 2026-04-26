@@ -2,6 +2,7 @@ const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const groupController = require('../controllers/groupController');
 const { updateGroupMembership } = require('../controllers/coordinatorController');
+const deliverableSubmissionController = require('../controllers/deliverableSubmissionController');
 
 const router = express.Router();
 
@@ -39,6 +40,19 @@ router.post('/:groupId/leave', authenticate, groupController.leaveGroupValidatio
 router.post('/:groupId/members/:memberId/kick', authenticate, groupController.kickMemberValidation, groupController.kickMember);
 
 router.post('/:groupId/invitations', authenticate, groupController.dispatchInvitesValidation, groupController.dispatchInvites);
+
+router.post(
+  '/:groupId/deliverables',
+  authenticate,
+  deliverableSubmissionController.submitDeliverableValidation,
+  deliverableSubmissionController.submitDeliverable,
+);
+
+router.get(
+  '/:groupId/deliverables',
+  authenticate,
+  deliverableSubmissionController.listSubmissions,
+);
 
 router.patch(
   '/:groupId/membership/coordinator',
