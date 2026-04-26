@@ -5,25 +5,28 @@ const GradingRubric = sequelize.define(
   'GradingRubric',
   {
     id: {
-      type: DataTypes.STRING,
+      type: DataTypes.UUID,
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
     deliverableType: {
       type: DataTypes.ENUM('PROPOSAL', 'SOW'),
       allowNull: false,
-      unique: true,
     },
-    // JSON array of { id, question, criterionType, maxPoints, weight }
     criteria: {
       type: DataTypes.JSON,
       allowNull: false,
       defaultValue: [],
     },
+    updatedBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
   },
   {
     tableName: 'GradingRubrics',
     timestamps: true,
+    indexes: [{ unique: true, fields: ['deliverableType'] }],
   }
 );
 
