@@ -1,0 +1,1170 @@
+openapi: 3.0.3
+info:
+  title: Senior Project Management System - Deliverable Management API
+  description: >
+    API specification for Process 4.0 Deliverable Management (Level 2 DFD).
+    Enforces a strict 1:1 mapping between the 17 defined deliverable management
+    business flows and 17 endpoint operations.
+    Covers P41–P44 and maps to D3 (Grading DB), D5 (Document Storage), and D6 (Audit Logs).
+  version: 1.1.0
+
+servers:
+  - url: https://api.senior-project.edu/v1
+    description: Production server
+
+tags:
+  - name: 4.0 Deliverable Management
+    description: >
+      Operations for rubric definition, grading weight configuration, deliverable
+      submission, document storage, committee review, grading, and audit logging.
+
+security:
+  - cookieAuth: []
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+    internalApiKey:
+      type: apiKey
+      in: header
+      name: X-Internal-Api-Key
+
+  parameters:
+    GroupIdParam:
+      name: groupId
+      in: path
+      required: true
+      description: Unique identifier of the student project group.
+      schema:
+        type: string
+      example: grp_123e4567-e89b-12d3-a456-426614174000
+    RubricIdParam:
+      name: rubricId
+      in: path
+      required: true
+      description: Unique identifier of the deliverable rubric.
+      schema:
+        type: string
+      example: rub_01HDELIVERABLE
+    DeliverableIdParam:
+      name: deliverableId
+      in: path
+      required: true
+      description: Unique identifier of the deliverable submission.
+      schema:
+        type: string
+      example: del_01HC2A9SUBMISSION
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message, timestamp]
+      properties:
+        code:
+          type: string
+          example: DELIVERABLE_MANAGEMENT_ERROR
+        message:
+          type: string
+          example: The requested deliverable management operation could not be completed.
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-04-23T12:40:00Z"
+
+    ActionResponse:
+      type: object
+      required: [id, status, message, recordedAt]
+      properties:
+        id:
+          type: string
+          example: op_01HS3MB6R5T2N7K9P4Q8
+        status:
+          type: string
+          example: ACCEPTED
+        message:
+          type: string
+          example: Operation processed successfully.
+        recordedAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T12:40:00Z"
+
+    RubricCriterion:
+      type: object
+      required: [id, question, criterionType, maxPoints]
+      properties:
+        id:
+          type: string
+          example: crit_01
+        question:
+          type: string
+          example: Problem statement is clearly defined
+        criterionType:
+          type: string
+          description: Binary criteria are pass/fail style; soft criteria are graded on a scale.
+          enum: [BINARY, SOFT]
+          example: SOFT
+        maxPoints:
+          type: number
+          format: float
+          minimum: 0
+          example: 10
+
+    DeliverableRubric:
+      type: object
+      required: [id, deliverableType, criteria, createdAt]
+      properties:
+        id:
+          type: string
+          example: rub_01HDELIVERABLE
+        deliverableType:
+          type: string
+          enum: [PROPOSAL, SOW]
+          example: PROPOSAL
+        criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/RubricCriterion'
+        sprintWeights:
+          type: array
+          description: Sprint-to-weight mapping configured by coordinator.
+          items:
+            type: object
+            required: [sprintNumber, weight]
+            properties:
+              sprintNumber:
+                type: integer
+                minimum: 1
+                example: 1
+              weight:
+                type: number
+                format: float
+                minimum: 0
+                maximum: 1
+                example: 0.25
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-01T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-15T09:30:00Z"
+
+    RubricStoreRequest:
+      type: object
+      required: [rubricId, deliverableType, criteria, createdBy, createdAt]
+      properties:
+        rubricId:
+          type: string
+          example: rub_01HDELIVERABLE
+        deliverableType:
+          type: string
+          enum: [PROPOSAL, SOW]
+          example: PROPOSAL
+        criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/RubricCriterion'
+        createdBy:
+          type: string
+          example: coord_007
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-01T10:00:00Z"
+
+    WeightUpdateStoreRequest:
+      type: object
+      required: [rubricId, sprintWeights, updatedBy, updatedAt]
+      properties:
+        rubricId:
+          type: string
+          example: rub_01HDELIVERABLE
+        sprintWeights:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [sprintNumber, weight]
+            properties:
+              sprintNumber:
+                type: integer
+                minimum: 1
+                example: 1
+              weight:
+                type: number
+                format: float
+                minimum: 0
+                maximum: 1
+                example: 0.25
+        updatedBy:
+          type: string
+          example: coord_007
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-15T09:30:00Z"
+
+    DeliverableSubmission:
+      type: object
+      required: [id, groupId, deliverableType, title, status, submittedAt]
+      properties:
+        id:
+          type: string
+          example: del_01HC2A9SUBMISSION
+        groupId:
+          type: string
+          example: grp_123e4567-e89b-12d3-a456-426614174000
+        deliverableType:
+          type: string
+          enum: [PROPOSAL, SOW]
+          example: SOW
+        title:
+          type: string
+          example: Smart Campus Analytics SoW
+        markdownBody:
+          type: string
+          description: Markdown payload stored in D5 (Document Storage).
+        imageUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+          example:
+            - https://storage.senior-project.edu/groups/grp_123/images/diagram.png
+        status:
+          type: string
+          enum: [SUBMITTED, UNDER_REVIEW, GRADED]
+          example: SUBMITTED
+        submittedAt:
+          type: string
+          format: date-time
+          example: "2026-04-20T14:00:00Z"
+
+    DocumentStoreRequest:
+      type: object
+      required: [submissionId, groupId, deliverableType, title, markdownBody, submittedAt]
+      properties:
+        submissionId:
+          type: string
+          example: del_01HC2A9SUBMISSION
+        groupId:
+          type: string
+          example: grp_123e4567-e89b-12d3-a456-426614174000
+        deliverableType:
+          type: string
+          enum: [PROPOSAL, SOW]
+          example: SOW
+        title:
+          type: string
+          example: Smart Campus Analytics SoW
+        markdownBody:
+          type: string
+          example: "## Introduction\nThis document describes..."
+        imageUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+        submittedAt:
+          type: string
+          format: date-time
+          example: "2026-04-20T14:00:00Z"
+
+    SubmissionMetadataStoreRequest:
+      type: object
+      required: [submissionId, groupId, deliverableType, title, status, submittedAt]
+      properties:
+        submissionId:
+          type: string
+          example: del_01HC2A9SUBMISSION
+        groupId:
+          type: string
+          example: grp_123e4567-e89b-12d3-a456-426614174000
+        deliverableType:
+          type: string
+          enum: [PROPOSAL, SOW]
+          example: SOW
+        title:
+          type: string
+          example: Smart Campus Analytics SoW
+        status:
+          type: string
+          enum: [SUBMITTED, UNDER_REVIEW, GRADED]
+          example: SUBMITTED
+        submittedAt:
+          type: string
+          format: date-time
+          example: "2026-04-20T14:00:00Z"
+
+    ReviewContext:
+      type: object
+      required: [submission, rubric]
+      properties:
+        submission:
+          $ref: '#/components/schemas/DeliverableSubmission'
+        rubric:
+          $ref: '#/components/schemas/DeliverableRubric'
+
+    GradeReview:
+      type: object
+      required: [id, submissionId, committeeMemberId, score, comments, gradedAt]
+      properties:
+        id:
+          type: string
+          example: grv_01HGRADEREVIEW
+        submissionId:
+          type: string
+          example: del_01HC2A9SUBMISSION
+        committeeMemberId:
+          type: string
+          example: com_44
+        score:
+          type: number
+          format: float
+          minimum: 0
+          example: 87.5
+        rubricSelections:
+          type: array
+          description: Per-criterion choices and awarded points selected by reviewer.
+          items:
+            type: object
+            required: [criterionId, awardedPoints]
+            properties:
+              criterionId:
+                type: string
+                example: crit_01
+              awardedPoints:
+                type: number
+                format: float
+                minimum: 0
+                example: 8.5
+              remark:
+                type: string
+                example: Scope is realistic and measurable.
+        comments:
+          type: string
+          example: Solid submission with clear milestones.
+        gradedAt:
+          type: string
+          format: date-time
+          example: "2026-04-22T11:00:00Z"
+
+    GradeStoreRequest:
+      type: object
+      required: [reviewId, submissionId, committeeMemberId, score, rubricSelections, gradedAt]
+      properties:
+        reviewId:
+          type: string
+          example: grv_01HGRADEREVIEW
+        submissionId:
+          type: string
+          example: del_01HC2A9SUBMISSION
+        committeeMemberId:
+          type: string
+          example: com_44
+        score:
+          type: number
+          format: float
+          minimum: 0
+          example: 87.5
+        rubricSelections:
+          type: array
+          items:
+            type: object
+            required: [criterionId, awardedPoints]
+            properties:
+              criterionId:
+                type: string
+                example: crit_01
+              awardedPoints:
+                type: number
+                format: float
+                minimum: 0
+                example: 8.5
+              remark:
+                type: string
+        gradedAt:
+          type: string
+          format: date-time
+          example: "2026-04-22T11:00:00Z"
+
+    AuditLogRequest:
+      type: object
+      required: [eventType, actorId, actorRole]
+      properties:
+        groupId:
+          type: string
+          nullable: true
+          example: grp_123e4567-e89b-12d3-a456-426614174000
+        deliverableId:
+          type: string
+          nullable: true
+          example: del_01HC2A9SUBMISSION
+        rubricId:
+          type: string
+          nullable: true
+          example: rub_01HDELIVERABLE
+        eventType:
+          type: string
+          enum:
+            [
+              RUBRIC_DEFINED,
+              WEIGHT_CONFIGURED,
+              DELIVERABLE_SUBMITTED,
+              REVIEW_GRADED,
+            ]
+          example: DELIVERABLE_SUBMITTED
+        actorId:
+          type: string
+          example: leader_1024
+        actorRole:
+          type: string
+          enum: [COORDINATOR, TEAM_LEADER, COMMITTEE_MEMBER, SYSTEM]
+          example: TEAM_LEADER
+        details:
+          type: string
+          example: Team leader submitted the SoW deliverable for group grp_123.
+
+paths:
+  # ─── P41: Define Deliverable Rubrics ─────────────────────────────────────────
+
+  /deliverables/rubrics:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "1. Coordinator -> Define Deliverable Rubric (P41)"
+      description: >
+        Business Flow 1 of 17.
+        Coordinator defines rubric criteria (BINARY/SOFT) for a Proposal or SoW deliverable.
+        Triggers storage of the rubric in D3 (Grading DB) and an audit event in D6 (Audit Logs).
+      operationId: defineDeliverableRubric
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliverableType, criteria]
+              properties:
+                deliverableType:
+                  type: string
+                  enum: [PROPOSAL, SOW]
+                  example: PROPOSAL
+                criteria:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [question, criterionType, maxPoints]
+                    properties:
+                      question:
+                        type: string
+                        example: Problem statement is clearly defined
+                      criterionType:
+                        type: string
+                        enum: [BINARY, SOFT]
+                        example: SOFT
+                      maxPoints:
+                        type: number
+                        format: float
+                        minimum: 0
+                        example: 10
+      responses:
+        "201":
+          description: Rubric created and queued for persistence to D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliverableRubric'
+        "400":
+          description: Invalid rubric payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Authentication required.
+        "403":
+          description: Coordinator role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /internal/grading-db/rubrics:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "2. P41 -> Store Rubric in D3 (Grading DB)"
+      description: >
+        Business Flow 2 of 17.
+        Internal endpoint. Persists the newly defined rubric configuration to D3 (Grading DB).
+      operationId: storeRubricInGradingDb
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RubricStoreRequest'
+      responses:
+        "201":
+          description: Rubric persisted in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: Invalid rubric store payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Internal API key required.
+
+  /internal/audit-logs/rubric-configuration:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "3. P41 -> Log Rubric Configuration to D6 (Audit Logs)"
+      description: >
+        Business Flow 3 of 17.
+        Internal endpoint. Records a RUBRIC_DEFINED audit event in D6 (Audit Logs).
+      operationId: logRubricConfiguration
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditLogRequest'
+      responses:
+        "201":
+          description: Rubric configuration audit event recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: Invalid audit log payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Internal API key required.
+
+  # ─── P42: Configure Grading Weights ──────────────────────────────────────────
+
+  /deliverables/rubrics/{rubricId}/weights:
+    patch:
+      tags: ["4.0 Deliverable Management"]
+      summary: "4. Coordinator -> Configure Grading Weights (P42)"
+      description: >
+        Business Flow 4 of 17.
+        Coordinator assigns sprint-level weights to an existing rubric.
+        Triggers update of weight configuration in D3 (Grading DB) and a WEIGHT_CONFIGURED
+        audit event in D6 (Audit Logs).
+      operationId: configureGradingWeights
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RubricIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sprintWeights]
+              properties:
+                sprintWeights:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [sprintNumber, weight]
+                    properties:
+                      sprintNumber:
+                        type: integer
+                        minimum: 1
+                        example: 2
+                      weight:
+                        type: number
+                        format: float
+                        minimum: 0
+                        maximum: 1
+                        example: 0.30
+      responses:
+        "200":
+          description: Weights updated and queued for persistence to D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliverableRubric'
+        "400":
+          description: Invalid weight configuration payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Authentication required.
+        "403":
+          description: Coordinator role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Rubric not found in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /internal/grading-db/rubrics/{rubricId}/weights:
+    patch:
+      tags: ["4.0 Deliverable Management"]
+      summary: "5. P42 -> Store Updated Weights in D3 (Grading DB)"
+      description: >
+        Business Flow 5 of 17.
+        Internal endpoint. Persists the updated sprint weight configuration for a rubric in D3.
+      operationId: storeWeightUpdateInGradingDb
+      security:
+        - internalApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/RubricIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeightUpdateStoreRequest'
+      responses:
+        "200":
+          description: Weight configuration updated in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: Invalid weight update payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Internal API key required.
+        "404":
+          description: Rubric not found in D3.
+
+  /internal/audit-logs/weight-configuration:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "6. P42 -> Log Weight Configuration to D6 (Audit Logs)"
+      description: >
+        Business Flow 6 of 17.
+        Internal endpoint. Records a WEIGHT_CONFIGURED audit event in D6 (Audit Logs).
+      operationId: logWeightConfiguration
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditLogRequest'
+      responses:
+        "201":
+          description: Weight configuration audit event recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: Invalid audit log payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Internal API key required.
+
+  # ─── P43: Submit Deliverable ─────────────────────────────────────────────────
+
+  /groups/{groupId}/deliverables:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "7. Team Leader -> Submit Deliverable (P43)"
+      description: >
+        Business Flow 7 of 17.
+        Team leader submits a Proposal or SoW document with markdown content and optional images.
+        Triggers document storage in D5 (Document Storage), metadata indexing in D3 (Grading DB),
+        and a DELIVERABLE_SUBMITTED audit event in D6 (Audit Logs).
+      operationId: submitDeliverable
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliverableType, title, markdownBody]
+              properties:
+                deliverableType:
+                  type: string
+                  enum: [PROPOSAL, SOW]
+                  example: SOW
+                title:
+                  type: string
+                  example: Smart Campus Analytics SoW
+                markdownBody:
+                  type: string
+                  example: "## Introduction\nThis document describes the Statement of Work..."
+                imageUrls:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  example:
+                    - https://storage.senior-project.edu/groups/grp_123/images/diagram.png
+      responses:
+        "201":
+          description: Deliverable accepted and queued for storage in D5 and D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliverableSubmission'
+        "400":
+          description: Invalid submission payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Authentication required.
+        "403":
+          description: Team leader role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Group not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /internal/document-storage/deliverables:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "8. P43 -> Store Document in D5 (Document Storage)"
+      description: >
+        Business Flow 8 of 17.
+        Internal endpoint. Persists the markdown body and image references of the submitted
+        deliverable to D5 (Document Storage).
+      operationId: storeDeliverableDocument
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentStoreRequest'
+      responses:
+        "201":
+          description: Deliverable document stored in D5.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: Invalid document store payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Internal API key required.
+
+  /internal/grading-db/deliverables:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "9. P43 -> Store Submission Metadata in D3 (Grading DB)"
+      description: >
+        Business Flow 9 of 17.
+        Internal endpoint. Indexes submission metadata (group, type, status) in D3 (Grading DB).
+      operationId: storeSubmissionMetadata
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmissionMetadataStoreRequest'
+      responses:
+        "201":
+          description: Submission metadata stored in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: Invalid metadata payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Internal API key required.
+
+  /internal/audit-logs/deliverable-submission:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "10. P43 -> Log Deliverable Submission to D6 (Audit Logs)"
+      description: >
+        Business Flow 10 of 17.
+        Internal endpoint. Records a DELIVERABLE_SUBMITTED audit event in D6 (Audit Logs).
+      operationId: logDeliverableSubmission
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditLogRequest'
+      responses:
+        "201":
+          description: Submission audit event recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: Invalid audit log payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Internal API key required.
+
+  /groups/{groupId}/deliverables/{deliverableId}:
+    get:
+      tags: ["4.0 Deliverable Management"]
+      summary: "11. Team Leader -> Get Submission Status (P43)"
+      description: >
+        Business Flow 11 of 17.
+        Team leader retrieves the current status and metadata of a specific deliverable submission
+        from D3 (Grading DB).
+      operationId: getSubmissionStatus
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+        - $ref: '#/components/parameters/DeliverableIdParam'
+      responses:
+        "200":
+          description: Submission status returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliverableSubmission'
+        "401":
+          description: Authentication required.
+        "403":
+          description: Access restricted to group members.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Submission not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── P44: Review and Grade Submission ────────────────────────────────────────
+
+  /deliverables/{deliverableId}/review-context:
+    get:
+      tags: ["4.0 Deliverable Management"]
+      summary: "12. Committee -> Load Review Context from D3 + D5 (P44)"
+      description: >
+        Business Flow 12 of 17.
+        Committee member loads the full review context: document body from D5 (Document Storage)
+        combined with rubric configuration from D3 (Grading DB).
+      operationId: loadReviewContext
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DeliverableIdParam'
+      responses:
+        "200":
+          description: Review context loaded successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewContext'
+        "401":
+          description: Authentication required.
+        "403":
+          description: Committee member role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Deliverable or rubric not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /deliverables/{deliverableId}/reviews:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "13. Committee -> Submit Grade Review (P44)"
+      description: >
+        Business Flow 13 of 17.
+        Committee member records per-criterion scores and comments against the rubric.
+        Triggers grade persistence in D3 (Grading DB) and a REVIEW_GRADED audit event
+        in D6 (Audit Logs).
+      operationId: submitGradeReview
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DeliverableIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [committeeMemberId, score, rubricSelections, comments]
+              properties:
+                committeeMemberId:
+                  type: string
+                  example: com_44
+                score:
+                  type: number
+                  format: float
+                  minimum: 0
+                  example: 87.5
+                rubricSelections:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [criterionId, awardedPoints]
+                    properties:
+                      criterionId:
+                        type: string
+                        example: crit_01
+                      awardedPoints:
+                        type: number
+                        format: float
+                        minimum: 0
+                        example: 8.5
+                      remark:
+                        type: string
+                        example: Scope is realistic and measurable.
+                comments:
+                  type: string
+                  example: Solid submission with clear milestones.
+      responses:
+        "201":
+          description: Grade and comments queued for storage in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GradeReview'
+        "400":
+          description: Invalid grading payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Authentication required.
+        "403":
+          description: Committee member role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Deliverable not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "409":
+          description: Review already submitted by this committee member.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags: ["4.0 Deliverable Management"]
+      summary: "14. Committee -> Get All Reviews for a Deliverable (P44)"
+      description: >
+        Business Flow 14 of 17.
+        Retrieves all grade reviews submitted by committee members for a specific deliverable
+        from D3 (Grading DB).
+      operationId: getDeliverableReviews
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DeliverableIdParam'
+      responses:
+        "200":
+          description: List of grade reviews returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deliverableId, reviews]
+                properties:
+                  deliverableId:
+                    type: string
+                    example: del_01HC2A9SUBMISSION
+                  reviews:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GradeReview'
+        "401":
+          description: Authentication required.
+        "403":
+          description: Committee member or coordinator role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Deliverable not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /internal/grading-db/deliverables/{deliverableId}/reviews:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "15. P44 -> Store Grade Review in D3 (Grading DB)"
+      description: >
+        Business Flow 15 of 17.
+        Internal endpoint. Persists the committee grade review, per-criterion selections,
+        and aggregate score to D3 (Grading DB). Also updates the submission status to GRADED.
+      operationId: storeGradeReview
+      security:
+        - internalApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/DeliverableIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GradeStoreRequest'
+      responses:
+        "201":
+          description: Grade review persisted in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: Invalid grade store payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Internal API key required.
+        "404":
+          description: Deliverable not found in D3.
+
+  /internal/audit-logs/grading:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "16. P44 -> Log Grading Event to D6 (Audit Logs)"
+      description: >
+        Business Flow 16 of 17.
+        Internal endpoint. Records a REVIEW_GRADED audit event in D6 (Audit Logs).
+      operationId: logGradingEvent
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditLogRequest'
+      responses:
+        "201":
+          description: Grading audit event recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: Invalid audit log payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Internal API key required.
+
+  /deliverables/rubrics/{rubricId}:
+    get:
+      tags: ["4.0 Deliverable Management"]
+      summary: "17. Coordinator -> Retrieve Rubric from D3 (P41/P42)"
+      description: >
+        Business Flow 17 of 17.
+        Returns the full rubric definition, including criteria and sprint weight configuration,
+        from D3 (Grading DB). Used by coordinators to review or verify rubric state.
+      operationId: getRubric
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RubricIdParam'
+      responses:
+        "200":
+          description: Rubric returned from D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliverableRubric'
+        "401":
+          description: Authentication required.
+        "403":
+          description: Coordinator role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Rubric not found in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
