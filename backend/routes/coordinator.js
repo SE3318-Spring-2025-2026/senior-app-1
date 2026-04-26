@@ -2,7 +2,7 @@ const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const { coordinatorLogin } = require('../controllers/adminController');
 const { importValidStudentIds } = require('../controllers/userDatabaseController');
-const { updateGroupMembership } = require('../controllers/coordinatorController');
+const { updateGroupMembership, createRubric } = require('../controllers/coordinatorController');
 const {
   listCoordinatorAdvisors,
   transferByCoordinator,

@@ -4,7 +4,7 @@ const path = require('path');
 
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
-const { User, Group, AuditLog } = require('./models');
+const { User, Group, AuditLog, DeliverableRubric } = require('./models');
 
 const adminRoutes = require('./routes/admin');
 const coordinatorRoutes = require('./routes/coordinator');
@@ -32,7 +32,7 @@ if (fs.existsSync(frontendDistPath)) {
 }
 
 // Make models globally accessible
-app.locals.models = { User, Group, AuditLog };
+  app.locals.models = { User, Group, AuditLog, DeliverableRubric };
 
 // Routes
 app.use('/api/v1/admin', adminRoutes);

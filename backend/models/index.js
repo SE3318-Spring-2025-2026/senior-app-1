@@ -17,6 +17,7 @@ const GroupAdvisorAssignment = require('./GroupAdvisorAssignment');
 const Invitation = require('./Invitation');
 const AuditLog = require('./AuditLog');
 const Notification = require('./Notification');
+const DeliverableRubric = require('./DeliverableRubric');
 
 module.exports = {
   User,
