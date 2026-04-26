@@ -11,6 +11,7 @@ import GroupCleanupPage from './GroupCleanupPage';
 import CoordinatorHomePage from './CoordinatorHomePage';
 import CoordinatorLoginPage from './CoordinatorLoginPage';
 import CoordinatorStudentIdUploadPage from './CoordinatorStudentIdUploadPage';
+import CoordinatorRubricPage from './CoordinatorRubricPage';
 import GroupPage from './GroupPage';
 import HomePage from './HomePage';
 import ProfessorHomePage from './ProfessorHomePage';
@@ -64,6 +65,7 @@ export default function App() {
               <Route path="/coordinator/groups/manage" element={<CoordinatorGroupMembershipPage />} />
               <Route path="/coordinator/groups/transfer" element={<CoordinatorAdvisorTransferPage />} />
               <Route path="/coordinator/groups/cleanup" element={<GroupCleanupPage role="COORDINATOR" />} />
+              <Route path="/coordinator/rubrics" element={<CoordinatorRubricPage />} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="/advisor/requests" element={<AdvisorRequestsPage />} />
               <Route path="*" element={<HomePage />} />

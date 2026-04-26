@@ -8,6 +8,7 @@ const {
   transferByCoordinator,
 } = require('../controllers/mentorMatchingController');
 const groupController = require('../controllers/groupController');
+const coordinatorRubricController = require('../controllers/coordinatorRubricController');
 
 const router = express.Router();
 
@@ -23,5 +24,26 @@ router.get('/groups', authenticate, authorize(['COORDINATOR']), groupController.
 router.patch('/groups/:groupId/advisor-transfer', authenticate, authorize(['COORDINATOR']), transferByCoordinator);
 router.patch('/groups/:groupId/members', authenticate, authorize(['COORDINATOR']), updateGroupMembership);
 router.patch('/groups/:groupId/membership/coordinator', authenticate, authorize(['COORDINATOR']), updateGroupMembership);
+
+router.get(
+  '/rubrics',
+  authenticate,
+  authorize(['COORDINATOR']),
+  coordinatorRubricController.listRubrics,
+);
+router.get(
+  '/rubrics/:deliverableType',
+  authenticate,
+  authorize(['COORDINATOR']),
+  coordinatorRubricController.getRubricValidation,
+  coordinatorRubricController.getRubric,
+);
+router.put(
+  '/rubrics',
+  authenticate,
+  authorize(['COORDINATOR']),
+  coordinatorRubricController.upsertRubricValidation,
+  coordinatorRubricController.upsertRubric,
+);
 
 module.exports = router;
