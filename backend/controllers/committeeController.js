@@ -43,8 +43,14 @@ exports.submitReview = async (req, res) => {
     if (err.code === 'SUBMISSION_NOT_FOUND') {
       return res.status(404).json({ code: 'SUBMISSION_NOT_FOUND', message: 'Submission not found' });
     }
+    if (err.code === 'DUPLICATE_CRITERION_ID') {
+      return res.status(400).json({ code: 'DUPLICATE_CRITERION_ID', message: err.message });
+    }
     if (err.code === 'INVALID_CRITERION_ID') {
       return res.status(400).json({ code: 'INVALID_CRITERION_ID', message: err.message, details: err.details || [] });
+    }
+    if (err.code === 'SCORE_EXCEEDS_MAX') {
+      return res.status(400).json({ code: 'SCORE_EXCEEDS_MAX', message: err.message, details: err.details });
     }
     console.error('[committeeController] submitReview error:', err);
     return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });

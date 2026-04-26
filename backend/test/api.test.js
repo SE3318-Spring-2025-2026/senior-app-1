@@ -3794,3 +3794,90 @@ test('invalid criterionId in scores returns 400 INVALID_CRITERION_ID', async () 
   assert.equal(response.status, 400);
   assert.equal(json.code, 'INVALID_CRITERION_ID');
 });
+
+test('duplicate criterionId in scores returns 400 DUPLICATE_CRITERION_ID', async () => {
+  const criteria = await seedTestRubric();
+  const professor = await createProfessorUser({ email: 'dup-crit@example.edu', fullName: 'Dup Crit' });
+  const submission = await DeliverableSubmission.create({
+    groupId: 'group-dup-crit',
+    type: 'PROPOSAL',
+    content: 'content',
+    status: 'SUBMITTED',
+  });
+
+  const { response, json } = await request(
+    `/api/v1/committee/submissions/${submission.id}/review`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(professor)) },
+      body: JSON.stringify({
+        scores: [
+          { criterionId: criteria[0].id, value: 5 },
+          { criterionId: criteria[0].id, value: 8 },
+        ],
+      }),
+    }
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(json.code, 'DUPLICATE_CRITERION_ID');
+});
+
+test('score exceeding maxPoints returns 400 SCORE_EXCEEDS_MAX', async () => {
+  const criteria = await seedTestRubric();
+  const professor = await createProfessorUser({ email: 'oob-score@example.edu', fullName: 'OOB Score' });
+  const submission = await DeliverableSubmission.create({
+    groupId: 'group-oob-score',
+    type: 'PROPOSAL',
+    content: 'content',
+    status: 'SUBMITTED',
+  });
+
+  const { response, json } = await request(
+    `/api/v1/committee/submissions/${submission.id}/review`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(professor)) },
+      body: JSON.stringify({
+        scores: [
+          { criterionId: criteria[0].id, value: criteria[0].maxPoints + 1 },
+          { criterionId: criteria[1].id, value: criteria[1].maxPoints },
+          { criterionId: criteria[2].id, value: criteria[2].maxPoints },
+        ],
+      }),
+    }
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(json.code, 'SCORE_EXCEEDS_MAX');
+});
+
+test('criteria from wrong deliverableType returns 400 INVALID_CRITERION_ID', async () => {
+  const proposalCriteria = await seedTestRubric();
+  const sowCriteria = await RubricCriterion.bulkCreate([
+    { deliverableType: 'SOW', question: 'SOW Budget Clarity', criterionType: 'SOFT', maxPoints: 10, weight: 1.0 },
+  ]);
+  const professor = await createProfessorUser({ email: 'wrong-type@example.edu', fullName: 'Wrong Type' });
+  const submission = await DeliverableSubmission.create({
+    groupId: 'group-wrong-type',
+    type: 'PROPOSAL',
+    content: 'content',
+    status: 'SUBMITTED',
+  });
+
+  const { response, json } = await request(
+    `/api/v1/committee/submissions/${submission.id}/review`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(professor)) },
+      body: JSON.stringify({
+        scores: [
+          { criterionId: sowCriteria[0].id, value: 5 },
+        ],
+      }),
+    }
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(json.code, 'INVALID_CRITERION_ID');
+});

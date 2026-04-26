@@ -24,7 +24,16 @@ async function submitReview({ submissionId, reviewerId, scores, comments }) {
   }
 
   const criterionIds = scores.map((s) => s.criterionId);
-  const criteria = await RubricCriterion.findAll({ where: { id: criterionIds } });
+  const uniqueCriterionIds = new Set(criterionIds);
+  if (uniqueCriterionIds.size !== criterionIds.length) {
+    const err = new Error('Duplicate criterionIds are not allowed in a single review');
+    err.code = 'DUPLICATE_CRITERION_ID';
+    throw err;
+  }
+
+  const criteria = await RubricCriterion.findAll({
+    where: { id: criterionIds, deliverableType: submission.type },
+  });
 
   if (criteria.length !== criterionIds.length) {
     const foundIds = new Set(criteria.map((c) => c.id));
@@ -36,6 +45,19 @@ async function submitReview({ submissionId, reviewerId, scores, comments }) {
   }
 
   const criteriaMap = new Map(criteria.map((c) => [c.id, c]));
+
+  for (const score of scores) {
+    const criterion = criteriaMap.get(score.criterionId);
+    if (score.value > criterion.maxPoints) {
+      const err = new Error(
+        `Score ${score.value} exceeds maxPoints ${criterion.maxPoints} for criterion ${score.criterionId}`
+      );
+      err.code = 'SCORE_EXCEEDS_MAX';
+      err.details = { criterionId: score.criterionId, value: score.value, maxPoints: criterion.maxPoints };
+      throw err;
+    }
+  }
+
   const finalScore = calculateFinalScore(scores, criteriaMap);
 
   const transaction = await sequelize.transaction();
