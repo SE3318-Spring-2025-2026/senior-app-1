@@ -1,11 +1,12 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
+const Group = require('./Group');
 
 const Deliverable = sequelize.define(
   'Deliverable',
   {
     id: {
-      type: DataTypes.STRING,
+      type: DataTypes.UUID,
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
@@ -23,12 +24,18 @@ const Deliverable = sequelize.define(
     },
     images: {
       type: DataTypes.JSON,
-      allowNull: true,
+      allowNull: false,
+      defaultValue: [],
     },
     status: {
-      type: DataTypes.ENUM('SUBMITTED', 'UNDER_REVIEW', 'GRADED'),
+      type: DataTypes.ENUM('DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'GRADED'),
       allowNull: false,
       defaultValue: 'SUBMITTED',
+    },
+    version: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
     },
     submittedAt: {
       type: DataTypes.DATE,
@@ -43,7 +50,15 @@ const Deliverable = sequelize.define(
   {
     tableName: 'Deliverables',
     timestamps: true,
+    indexes: [
+      {
+        unique: true,
+        fields: ['groupId', 'type'],
+      },
+    ],
   }
 );
+
+Deliverable.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
 
 module.exports = Deliverable;

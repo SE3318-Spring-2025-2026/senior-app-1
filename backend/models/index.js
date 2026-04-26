@@ -17,6 +17,7 @@ const GroupAdvisorAssignment = require('./GroupAdvisorAssignment');
 const Invitation = require('./Invitation');
 const AuditLog = require('./AuditLog');
 const Notification = require('./Notification');
+const Grade = require('./Grade');
 const DeliverableRubric = require('./DeliverableRubric');
 const Deliverable = require('./Deliverable');
 const GradingRubric = require('./GradingRubric');
@@ -34,6 +35,7 @@ module.exports = {
   Invitation,
   AuditLog,
   Notification,
+  Grade,
   DeliverableRubric,
   Deliverable,
   GradingRubric,

@@ -20,8 +20,9 @@ const {
   ValidStudentId,
   LinkedGitHubAccount,
   OAuthState,
-  DeliverableRubric,
   Deliverable,
+  Grade,
+  DeliverableRubric,
   GradingRubric,
   CommitteeReview,
 } = require('../models');
@@ -3631,6 +3632,310 @@ test('team leader can submit a new request to the same advisor after advisor rel
   assert.equal(retryResponse.json.advisorId, advisor.id);
 });
 
+// --- Issue #260: Log Grading (Connector f14) ---
+
+test('committee member submits grades and audit log is generated (Issue #260)', async () => {
+  const professor = await createProfessorUser({
+    email: 'grading-professor@example.edu',
+    fullName: 'Grading Professor',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002200',
+    email: 'grading-leader@example.edu',
+    fullName: 'Grading Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Grading Test Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  // Create and submit deliverable
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'PROPOSAL',
+    content: '# Project Proposal for Grading',
+    images: [],
+    status: 'SUBMITTED',
+    version: 1,
+  });
+
+  const gradeRequest = {
+    gradeType: 'COMMITTEE_FINAL',
+    scores: [
+      { criterionId: 'criterion_1', value: 0.8 },
+      { criterionId: 'criterion_2', value: 0.9 },
+      { criterionId: 'criterion_3', value: 0.75 },
+    ],
+    comments: 'Excellent proposal with clear objectives.',
+  };
+
+  const response = await request(`/api/v1/committee/submissions/${deliverable.id}/grade`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify(gradeRequest),
+  });
+
+  assert.equal(response.response.status, 201);
+  assert.equal(response.json.code, 'SUCCESS');
+  assert.ok(response.json.data.id, 'Grade should have an ID');
+  assert.equal(response.json.data.deliverableId, deliverable.id);
+  assert.equal(response.json.data.gradedBy, professor.id);
+  assert.equal(response.json.data.gradeType, 'COMMITTEE_FINAL');
+  assert.equal(response.json.data.scores.length, 3);
+  assert.equal(response.json.data.finalScore, 0.82); // (0.8 + 0.9 + 0.75) / 3
+
+  // Verify audit log entry was created with correct metadata
+  // Fire-and-forget logging means we need a small delay
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const auditLogs = await AuditLog.findAll({
+    where: {
+      targetId: response.json.data.id,
+      action: 'GRADE_SUBMITTED',
+    },
+  });
+
+  assert.equal(auditLogs.length, 1, 'One audit log entry should exist');
+  const log = auditLogs[0];
+  assert.equal(log.action, 'GRADE_SUBMITTED');
+  assert.equal(log.actorId, professor.id);
+  assert.equal(log.targetType, 'GRADE');
+  assert.equal(log.metadata.eventType, 'GRADING_EVENT');
+  assert.equal(log.metadata.deliverableType, 'PROPOSAL');
+  assert.equal(log.metadata.reviewerId, professor.id);
+  assert.equal(log.metadata.gradeType, 'COMMITTEE_FINAL');
+  assert.equal(log.metadata.finalScore, 0.82);
+  assert.equal(log.metadata.criteriaCount, 3);
+  assert.ok(log.metadata.submissionRef.includes(group.id), 'Submission ref should include group ID');
+});
+
+test('committee member updates their grade submission (Issue #260)', async () => {
+  const professor = await createProfessorUser({
+    email: 'grading-update-professor@example.edu',
+    fullName: 'Grading Update Professor',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002201',
+    email: 'grading-update-leader@example.edu',
+    fullName: 'Grading Update Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Grading Update Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'PROPOSAL',
+    content: '# Proposal',
+    images: [],
+    status: 'SUBMITTED',
+    version: 1,
+  });
+
+  // First grade
+  const firstGrade = await request(`/api/v1/committee/submissions/${deliverable.id}/grade`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      gradeType: 'COMMITTEE_FINAL',
+      scores: [{ criterionId: 'c1', value: 0.7 }],
+      comments: 'Initial grade',
+    }),
+  });
+
+  assert.equal(firstGrade.response.status, 201);
+  const firstGradeId = firstGrade.json.data.id;
+
+  // Update grade (same professor)
+  const secondGrade = await request(`/api/v1/committee/submissions/${deliverable.id}/grade`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      gradeType: 'COMMITTEE_FINAL',
+      scores: [{ criterionId: 'c1', value: 0.9 }],
+      comments: 'Updated after review',
+    }),
+  });
+
+  assert.equal(secondGrade.response.status, 201);
+  assert.equal(secondGrade.json.data.id, firstGradeId, 'Should be same grade record');
+  assert.equal(secondGrade.json.data.finalScore, 0.9, 'Score should be updated');
+
+  // Verify two audit logs for two submissions
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const auditLogs = await AuditLog.findAll({
+    where: {
+      targetId: firstGradeId,
+      action: 'GRADE_SUBMITTED',
+    },
+  });
+
+  assert.equal(auditLogs.length, 2, 'Two audit log entries for two submissions');
+});
+
+test('multiple committee members can grade same deliverable concurrently (Issue #260)', async () => {
+  const professor1 = await createProfessorUser({
+    email: 'grading-concurrent-prof1@example.edu',
+    fullName: 'Concurrent Professor 1',
+  });
+
+  const professor2 = await createProfessorUser({
+    email: 'grading-concurrent-prof2@example.edu',
+    fullName: 'Concurrent Professor 2',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002202',
+    email: 'grading-concurrent-leader@example.edu',
+    fullName: 'Grading Concurrent Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Concurrent Grading Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'SOW',
+    content: '# Statement of Work',
+    images: [],
+    status: 'SUBMITTED',
+    version: 1,
+  });
+
+  // Professor 1 grades
+  const grade1 = await request(`/api/v1/committee/submissions/${deliverable.id}/grade`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor1)),
+    },
+    body: JSON.stringify({
+      gradeType: 'COMMITTEE_FINAL',
+      scores: [{ criterionId: 'c1', value: 0.85 }],
+    }),
+  });
+
+  // Professor 2 grades
+  const grade2 = await request(`/api/v1/committee/submissions/${deliverable.id}/grade`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor2)),
+    },
+    body: JSON.stringify({
+      gradeType: 'COMMITTEE_FINAL',
+      scores: [{ criterionId: 'c1', value: 0.92 }],
+    }),
+  });
+
+  assert.equal(grade1.response.status, 201);
+  assert.equal(grade2.response.status, 201);
+  assert.notEqual(grade1.json.data.id, grade2.json.data.id, 'Should be different grade records');
+
+  // Verify both professors have their own grade
+  const listResponse = await request(`/api/v1/committee/submissions/${deliverable.id}/grades`, {
+    method: 'GET',
+    headers: await authHeaderFor(professor1),
+  });
+
+  assert.equal(listResponse.response.status, 200);
+  assert.equal(listResponse.json.data.length, 2, 'Should have 2 grades from different professors');
+
+  // Verify audit logs from both professors - filter by grade IDs for isolation
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const grade1Logs = await AuditLog.findAll({
+    where: {
+      targetId: grade1.json.data.id,
+      action: 'GRADE_SUBMITTED',
+    },
+  });
+
+  const grade2Logs = await AuditLog.findAll({
+    where: {
+      targetId: grade2.json.data.id,
+      action: 'GRADE_SUBMITTED',
+    },
+  });
+
+  assert.equal(grade1Logs.length, 1, 'Should have 1 audit log for grade 1');
+  assert.equal(grade2Logs.length, 1, 'Should have 1 audit log for grade 2');
+  assert.equal(grade1Logs[0].actorId, professor1.id, 'Grade 1 logged by professor 1');
+  assert.equal(grade2Logs[0].actorId, professor2.id, 'Grade 2 logged by professor 2');
+});
+
+test('invalid score values return 400 error (Issue #260)', async () => {
+  const professor = await createProfessorUser({
+    email: 'grading-invalid-professor@example.edu',
+    fullName: 'Grading Invalid Professor',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002203',
+    email: 'grading-invalid-leader@example.edu',
+    fullName: 'Grading Invalid Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Grading Invalid Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'PROPOSAL',
+    content: '# Proposal',
+    images: [],
+    status: 'SUBMITTED',
+    version: 1,
+  });
+
+  // Submit with invalid score (> 1)
+  const response = await request(`/api/v1/committee/submissions/${deliverable.id}/grade`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      gradeType: 'COMMITTEE_FINAL',
+      scores: [{ criterionId: 'c1', value: 1.5 }], // Invalid: > 1
+    }),
+  });
+
+  assert.equal(response.response.status, 400);
+  assert.equal(response.json.code, 'VALIDATION_ERROR');
+});
+
 test('coordinator can create a rubric with valid payload', async () => {
   const coordinator = await User.create({
     email: 'rubric-coordinator@example.edu',
@@ -3760,6 +4065,99 @@ test('POST /api/v1/coordinator/rubrics rejects missing deliverableName', async (
 
   assert.equal(response.response.status, 400);
   assert.equal(response.json.code, 'INVALID_RUBRIC_INPUT');
+});
+
+test('GET endpoint returns grades with proper authorization (Issue #260)', async () => {
+  const professor = await createProfessorUser({
+    email: 'grading-get-professor@example.edu',
+    fullName: 'GET Professor',
+  });
+
+  const coordinator = await User.create({
+    email: 'grading-get-coordinator@example.edu',
+    passwordHash: await bcrypt.hash('StrongPass1!', 10),
+    fullName: 'GET Coordinator',
+    role: 'COORDINATOR',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002204',
+    email: 'grading-get-leader@example.edu',
+    fullName: 'GET Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'GET Test Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'SOW',
+    content: '# SOW',
+    images: [],
+    status: 'SUBMITTED',
+    version: 1,
+  });
+
+  // Submit a grade
+  const gradeResponse = await request(`/api/v1/committee/submissions/${deliverable.id}/grade`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      gradeType: 'COMMITTEE_FINAL',
+      scores: [
+        { criterionId: 'c1', value: 0.8 },
+        { criterionId: 'c2', value: 0.9 },
+      ],
+    }),
+  });
+
+  assert.equal(gradeResponse.response.status, 201);
+
+  // Test 1: Professor can retrieve grades
+  const profResponse = await request(`/api/v1/committee/submissions/${deliverable.id}/grades`, {
+    method: 'GET',
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(profResponse.response.status, 200);
+  assert.equal(profResponse.json.code, 'SUCCESS');
+  assert.equal(profResponse.json.data.length, 1, 'Should have 1 grade');
+  assert.equal(profResponse.json.data[0].gradeType, 'COMMITTEE_FINAL');
+  assert.equal(profResponse.json.data[0].finalScore, 0.85);
+
+  // Test 2: Coordinator can retrieve grades
+  const coordResponse = await request(`/api/v1/committee/submissions/${deliverable.id}/grades`, {
+    method: 'GET',
+    headers: await authHeaderFor(coordinator),
+  });
+
+  assert.equal(coordResponse.response.status, 200);
+  assert.equal(coordResponse.json.data.length, 1);
+
+  // Test 3: Student cannot retrieve grades (authorization failure)
+  const studentResponse = await request(`/api/v1/committee/submissions/${deliverable.id}/grades`, {
+    method: 'GET',
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(studentResponse.response.status, 403, 'Student should not be authorized');
+
+  // Test 4: GET with invalid UUID returns 400
+  const invalidResponse = await request(`/api/v1/committee/submissions/invalid-uuid/grades`, {
+    method: 'GET',
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(invalidResponse.response.status, 400);
+  assert.equal(invalidResponse.json.code, 'VALIDATION_ERROR');
 });
 
 test('POST /api/v1/coordinator/rubrics rejects empty criteria array', async () => {
