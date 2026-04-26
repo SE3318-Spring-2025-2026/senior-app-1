@@ -1,6 +1,5 @@
 const { Op } = require('sequelize');
-const sequelize = require('../db');
-const { DeliverableSubmission, RubricCriterion, CommitteeReview } = require('../models');
+const { Deliverable, GradingRubric, CommitteeReview } = require('../models');
 
 function calculateFinalScore(scores, criteriaMap) {
   let weightedSum = 0;
@@ -17,55 +16,48 @@ function calculateFinalScore(scores, criteriaMap) {
 }
 
 async function submitReview({ submissionId, reviewerId, scores, comments }) {
-  const submission = await DeliverableSubmission.findByPk(submissionId);
+  const submission = await Deliverable.findByPk(submissionId);
   if (!submission) {
     const err = new Error('Submission not found');
     err.code = 'SUBMISSION_NOT_FOUND';
     throw err;
   }
 
-  const criterionIds = scores.map((s) => s.criterionId);
-  const criteria = await RubricCriterion.findAll({ where: { id: criterionIds } });
+  const rubric = await GradingRubric.findOne({ where: { deliverableType: submission.type } });
+  const criteria = rubric ? (rubric.criteria || []) : [];
+  const criteriaMap = new Map(criteria.map((c) => [c.id, c]));
 
-  if (criteria.length !== criterionIds.length) {
-    const foundIds = new Set(criteria.map((c) => c.id));
-    const missing = criterionIds.filter((id) => !foundIds.has(id));
+  const criterionIds = scores.map((s) => s.criterionId);
+  const missing = criterionIds.filter((id) => !criteriaMap.has(id));
+  if (missing.length > 0) {
     const err = new Error(`Invalid criterion IDs: ${missing.join(', ')}`);
     err.code = 'INVALID_CRITERION_ID';
     err.details = missing;
     throw err;
   }
 
-  const criteriaMap = new Map(criteria.map((c) => [c.id, c]));
   const finalScore = calculateFinalScore(scores, criteriaMap);
-
-  const transaction = await sequelize.transaction();
-  try {
-    const review = await CommitteeReview.create(
-      { submissionId, reviewerId, scores, comments: comments || null, finalScore },
-      { transaction }
-    );
-
-    await DeliverableSubmission.update(
-      { status: 'GRADED' },
-      { where: { id: submissionId }, transaction }
-    );
-
-    await transaction.commit();
-    return review;
-  } catch (err) {
-    if (!transaction.finished) await transaction.rollback();
-    throw err;
-  }
+  const review = await CommitteeReview.create({
+    submissionId,
+    reviewerId,
+    scores,
+    comments: comments || null,
+    finalScore,
+  });
+  return review;
 }
 
 async function listRubricCriteria({ deliverableType } = {}) {
-  const where = deliverableType ? { deliverableType } : {};
-  return RubricCriterion.findAll({ where, order: [['weight', 'DESC']] });
+  if (deliverableType) {
+    const rubric = await GradingRubric.findOne({ where: { deliverableType } });
+    return rubric ? (rubric.criteria || []) : [];
+  }
+  const rubrics = await GradingRubric.findAll();
+  return rubrics.flatMap((r) => r.criteria || []);
 }
 
 async function listPendingSubmissions() {
-  return DeliverableSubmission.findAll({
+  return Deliverable.findAll({
     where: { status: { [Op.ne]: 'GRADED' } },
     order: [['submittedAt', 'DESC']],
   });

@@ -1,8 +1,8 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
 
-const DeliverableSubmission = sequelize.define(
-  'DeliverableSubmission',
+const Deliverable = sequelize.define(
+  'Deliverable',
   {
     id: {
       type: DataTypes.STRING,
@@ -21,6 +21,10 @@ const DeliverableSubmission = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: false,
     },
+    images: {
+      type: DataTypes.JSON,
+      allowNull: true,
+    },
     status: {
       type: DataTypes.ENUM('SUBMITTED', 'UNDER_REVIEW', 'GRADED'),
       allowNull: false,
@@ -37,9 +41,9 @@ const DeliverableSubmission = sequelize.define(
     },
   },
   {
-    tableName: 'DeliverableSubmissions',
+    tableName: 'Deliverables',
     timestamps: true,
   }
 );
 
-module.exports = DeliverableSubmission;
+module.exports = Deliverable;

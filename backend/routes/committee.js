@@ -19,7 +19,7 @@ router.get(
 );
 
 router.post(
-  '/submissions/:submissionId/review',
+  '/submissions/:submissionId/grade',
   authenticate,
   authorize(['PROFESSOR']),
   committeeController.submitReviewValidation,

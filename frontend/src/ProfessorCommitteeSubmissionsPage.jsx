@@ -126,6 +126,7 @@ export default function ProfessorCommitteeSubmissionsPage() {
                 <div style={{ marginTop: '16px' }}>
                   <Link
                     to={`/professors/committee-review/${submission.id}`}
+                    state={{ submissionType: submission.type }}
                     className="gateway-link"
                     style={{ display: 'inline-flex', minWidth: '180px' }}
                   >

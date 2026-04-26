@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
 import apiClient from './services/apiClient';
 
@@ -75,7 +75,9 @@ function CriterionRow({ criterion, value, onChange, disabled }) {
 export default function CommitteeGradingPage() {
   const { submissionId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { notify } = useNotification();
+  const submissionType = location.state?.submissionType;
 
   const [criteria, setCriteria] = useState([]);
   const [scores, setScores] = useState({});
@@ -97,7 +99,10 @@ export default function CommitteeGradingPage() {
 
     async function loadCriteria() {
       try {
-        const res = await apiClient.get('/v1/committee/rubric-criteria');
+        const url = submissionType
+          ? `/v1/committee/rubric-criteria?deliverableType=${submissionType}`
+          : '/v1/committee/rubric-criteria';
+        const res = await apiClient.get(url);
         const loaded = res.data?.criteria || [];
         setCriteria(loaded);
         const initialScores = {};
@@ -115,7 +120,7 @@ export default function CommitteeGradingPage() {
     }
 
     loadCriteria();
-  }, [navigate, notify, token]);
+  }, [navigate, notify, token, submissionType]);
 
   function handleScoreChange(criterionId, value) {
     setScores((current) => ({ ...current, [criterionId]: value }));
@@ -132,7 +137,7 @@ export default function CommitteeGradingPage() {
     }));
 
     try {
-      const res = await apiClient.post(`/v1/committee/submissions/${submissionId}/review`, {
+      const res = await apiClient.post(`/v1/committee/submissions/${submissionId}/grade`, {
         scores: scoreArray,
         comments: comments.trim() || undefined,
       });

@@ -52,7 +52,7 @@ exports.submitReview = async (req, res) => {
       comments,
     });
 
-    return res.status(201).json({
+    return res.status(200).json({
       id: review.id,
       submissionId: review.submissionId,
       reviewerId: review.reviewerId,

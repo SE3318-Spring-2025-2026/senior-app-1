@@ -33,6 +33,7 @@ const CommitteeReview = sequelize.define(
   {
     tableName: 'CommitteeReviews',
     timestamps: true,
+    indexes: [{ unique: true, fields: ['submissionId', 'reviewerId'] }],
   }
 );
 
