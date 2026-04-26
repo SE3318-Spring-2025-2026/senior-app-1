@@ -32,7 +32,7 @@ if (fs.existsSync(frontendDistPath)) {
 }
 
 // Make models globally accessible
-  app.locals.models = { User, Group, AuditLog, DeliverableRubric };
+app.locals.models = { User, Group, AuditLog, DeliverableRubric };
 
 // Routes
 app.use('/api/v1/admin', adminRoutes);
