@@ -45,9 +45,9 @@ const createRubric = [
   body('criteria').isArray({ min: 1 }),
   body('criteria.*.name').isString().trim().notEmpty(),
   body('criteria.*.description').optional().isString().trim(),
-  body('criteria.*.maxPoints').isNumeric(),
-  body('totalPoints').isNumeric(),
-  body('courseId').optional().isInt(),
+  body('criteria.*.maxPoints').isInt({ min: 0 }).toInt(),
+  body('totalPoints').isInt({ min: 0 }).toInt(),
+  body('courseId').optional().isInt().toInt(),
 
   async (req, res, next) => {
     const errors = validationResult(req);
