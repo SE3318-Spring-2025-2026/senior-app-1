@@ -8,6 +8,7 @@ const {
   transferByCoordinator,
 } = require('../controllers/mentorMatchingController');
 const groupController = require('../controllers/groupController');
+const coordinatorWeightsController = require('../controllers/coordinatorWeightsController');
 
 const router = express.Router();
 
@@ -23,5 +24,13 @@ router.get('/groups', authenticate, authorize(['COORDINATOR']), groupController.
 router.patch('/groups/:groupId/advisor-transfer', authenticate, authorize(['COORDINATOR']), transferByCoordinator);
 router.patch('/groups/:groupId/members', authenticate, authorize(['COORDINATOR']), updateGroupMembership);
 router.patch('/groups/:groupId/membership/coordinator', authenticate, authorize(['COORDINATOR']), updateGroupMembership);
+
+router.put(
+  '/weights',
+  authenticate,
+  authorize(['COORDINATOR']),
+  coordinatorWeightsController.updateWeightsValidation,
+  coordinatorWeightsController.updateWeights,
+);
 
 module.exports = router;
