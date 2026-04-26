@@ -1,22 +1,29 @@
 /**
  * routes/submissions.js
  *
- * Committee submission review and grading endpoints.
- * Implements grading with D6 logging (Issue #260).
+ * Committee submission endpoints: document retrieval (Issue #249) and grading (Issue #260).
  */
 
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
+const submissionController = require('../controllers/submissionController');
 const gradingController = require('../controllers/gradingController');
 
 const router = express.Router();
 
-/**
- * POST /api/v1/committee/submissions/:submissionId/grade
- * Submit grades for a deliverable
- *
- * Auth: PROFESSOR (committee member)
- */
+router.get(
+  '/',
+  authenticate,
+  submissionController.listSubmissions
+);
+
+router.get(
+  '/:submissionId',
+  authenticate,
+  submissionController.getSubmissionValidation,
+  submissionController.getSubmission
+);
+
 router.post(
   '/:submissionId/grade',
   authenticate,
@@ -25,12 +32,6 @@ router.post(
   gradingController.submitGrade
 );
 
-/**
- * GET /api/v1/committee/submissions/:submissionId/grades
- * List all grades for a deliverable
- *
- * Auth: PROFESSOR, COORDINATOR
- */
 router.get(
   '/:submissionId/grades',
   authenticate,
