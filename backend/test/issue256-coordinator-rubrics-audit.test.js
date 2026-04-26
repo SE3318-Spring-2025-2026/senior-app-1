@@ -39,9 +39,7 @@ async function authHeaderFor(user) {
 function sampleRubric() {
   return {
     deliverableType: 'PROPOSAL',
-    criteria: [
-      { id: 'crit-1', label: 'Clarity', maxPoints: 10, weight: 0.5, gradeType: 'COMMITTEE_FINAL' },
-    ],
+    criteria: [{ question: 'Is the proposal clear?', type: 'SOFT', weight: 0.5 }],
   };
 }
 
