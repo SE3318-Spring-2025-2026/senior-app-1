@@ -23,6 +23,7 @@ const DeliverableRubric = require('./DeliverableRubric');
 const Deliverable = require('./Deliverable');
 const CommitteeReview = require('./CommitteeReview');
 const SprintWeightConfiguration = require('./SprintWeightConfiguration');
+const DeliverableSubmission = require('./DeliverableSubmission');
 
 module.exports = {
   User,
@@ -42,4 +43,5 @@ module.exports = {
   Deliverable,
   CommitteeReview,
   SprintWeightConfiguration,
+  DeliverableSubmission,
 };
