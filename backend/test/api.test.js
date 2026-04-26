@@ -3654,11 +3654,12 @@ test('coordinator can create a rubric with valid payload', async () => {
   });
 
   assert.equal(response.response.status, 201);
-  assert.equal(response.json.deliverableName, payload.deliverableName);
-  assert.equal(response.json.totalPoints, payload.totalPoints);
-  assert.equal(response.json.courseId, payload.courseId);
-  assert.deepEqual(response.json.criteria, payload.criteria);
-  assert.ok(response.json.id);
+  assert.equal(response.json.code, 'CREATED');
+  assert.equal(response.json.data.deliverableName, payload.deliverableName);
+  assert.equal(response.json.data.totalPoints, payload.totalPoints);
+  assert.equal(response.json.data.courseId, payload.courseId);
+  assert.deepEqual(response.json.data.criteria, payload.criteria);
+  assert.ok(response.json.data.id);
 });
 
 test('coordinator can create a rubric without optional courseId', async () => {
@@ -3686,8 +3687,9 @@ test('coordinator can create a rubric without optional courseId', async () => {
   });
 
   assert.equal(response.response.status, 201);
-  assert.equal(response.json.deliverableName, payload.deliverableName);
-  assert.equal(response.json.courseId, null);
+  assert.equal(response.json.code, 'CREATED');
+  assert.equal(response.json.data.deliverableName, payload.deliverableName);
+  assert.equal(response.json.data.courseId, null);
 });
 
 test('POST /api/v1/coordinator/rubrics rejects request without authentication', async () => {

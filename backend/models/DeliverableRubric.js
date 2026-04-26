@@ -3,16 +3,15 @@ const sequelize = require('../db');
 
 const DeliverableRubric = sequelize.define('DeliverableRubric', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.UUID,
     primaryKey: true,
-    autoIncrement: true,
+    defaultValue: DataTypes.UUIDV4,
   },
   deliverableName: {
     type: DataTypes.STRING,
     allowNull: false,
   },
   criteria: {
-    // Array of { name, description, maxPoints }
     type: DataTypes.JSON,
     allowNull: false,
   },

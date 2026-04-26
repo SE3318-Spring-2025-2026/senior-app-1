@@ -28,6 +28,14 @@ const GroupDeliverable = sequelize.define(
       allowNull: false,
       defaultValue: [],
     },
+    sprintNumber: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    deliverableType: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
   },
   {
     tableName: 'GroupDeliverables',

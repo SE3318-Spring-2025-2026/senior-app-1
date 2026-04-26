@@ -1,5 +1,6 @@
 const { body, param, validationResult } = require('express-validator');
 const coordinatorGroupService = require('../services/coordinatorGroupService');
+const deliverableRubricService = require('../services/deliverableRubricService');
 
 const updateGroupMembership = [
   param('groupId').isString().trim().notEmpty(),
@@ -62,14 +63,25 @@ const createRubric = [
     try {
       const { deliverableName, criteria, totalPoints, courseId } = req.body;
 
-      const rubric = await req.app.locals.models.DeliverableRubric.create({
+      const rubric = await deliverableRubricService.createRubric({
         deliverableName,
         criteria,
         totalPoints,
-        courseId: courseId ?? null,
+        courseId,
       });
 
-      return res.status(201).json(rubric);
+      return res.status(201).json({
+        code: 'CREATED',
+        message: 'Rubric created successfully.',
+        data: {
+          id: rubric.id,
+          deliverableName: rubric.deliverableName,
+          criteria: rubric.criteria,
+          totalPoints: rubric.totalPoints,
+          courseId: rubric.courseId,
+          createdAt: rubric.createdAt,
+        },
+      });
     } catch (error) {
       if (error.status && error.code) {
         return res.status(error.status).json({
