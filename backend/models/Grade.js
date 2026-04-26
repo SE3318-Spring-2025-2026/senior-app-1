@@ -86,15 +86,13 @@ const Grade = sequelize.define(
   {
     tableName: 'Grades',
     timestamps: true,
+    indexes: [
+      {
+        unique: true,
+        fields: ['deliverableId', 'gradedBy'],
+      },
+    ],
   }
 );
-
-/**
- * Unique constraint: one grade per deliverable per grader
- */
-Grade.addConstraint('grade_deliverable_grader_unique', {
-  type: 'unique',
-  fields: ['deliverableId', 'gradedBy'],
-});
 
 module.exports = Grade;

@@ -83,6 +83,7 @@ router.post(
 router.get(
   '/:groupId/deliverables',
   authenticate,
+  authorize(['STUDENT', 'PROFESSOR', 'COORDINATOR']),
   submissionController.listDeliverableValidation,
   submissionController.listDeliverables
 );

@@ -216,7 +216,7 @@ class SubmissionService {
     // Student can access own group's submissions
     if (user.role === 'STUDENT') {
       const group = await Group.findByPk(deliverable.groupId);
-      return group && group.memberIds && group.memberIds.includes(user.id);
+      return group && group.memberIds && group.memberIds.map(String).includes(String(user.id));
     }
 
     return false;

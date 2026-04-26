@@ -89,16 +89,13 @@ const Deliverable = sequelize.define(
   {
     tableName: 'Deliverables',
     timestamps: true,
+    indexes: [
+      {
+        unique: true,
+        fields: ['groupId', 'type'],
+      },
+    ],
   }
 );
-
-/**
- * Unique constraint: one deliverable per group per type
- * (can't have two PROPOSAL deliverables for same group)
- */
-Deliverable.addConstraint('deliverable_group_type_unique', {
-  type: 'unique',
-  fields: ['groupId', 'type'],
-});
 
 module.exports = Deliverable;

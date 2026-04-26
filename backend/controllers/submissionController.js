@@ -7,7 +7,7 @@
 
 const { validationResult, body, param } = require('express-validator');
 const SubmissionService = require('../services/submissionService');
-const { v4: isUUID } = require('uuid');
+const { validate: isUUID } = require('uuid');
 
 /**
  * Validation middleware for POST /api/v1/groups/:groupId/deliverables
