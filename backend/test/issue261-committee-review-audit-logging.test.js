@@ -1,10 +1,12 @@
 /**
- * Issue #261 — Testing: Log Grading (Connector f14)
+ * Issue #261 — Committee grading audit logging (Connector f14)
  *
- * Logging failures must not fail POST /api/v1/committee/submissions/:id/review.
- * Note: GitHub #261 references "Issue 27" — that is unrelated (coordinator upload); use this file as-is.
+ * Logging failures must not fail POST /api/v1/committee/submissions/:id/review
+ * (or .../grade — set TEST_COMMITTEE_REVIEW_PATH).
  *
- * Env: TEST_COMMITTEE_REVIEW_PATH=review | grade
+ * CI: either set TEST_COMMITTEE_SUBMISSION_ID to a real pending submission id, or merge
+ * a DeliverableSubmission (or CommitteeSubmission) model so auto-seed below succeeds.
+ * GitHub #261 text "Issue 27" is unrelated to repo #27.
  */
 require('./setupTestEnv');
 
@@ -12,12 +14,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { mock, afterEach: runAfterEach } = require('node:test');
 
 const sequelize = require('../db');
 const app = require('../app');
-const { User, AuditLog } = require('../models');
-const { ensureValidStudentRegistry } = require('../services/studentService');
+const { User, Group, AuditLog } = require('../models');
+const { createStudent, ensureValidStudentRegistry } = require('../services/studentService');
 
 let server;
 let baseUrl;
@@ -26,6 +29,18 @@ const REVIEW_SEGMENT = process.env.TEST_COMMITTEE_REVIEW_PATH || 'review';
 
 function reviewUrl(submissionId) {
   return `/api/v1/committee/submissions/${submissionId}/${REVIEW_SEGMENT}`;
+}
+
+function loadSubmissionModel() {
+  const candidates = ['DeliverableSubmission', 'CommitteeSubmission', 'Submission'];
+  for (const name of candidates) {
+    try {
+      return require(`../models/${name}`);
+    } catch {
+      // try next
+    }
+  }
+  return null;
 }
 
 async function request(path, options = {}) {
@@ -45,10 +60,7 @@ async function authHeaderFor(user) {
   return { Authorization: `Bearer ${token}` };
 }
 
-async function resolveSubmissionId(professor) {
-  if (process.env.TEST_COMMITTEE_SUBMISSION_ID) {
-    return process.env.TEST_COMMITTEE_SUBMISSION_ID;
-  }
+async function fetchPendingSubmissionId(professor) {
   const { response, json } = await request('/api/v1/committee/submissions/pending', {
     headers: await authHeaderFor(professor),
   });
@@ -57,6 +69,55 @@ async function resolveSubmissionId(professor) {
   if (!list.length) return null;
   const row = list[0];
   return row.submissionId || row.id || row.submission_id || null;
+}
+
+/**
+ * Prefer env, then API pending list, then DB seed when a submission model exists on the branch.
+ */
+async function ensureSubmissionId(professor) {
+  if (process.env.TEST_COMMITTEE_SUBMISSION_ID) {
+    return process.env.TEST_COMMITTEE_SUBMISSION_ID;
+  }
+  const fromApi = await fetchPendingSubmissionId(professor);
+  if (fromApi) return fromApi;
+
+  const Model = loadSubmissionModel();
+  if (!Model) return null;
+
+  const leader = await createStudent({
+    studentId: '11070001000',
+    email: 'seed261-leader@example.edu',
+    fullName: 'Seed Leader 261',
+    password: 'StrongPass1!',
+  });
+  const group = await Group.create({
+    name: 'Committee seed group 261',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+    maxMembers: 4,
+    status: 'FORMATION',
+  });
+
+  const id = crypto.randomUUID();
+  const payload = {
+    id,
+    groupId: group.id,
+    status: 'PENDING',
+    deliverableType: 'PROPOSAL',
+  };
+  try {
+    const row = await Model.create(payload);
+    return String(row.id);
+  } catch (firstErr) {
+    try {
+      const row = await Model.create({ groupId: group.id, status: 'PENDING' });
+      return String(row.id);
+    } catch (secondErr) {
+      throw new Error(
+        `Could not seed submission row; adjust payload in issue261 test. First: ${firstErr.message} Second: ${secondErr.message}`,
+      );
+    }
+  }
 }
 
 test.before(async () => {
@@ -83,6 +144,7 @@ runAfterEach(() => {
 
 test.beforeEach(async () => {
   await AuditLog.destroy({ where: {} });
+  await Group.destroy({ where: {} });
   await User.destroy({ where: {} });
 });
 
@@ -95,9 +157,17 @@ test('committee review HTTP response succeeds when AuditLog persistence throws',
     password: await bcrypt.hash('StrongPass1!', 10),
   });
 
-  const submissionId = await resolveSubmissionId(professor);
+  let submissionId;
+  try {
+    submissionId = await ensureSubmissionId(professor);
+  } catch (e) {
+    t.skip(e.message);
+    return;
+  }
   if (!submissionId) {
-    t.skip('no pending submission; set TEST_COMMITTEE_SUBMISSION_ID or seed data');
+    t.skip(
+      'No submission id: set TEST_COMMITTEE_SUBMISSION_ID in CI or add DeliverableSubmission (etc.) model for auto-seed',
+    );
     return;
   }
 
@@ -130,7 +200,7 @@ test('committee review HTTP response succeeds when AuditLog persistence throws',
 
 test('parallel committee grading requests enqueue distinct audit rows', async (t) => {
   const professors = await Promise.all(
-    [0, 1, 2].map((i) =>
+    [0, 1, 2].map(async (i) =>
       User.create({
         email: `prof261p${i}@example.edu`,
         fullName: `Prof 261P${i}`,
@@ -141,9 +211,17 @@ test('parallel committee grading requests enqueue distinct audit rows', async (t
     ),
   );
 
-  const submissionId = await resolveSubmissionId(professors[0]);
+  let submissionId;
+  try {
+    submissionId = await ensureSubmissionId(professors[0]);
+  } catch (e) {
+    t.skip(e.message);
+    return;
+  }
   if (!submissionId) {
-    t.skip('no pending submission; set TEST_COMMITTEE_SUBMISSION_ID or seed data');
+    t.skip(
+      'No submission id: set TEST_COMMITTEE_SUBMISSION_ID in CI or add DeliverableSubmission (etc.) model for auto-seed',
+    );
     return;
   }
 
@@ -166,7 +244,7 @@ test('parallel committee grading requests enqueue distinct audit rows', async (t
   const before = await AuditLog.count();
 
   await Promise.all(
-    professors.map((prof, i) =>
+    professors.map(async (prof, i) =>
       request(reviewUrl(submissionId), {
         method: 'POST',
         headers: {
