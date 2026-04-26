@@ -91,7 +91,7 @@ test('POST committee review returns 400 when mandatory fields are missing', asyn
   });
 
   const sid = process.env.TEST_COMMITTEE_SUBMISSION_ID || '00000000-0000-4000-8000-000000000099';
-  const { response } = await request(reviewUrl(sid), {
+  const { response, json } = await request(reviewUrl(sid), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
