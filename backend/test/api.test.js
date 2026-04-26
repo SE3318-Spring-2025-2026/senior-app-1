@@ -4622,3 +4622,93 @@ test('coordinator can fetch any submission (Issue #249)', async () => {
   assert.equal(response.response.status, 200);
   assert.equal(response.json.data.submission.groupId, group.id);
 });
+
+// --- Issue #251: Fetch Rubric Context (Connector f10) ---
+
+test('fetching submission includes rubric context with weight configuration (Issue #251)', async () => {
+  const professor = await createProfessorUser({
+    email: 'rubric-context-prof@example.edu',
+    fullName: 'Rubric Context Professor',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002005',
+    email: 'rubric-context-leader@example.edu',
+    fullName: 'Rubric Context Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'Rubric Context Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  const rubric = await GradingRubric.create({
+    deliverableType: 'PROPOSAL',
+    criteria: [
+      { id: '1', question: 'Problem statement clarity?', type: 'BINARY', weight: 0.3 },
+      { id: '2', question: 'Feasibility assessment?', type: 'SOFT', weight: 0.3 },
+      { id: '3', question: 'Timeline realism?', type: 'BINARY', weight: 0.4 },
+    ],
+  });
+
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'PROPOSAL',
+    content: '# Proposal with Rubric Context',
+    images: [],
+    status: 'SUBMITTED',
+  });
+
+  const response = await request(`/api/v1/committee/submissions/${deliverable.id}`, {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.equal(response.json.code, 'SUCCESS');
+  assert.ok(response.json.data.rubric, 'Rubric should be included');
+  assert.equal(response.json.data.rubric.criteria.length, 3);
+});
+
+test('submission response includes null weight config when not defined (Issue #251)', async () => {
+  const professor = await createProfessorUser({
+    email: 'no-weight-prof@example.edu',
+    fullName: 'No Weight Professor',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002006',
+    email: 'no-weight-leader@example.edu',
+    fullName: 'No Weight Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'No Weight Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  await GradingRubric.create({
+    deliverableType: 'SOW',
+    criteria: [{ id: '1', question: 'Scope clarity?', type: 'BINARY', weight: 0.5 }],
+  });
+
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'SOW',
+    content: '# SOW without weight config',
+    images: [],
+    status: 'SUBMITTED',
+  });
+
+  const response = await request(`/api/v1/committee/submissions/${deliverable.id}`, {
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.ok(response.json.data.rubric, 'Rubric should be included');
+});

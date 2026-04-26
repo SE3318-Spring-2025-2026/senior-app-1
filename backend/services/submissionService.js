@@ -5,7 +5,7 @@
  * Fetches deliverable content, rubric, and previous grades as a SubmissionReviewPacket.
  */
 
-const { Deliverable, GradingRubric, Grade, User, Group } = require('../models');
+const { Deliverable, GradingRubric, Grade, User, Group, DeliverableWeightConfiguration } = require('../models');
 
 class SubmissionService {
   /**
@@ -40,6 +40,16 @@ class SubmissionService {
 
     // 2. Fetch applicable rubric for this deliverable type
     const rubric = await GradingRubric.findOne({
+      where: {
+        deliverableType: deliverable.type,
+        isActive: true,
+      },
+      order: [['createdAt', 'DESC']],
+      limit: 1,
+    });
+
+    // 2.5 Fetch weight configuration for this deliverable type
+    const weightConfig = await DeliverableWeightConfiguration.findOne({
       where: {
         deliverableType: deliverable.type,
         isActive: true,
@@ -84,6 +94,15 @@ class SubmissionService {
             name: rubric.name,
             deliverableType: rubric.deliverableType,
             criteria: rubric.criteria || [],
+          }
+        : null,
+      weightConfiguration: weightConfig
+        ? {
+            id: weightConfig.id,
+            deliverableType: weightConfig.deliverableType,
+            weight: weightConfig.weight,
+            description: weightConfig.description,
+            sprintNumber: weightConfig.sprintNumber,
           }
         : null,
       previousGrades: previousGrades.map((grade) => ({
