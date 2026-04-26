@@ -7,7 +7,7 @@
 
 const { validationResult, body, param } = require('express-validator');
 const GradingService = require('../services/gradingService');
-const { v4: isUUID } = require('uuid');
+const { validate: isUUID } = require('uuid');
 
 /**
  * Validation middleware for POST /api/v1/committee/submissions/:submissionId/grade
@@ -33,6 +33,16 @@ const submitGradeValidation = [
     .trim()
     .isLength({ max: 2000 })
     .withMessage('Comments must be 2000 characters or less'),
+];
+
+/**
+ * Validation middleware for GET /api/v1/committee/submissions/:submissionId/grades
+ * Only validates the submissionId parameter, not body fields
+ */
+const listGradesValidation = [
+  param('submissionId')
+    .custom((value) => isUUID(value))
+    .withMessage('Submission ID must be a valid UUID'),
 ];
 
 /**
@@ -91,10 +101,6 @@ async function submitGrade(req, res) {
       gradeType,
     });
 
-    // Calculate final score
-    const finalScore =
-      scores.reduce((sum, s) => sum + (s.value || 0), 0) / scores.length;
-
     res.status(201).json({
       code: 'SUCCESS',
       message: 'Grade submitted successfully',
@@ -105,7 +111,7 @@ async function submitGrade(req, res) {
         gradeType: grade.gradeType,
         scores: grade.scores,
         comments: grade.comments,
-        finalScore: parseFloat(finalScore.toFixed(2)),
+        finalScore: grade.finalScore,
         createdAt: grade.createdAt,
       },
     });
@@ -171,20 +177,16 @@ async function listGrades(req, res) {
     res.status(200).json({
       code: 'SUCCESS',
       message: 'Grades retrieved successfully',
-      data: grades.map((g) => {
-        const finalScore =
-          g.scores.reduce((sum, s) => sum + (s.value || 0), 0) / g.scores.length;
-        return {
-          id: g.id,
-          gradeType: g.gradeType,
-          finalScore: parseFloat(finalScore.toFixed(2)),
-          grader: {
-            id: g.grader?.id,
-            fullName: g.grader?.fullName,
-          },
-          createdAt: g.createdAt,
-        };
-      }),
+      data: grades.map((g) => ({
+        id: g.id,
+        gradeType: g.gradeType,
+        finalScore: g.finalScore,
+        grader: {
+          id: g.grader?.id,
+          fullName: g.grader?.fullName,
+        },
+        createdAt: g.createdAt,
+      })),
     });
   } catch (error) {
     console.error('Error listing grades:', error);
@@ -199,4 +201,5 @@ module.exports = {
   submitGrade,
   listGrades,
   submitGradeValidation,
+  listGradesValidation,
 };

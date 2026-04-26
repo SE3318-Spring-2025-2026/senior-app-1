@@ -35,7 +35,7 @@ router.get(
   '/:submissionId/grades',
   authenticate,
   authorize(['PROFESSOR', 'COORDINATOR']),
-  gradingController.submitGradeValidation,
+  gradingController.listGradesValidation,
   gradingController.listGrades
 );
 

@@ -20,6 +20,8 @@ const {
   ValidStudentId,
   LinkedGitHubAccount,
   OAuthState,
+  Deliverable,
+  Grade,
 } = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
@@ -3859,23 +3861,27 @@ test('multiple committee members can grade same deliverable concurrently (Issue 
   assert.equal(listResponse.response.status, 200);
   assert.equal(listResponse.json.data.length, 2, 'Should have 2 grades from different professors');
 
-  // Verify audit logs from both professors
+  // Verify audit logs from both professors - filter by grade IDs for isolation
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  const allLogs = await AuditLog.findAll({
+  const grade1Logs = await AuditLog.findAll({
     where: {
+      targetId: grade1.json.data.id,
       action: 'GRADE_SUBMITTED',
     },
-    order: [['createdAt', 'DESC']],
-    limit: 2,
   });
 
-  assert.equal(allLogs.length, 2, 'Should have 2 audit log entries');
-  const professorIds = allLogs.map((log) => log.actorId);
-  assert.ok(
-    professorIds.includes(professor1.id) && professorIds.includes(professor2.id),
-    'Both professors should have logged'
-  );
+  const grade2Logs = await AuditLog.findAll({
+    where: {
+      targetId: grade2.json.data.id,
+      action: 'GRADE_SUBMITTED',
+    },
+  });
+
+  assert.equal(grade1Logs.length, 1, 'Should have 1 audit log for grade 1');
+  assert.equal(grade2Logs.length, 1, 'Should have 1 audit log for grade 2');
+  assert.equal(grade1Logs[0].actorId, professor1.id, 'Grade 1 logged by professor 1');
+  assert.equal(grade2Logs[0].actorId, professor2.id, 'Grade 2 logged by professor 2');
 });
 
 test('invalid score values return 400 error (Issue #260)', async () => {
@@ -3922,4 +3928,97 @@ test('invalid score values return 400 error (Issue #260)', async () => {
 
   assert.equal(response.response.status, 400);
   assert.equal(response.json.code, 'VALIDATION_ERROR');
+});
+
+test('GET endpoint returns grades with proper authorization (Issue #260)', async () => {
+  const professor = await createProfessorUser({
+    email: 'grading-get-professor@example.edu',
+    fullName: 'GET Professor',
+  });
+
+  const coordinator = await User.create({
+    email: 'grading-get-coordinator@example.edu',
+    passwordHash: await bcrypt.hash('StrongPass1!', 10),
+    fullName: 'GET Coordinator',
+    role: 'COORDINATOR',
+  });
+
+  const leader = await createStudent({
+    studentId: '11070002204',
+    email: 'grading-get-leader@example.edu',
+    fullName: 'GET Leader',
+    password: 'StrongPass1!',
+  });
+
+  const group = await Group.create({
+    name: 'GET Test Group',
+    leaderId: leader.id,
+    memberIds: [leader.id],
+    maxMembers: 4,
+  });
+
+  const deliverable = await Deliverable.create({
+    groupId: group.id,
+    type: 'SOW',
+    content: '# SOW',
+    images: [],
+    status: 'SUBMITTED',
+    version: 1,
+  });
+
+  // Submit a grade
+  const gradeResponse = await request(`/api/v1/committee/submissions/${deliverable.id}/grade`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify({
+      gradeType: 'COMMITTEE_FINAL',
+      scores: [
+        { criterionId: 'c1', value: 0.8 },
+        { criterionId: 'c2', value: 0.9 },
+      ],
+    }),
+  });
+
+  assert.equal(gradeResponse.response.status, 201);
+
+  // Test 1: Professor can retrieve grades
+  const profResponse = await request(`/api/v1/committee/submissions/${deliverable.id}/grades`, {
+    method: 'GET',
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(profResponse.response.status, 200);
+  assert.equal(profResponse.json.code, 'SUCCESS');
+  assert.equal(profResponse.json.data.length, 1, 'Should have 1 grade');
+  assert.equal(profResponse.json.data[0].gradeType, 'COMMITTEE_FINAL');
+  assert.equal(profResponse.json.data[0].finalScore, 0.85);
+
+  // Test 2: Coordinator can retrieve grades
+  const coordResponse = await request(`/api/v1/committee/submissions/${deliverable.id}/grades`, {
+    method: 'GET',
+    headers: await authHeaderFor(coordinator),
+  });
+
+  assert.equal(coordResponse.response.status, 200);
+  assert.equal(coordResponse.json.data.length, 1);
+
+  // Test 3: Student cannot retrieve grades (authorization failure)
+  const studentResponse = await request(`/api/v1/committee/submissions/${deliverable.id}/grades`, {
+    method: 'GET',
+    headers: await authHeaderFor(leader),
+  });
+
+  assert.equal(studentResponse.response.status, 403, 'Student should not be authorized');
+
+  // Test 4: GET with invalid UUID returns 400
+  const invalidResponse = await request(`/api/v1/committee/submissions/invalid-uuid/grades`, {
+    method: 'GET',
+    headers: await authHeaderFor(professor),
+  });
+
+  assert.equal(invalidResponse.response.status, 400);
+  assert.equal(invalidResponse.json.code, 'VALIDATION_ERROR');
 });

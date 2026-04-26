@@ -38,7 +38,7 @@ class GradingService {
       throw error;
     }
 
-    if (!gradedBy || typeof gradedBy !== 'string') {
+    if (!gradedBy) {
       const error = new Error('Grader user ID is required');
       error.code = 'INVALID_GRADER_ID';
       throw error;
@@ -115,6 +115,7 @@ class GradingService {
     // Calculate final score (average of criterion values)
     const finalScore =
       scores.reduce((sum, s) => sum + (s.value || 0), 0) / scores.length;
+    grade.finalScore = parseFloat(finalScore.toFixed(2));
 
     // Fire-and-forget: Log grading asynchronously without blocking response
     GradingService._logGrading({
@@ -123,7 +124,7 @@ class GradingService {
       deliverableType: deliverable.type,
       reviewerId: gradedBy,
       gradeType,
-      finalScore,
+      finalScore: grade.finalScore,
       criteriaCount: scores.length,
       groupId: deliverable.groupId,
     }).catch((error) => {
@@ -181,29 +182,6 @@ class GradingService {
   }
 
   /**
-   * Get a grade by ID with related information.
-   *
-   * @param {string} gradeId - Grade UUID
-   * @returns {Promise<Object|null>}
-   */
-  static async getGrade(gradeId) {
-    return Grade.findByPk(gradeId, {
-      include: [
-        {
-          model: Deliverable,
-          as: 'deliverable',
-          attributes: ['id', 'groupId', 'type'],
-        },
-        {
-          model: User,
-          as: 'grader',
-          attributes: ['id', 'fullName', 'email'],
-        },
-      ],
-    });
-  }
-
-  /**
    * List grades for a specific deliverable.
    *
    * @param {string} deliverableId - Deliverable UUID
@@ -220,19 +198,6 @@ class GradingService {
         },
       ],
       order: [['createdAt', 'DESC']],
-    });
-  }
-
-  /**
-   * Check if user (reviewer) has already graded a deliverable.
-   *
-   * @param {string} deliverableId - Deliverable UUID
-   * @param {string} reviewerId - User ID
-   * @returns {Promise<Object|null>} Existing grade or null
-   */
-  static async getExistingGrade(deliverableId, reviewerId) {
-    return Grade.findOne({
-      where: { deliverableId, gradedBy: reviewerId },
     });
   }
 }
