@@ -2,6 +2,7 @@ const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const groupController = require('../controllers/groupController');
 const { updateGroupMembership } = require('../controllers/coordinatorController');
+const submissionController = require('../controllers/submissionController');
 
 const router = express.Router();
 
@@ -60,5 +61,31 @@ router.post('/:groupId/membership/finalize', groupController.finalizeMembershipV
  * Auth: Optional
  */
 router.get('/:groupId/membership', groupController.getGroupMembershipValidation, groupController.getGroupMembership);
+
+/**
+ * POST /api/v1/groups/:groupId/deliverables
+ * Submit a deliverable (Proposal or SOW)
+ * Auth: STUDENT (group member)
+ */
+router.post(
+  '/:groupId/deliverables',
+  authenticate,
+  authorize(['STUDENT']),
+  submissionController.submitDeliverableValidation,
+  submissionController.submitDeliverable
+);
+
+/**
+ * GET /api/v1/groups/:groupId/deliverables
+ * List deliverables for a group
+ * Auth: STUDENT, PROFESSOR, COORDINATOR
+ */
+router.get(
+  '/:groupId/deliverables',
+  authenticate,
+  authorize(['STUDENT', 'PROFESSOR', 'COORDINATOR']),
+  submissionController.listDeliverableValidation,
+  submissionController.listDeliverables
+);
 
 module.exports = router;
