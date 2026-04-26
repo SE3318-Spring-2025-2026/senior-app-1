@@ -18,6 +18,7 @@ const roleMenuSections = {
       items: [
         { to: '/professors', label: 'Professor Home', icon: 'HM' },
         { to: '/professors/notifications', label: 'Advisor Requests', icon: 'AR' },
+        { to: '/professors/committee-submissions', label: 'Committee Review', icon: 'CR' },
       ],
     },
   ],

@@ -9,6 +9,28 @@ exports.submitReviewValidation = [
   body('comments').optional({ nullable: true }).isString().withMessage('comments must be a string'),
 ];
 
+exports.listRubricCriteria = async (req, res) => {
+  try {
+    const criteria = await committeeService.listRubricCriteria({
+      deliverableType: req.query.deliverableType,
+    });
+    return res.status(200).json({ criteria });
+  } catch (err) {
+    console.error('[committeeController] listRubricCriteria error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+};
+
+exports.listPendingSubmissions = async (req, res) => {
+  try {
+    const submissions = await committeeService.listPendingSubmissions();
+    return res.status(200).json({ submissions });
+  } catch (err) {
+    console.error('[committeeController] listPendingSubmissions error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+};
+
 exports.submitReview = async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -30,7 +52,7 @@ exports.submitReview = async (req, res) => {
       comments,
     });
 
-    return res.status(201).json({
+    return res.status(200).json({
       id: review.id,
       submissionId: review.submissionId,
       reviewerId: review.reviewerId,

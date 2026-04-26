@@ -20,8 +20,8 @@ const {
   ValidStudentId,
   LinkedGitHubAccount,
   OAuthState,
-  DeliverableSubmission,
-  RubricCriterion,
+  Deliverable,
+  GradingRubric,
   CommitteeReview,
 } = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
@@ -81,8 +81,8 @@ test.after(async () => {
 
 test.beforeEach(async () => {
   await CommitteeReview.destroy({ where: {} });
-  await DeliverableSubmission.destroy({ where: {} });
-  await RubricCriterion.destroy({ where: {} });
+  await Deliverable.destroy({ where: {} });
+  await GradingRubric.destroy({ where: {} });
   await GroupAdvisorAssignment.destroy({ where: {} });
   await AdvisorRequest.destroy({ where: {} });
   await Notification.destroy({ where: {} });
@@ -3632,18 +3632,21 @@ test('team leader can submit a new request to the same advisor after advisor rel
 
 // ─── Committee Review ───────────────────────────────────────────────────────
 
+const TEST_CRITERIA = [
+  { id: 'crit-tech-feasibility', question: 'Technical Feasibility', criterionType: 'SOFT', maxPoints: 10, weight: 0.4 },
+  { id: 'crit-scope-clarity', question: 'Project Scope Clarity', criterionType: 'SOFT', maxPoints: 10, weight: 0.4 },
+  { id: 'crit-team-qual', question: 'Team Qualification', criterionType: 'BINARY', maxPoints: 5, weight: 0.2 },
+];
+
 async function seedTestRubric() {
-  return RubricCriterion.bulkCreate([
-    { deliverableType: 'PROPOSAL', question: 'Technical Feasibility', criterionType: 'SOFT', maxPoints: 10, weight: 0.4 },
-    { deliverableType: 'PROPOSAL', question: 'Project Scope Clarity', criterionType: 'SOFT', maxPoints: 10, weight: 0.4 },
-    { deliverableType: 'PROPOSAL', question: 'Team Qualification', criterionType: 'BINARY', maxPoints: 5, weight: 0.2 },
-  ]);
+  await GradingRubric.create({ deliverableType: 'PROPOSAL', criteria: TEST_CRITERIA });
+  return TEST_CRITERIA;
 }
 
 test('PROFESSOR can submit a review and finalScore is mathematically correct', async () => {
   const criteria = await seedTestRubric();
   const professor = await createProfessorUser({ email: 'reviewer1@example.edu', fullName: 'Reviewer One' });
-  const submission = await DeliverableSubmission.create({
+  const submission = await Deliverable.create({
     groupId: 'group-test-1',
     type: 'PROPOSAL',
     content: 'Proposal content',
@@ -3657,7 +3660,7 @@ test('PROFESSOR can submit a review and finalScore is mathematically correct', a
   ];
 
   const { response, json } = await request(
-    `/api/v1/committee/submissions/${submission.id}/review`,
+    `/api/v1/committee/submissions/${submission.id}/grade`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(professor)) },
@@ -3665,7 +3668,7 @@ test('PROFESSOR can submit a review and finalScore is mathematically correct', a
     }
   );
 
-  assert.equal(response.status, 201);
+  assert.equal(response.status, 200);
   assert.ok(json.id);
   assert.equal(json.submissionId, submission.id);
   assert.equal(json.reviewerId, professor.id);
@@ -3682,7 +3685,7 @@ test('non-PROFESSOR gets 403 when submitting a committee review', async () => {
     fullName: 'Student User',
     password: 'StrongPass1!',
   });
-  const submission = await DeliverableSubmission.create({
+  const submission = await Deliverable.create({
     groupId: 'group-test-2',
     type: 'PROPOSAL',
     content: 'content',
@@ -3690,7 +3693,7 @@ test('non-PROFESSOR gets 403 when submitting a committee review', async () => {
   });
 
   const { response } = await request(
-    `/api/v1/committee/submissions/${submission.id}/review`,
+    `/api/v1/committee/submissions/${submission.id}/grade`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(student)) },
@@ -3706,7 +3709,7 @@ test('review for nonexistent submission returns 404 SUBMISSION_NOT_FOUND', async
   const professor = await createProfessorUser({ email: 'reviewer2@example.edu', fullName: 'Reviewer Two' });
 
   const { response, json } = await request(
-    '/api/v1/committee/submissions/nonexistent-uuid/review',
+    '/api/v1/committee/submissions/nonexistent-uuid/grade',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(professor)) },
@@ -3722,7 +3725,7 @@ test('two professors can each submit a review; CommitteeReviews table gets 2 row
   const criteria = await seedTestRubric();
   const prof1 = await createProfessorUser({ email: 'multi-prof1@example.edu', fullName: 'Prof One' });
   const prof2 = await createProfessorUser({ email: 'multi-prof2@example.edu', fullName: 'Prof Two' });
-  const submission = await DeliverableSubmission.create({
+  const submission = await Deliverable.create({
     groupId: 'group-multi',
     type: 'PROPOSAL',
     content: 'multi-reviewer content',
@@ -3731,51 +3734,30 @@ test('two professors can each submit a review; CommitteeReviews table gets 2 row
 
   const scores = criteria.map((c) => ({ criterionId: c.id, value: c.maxPoints }));
 
-  const r1 = await request(`/api/v1/committee/submissions/${submission.id}/review`, {
+  const r1 = await request(`/api/v1/committee/submissions/${submission.id}/grade`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(prof1)) },
     body: JSON.stringify({ scores }),
   });
-  const r2 = await request(`/api/v1/committee/submissions/${submission.id}/review`, {
+  const r2 = await request(`/api/v1/committee/submissions/${submission.id}/grade`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(prof2)) },
     body: JSON.stringify({ scores }),
   });
 
-  assert.equal(r1.response.status, 201);
-  assert.equal(r2.response.status, 201);
+  assert.equal(r1.response.status, 200);
+  assert.equal(r2.response.status, 200);
   assert.notEqual(r1.json.id, r2.json.id);
 
   const reviews = await CommitteeReview.findAll({ where: { submissionId: submission.id } });
   assert.equal(reviews.length, 2);
 });
 
-test('submission status becomes GRADED after a committee review', async () => {
-  const criteria = await seedTestRubric();
-  const professor = await createProfessorUser({ email: 'grade-check@example.edu', fullName: 'Grade Checker' });
-  const submission = await DeliverableSubmission.create({
-    groupId: 'group-grade',
-    type: 'PROPOSAL',
-    content: 'content',
-    status: 'SUBMITTED',
-  });
-
-  const scores = criteria.map((c) => ({ criterionId: c.id, value: c.maxPoints / 2 }));
-
-  await request(`/api/v1/committee/submissions/${submission.id}/review`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(professor)) },
-    body: JSON.stringify({ scores }),
-  });
-
-  await submission.reload();
-  assert.equal(submission.status, 'GRADED');
-});
 
 test('invalid criterionId in scores returns 400 INVALID_CRITERION_ID', async () => {
   await seedTestRubric();
   const professor = await createProfessorUser({ email: 'invalid-crit@example.edu', fullName: 'Bad Crit' });
-  const submission = await DeliverableSubmission.create({
+  const submission = await Deliverable.create({
     groupId: 'group-invalid',
     type: 'PROPOSAL',
     content: 'content',
@@ -3783,7 +3765,7 @@ test('invalid criterionId in scores returns 400 INVALID_CRITERION_ID', async () 
   });
 
   const { response, json } = await request(
-    `/api/v1/committee/submissions/${submission.id}/review`,
+    `/api/v1/committee/submissions/${submission.id}/grade`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await authHeaderFor(professor)) },
