@@ -30,6 +30,11 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import './styles.css';
 
 import AdvisorRequestsPage from './AdvisorRequestsPage';
+import ProfessorCommitteeSubmissionsPage from './ProfessorCommitteeSubmissionsPage';
+import CommitteeGradingPage from './CommitteeGradingPage';
+import SubmissionEditorPage from './SubmissionEditorPage';
+import CoordinatorWeightConfigurationPage from './CoordinatorWeightConfigurationPage';
+import AuthGuard from './components/AuthGuard';
 
 export default function App() {
   return (
@@ -46,6 +51,7 @@ export default function App() {
               <Route path="/students/groups/manage" element={<StudentGroupShellPage />} />
               <Route path="/students/groups/new" element={<StudentGroupShellPage />} />
               <Route path="/students/notifications" element={<StudentInvitationsPage />} />
+              <Route path="/team-leader/submission" element={<AuthGuard allowedRoles={['STUDENT']}><SubmissionEditorPage /></AuthGuard>} />
               <Route path="/team-leader/advisor-requests/new" element={<SubmitAdvisorRequestPage />} />
               <Route path="/team-leader/advisor-requests/:requestId" element={<TeamLeaderAdvisorRequestDetailsPage />} />
               <Route path="/professors/login" element={<AuthPage />} />
@@ -66,8 +72,11 @@ export default function App() {
               <Route path="/coordinator/groups/transfer" element={<CoordinatorAdvisorTransferPage />} />
               <Route path="/coordinator/groups/cleanup" element={<GroupCleanupPage role="COORDINATOR" />} />
               <Route path="/coordinator/rubrics" element={<CoordinatorRubricPage />} />
+              <Route path="/coordinator/grading/weight-configuration" element={<AuthGuard allowedRoles={['COORDINATOR']}><CoordinatorWeightConfigurationPage /></AuthGuard>} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="/advisor/requests" element={<AdvisorRequestsPage />} />
+              <Route path="/professors/committee-submissions" element={<ProfessorCommitteeSubmissionsPage />} />
+              <Route path="/professors/committee-review/:submissionId" element={<CommitteeGradingPage />} />
               <Route path="*" element={<HomePage />} />
             </Route>
           </Routes>

@@ -27,7 +27,7 @@ const GradingRubric = sequelize.define(
     tableName: 'GradingRubrics',
     timestamps: true,
     indexes: [{ unique: true, fields: ['deliverableType'] }],
-  },
+  }
 );
 
 module.exports = GradingRubric;
