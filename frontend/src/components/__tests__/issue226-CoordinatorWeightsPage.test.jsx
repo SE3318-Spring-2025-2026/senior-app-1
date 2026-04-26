@@ -1,16 +1,13 @@
 /**
- * Issue #226 — Grading Weights Assignment UI (f3)
- *
- * Adjust import path to the real component added in issue #227.
- *
- * See issue248 test header for Jest / Testing Library dependencies.
+ * Issue #226 — Grading weights assignment UI (f3)
+ * @see https://github.com/SE3318-Spring-2025-2026/senior-app-1/issues/226
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import CoordinatorWeightsPage from '../../CoordinatorWeightsPage.jsx';
+import CoordinatorWeightConfigurationPage from '../../CoordinatorWeightConfigurationPage.jsx';
 
-describe('CoordinatorWeightsPage (issue #226)', () => {
+describe('CoordinatorWeightConfigurationPage (issue #226)', () => {
   const originalFetch = global.fetch;
 
   afterEach(() => {
@@ -28,7 +25,7 @@ describe('CoordinatorWeightsPage (issue #226)', () => {
 
     render(
       <MemoryRouter>
-        <CoordinatorWeightsPage />
+        <CoordinatorWeightConfigurationPage />
       </MemoryRouter>,
     );
 
@@ -71,7 +68,7 @@ describe('CoordinatorWeightsPage (issue #226)', () => {
 
     render(
       <MemoryRouter>
-        <CoordinatorWeightsPage />
+        <CoordinatorWeightConfigurationPage />
       </MemoryRouter>,
     );
 
