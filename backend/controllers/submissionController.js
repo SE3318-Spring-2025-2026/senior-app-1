@@ -1,17 +1,15 @@
 /**
  * controllers/submissionController.js
  *
- * HTTP handlers for deliverable submission endpoints.
- * Implements submission with D6 logging (Issue #257).
+ * HTTP handlers for deliverable submission endpoints (D6 logging, Issue #257)
+ * and committee review document retrieval (D5, Issue #249).
  */
 
-const { validationResult, body, param } = require('express-validator');
+const { validationResult, body, param, query } = require('express-validator');
 const SubmissionService = require('../services/submissionService');
+const { AuditLog } = require('../models');
 const { validate: isUUID } = require('uuid');
 
-/**
- * Validation middleware for POST /api/v1/groups/:groupId/deliverables
- */
 const submitDeliverableValidation = [
   param('groupId')
     .custom((value) => isUUID(value))
@@ -31,44 +29,22 @@ const submitDeliverableValidation = [
     .withMessage('Images must be an array of URLs'),
 ];
 
-/**
- * Validation middleware for GET /api/v1/groups/:groupId/deliverables
- */
 const listDeliverableValidation = [
   param('groupId')
     .custom((value) => isUUID(value))
     .withMessage('Group ID must be a valid UUID'),
 ];
 
-/**
- * POST /api/v1/groups/:groupId/deliverables
- *
- * Submit or update a deliverable for a group.
- * Logs the submission to D6 (Audit Logs) asynchronously.
- *
- * Auth: STUDENT (team leader)
- *
- * Request body:
- * {
- *   type: "PROPOSAL" | "SOW",
- *   content: string (markdown),
- *   images: [url1, url2, ...] (optional)
- * }
- *
- * Response: 201
- * {
- *   code: "SUCCESS",
- *   data: {
- *     id: UUID,
- *     groupId: UUID,
- *     type: "PROPOSAL" | "SOW",
- *     status: "SUBMITTED",
- *     version: number,
- *     createdAt: ISO timestamp,
- *     updatedAt: ISO timestamp
- *   }
- * }
- */
+const getSubmissionValidation = [
+  param('submissionId')
+    .isUUID()
+    .withMessage('Invalid submission ID format'),
+  query('includeHistory')
+    .optional()
+    .isIn(['true', 'false'])
+    .withMessage('includeHistory must be true or false'),
+];
+
 async function submitDeliverable(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -106,47 +82,16 @@ async function submitDeliverable(req, res) {
       },
     });
   } catch (error) {
-    if (
-      error.code &&
-      [
-        'INVALID_GROUP_ID',
-        'INVALID_DELIVERABLE_TYPE',
-        'INVALID_CONTENT',
-        'INVALID_SUBMITTER',
-        'GROUP_NOT_FOUND',
-      ].includes(error.code)
-    ) {
+    if (error.code && ['INVALID_GROUP_ID', 'INVALID_DELIVERABLE_TYPE', 'INVALID_CONTENT', 'INVALID_SUBMITTER', 'GROUP_NOT_FOUND'].includes(error.code)) {
       const statusCode = error.code === 'GROUP_NOT_FOUND' ? 404 : 400;
-      return res.status(statusCode).json({
-        code: error.code,
-        message: error.message,
-      });
+      return res.status(statusCode).json({ code: error.code, message: error.message });
     }
 
     console.error('Error submitting deliverable:', error);
-    res.status(500).json({
-      code: 'INTERNAL_ERROR',
-      message: 'Failed to submit deliverable',
-    });
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to submit deliverable' });
   }
 }
 
-/**
- * GET /api/v1/groups/:groupId/deliverables
- *
- * List all deliverables for a group.
- *
- * Auth: STUDENT (group member), PROFESSOR, COORDINATOR
- *
- * Response: 200
- * {
- *   code: "SUCCESS",
- *   data: [
- *     { id, type, status, version, createdAt },
- *     ...
- *   ]
- * }
- */
 async function listDeliverables(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -176,10 +121,90 @@ async function listDeliverables(req, res) {
     });
   } catch (error) {
     console.error('Error listing deliverables:', error);
-    res.status(500).json({
-      code: 'INTERNAL_ERROR',
-      message: 'Failed to retrieve deliverables',
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to retrieve deliverables' });
+  }
+}
+
+async function getSubmission(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      code: 'VALIDATION_ERROR',
+      message: 'Invalid request parameters',
+      errors: errors.array(),
     });
+  }
+
+  const { submissionId } = req.params;
+  const user = req.user;
+
+  try {
+    const hasAccess = await SubmissionService.canUserAccessSubmission(submissionId, user);
+    if (!hasAccess) {
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'You do not have access to this submission' });
+    }
+
+    const packet = await SubmissionService.fetchSubmissionForReview(submissionId);
+
+    if (user?.id) {
+      AuditLog.create({
+        action: 'SUBMISSION_VIEWED',
+        actorId: user.id,
+        targetType: 'SUBMISSION',
+        targetId: submissionId,
+        metadata: {
+          submissionId,
+          groupId: packet.submission.groupId,
+          accessedAt: new Date().toISOString(),
+        },
+      }).catch((err) => console.error('Failed to log submission access:', err));
+    }
+
+    res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Submission retrieved successfully',
+      data: packet,
+    });
+  } catch (error) {
+    if (error.code === 'SUBMISSION_NOT_FOUND') {
+      return res.status(error.statusCode || 404).json({ code: error.code, message: error.message });
+    }
+
+    console.error('Error fetching submission:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to retrieve submission' });
+  }
+}
+
+async function listSubmissions(req, res) {
+  const user = req.user;
+
+  try {
+    let submissions;
+
+    if (['ADMIN', 'COORDINATOR', 'PROFESSOR'].includes(user?.role)) {
+      submissions = await SubmissionService.listAllSubmissions();
+    } else if (user?.role === 'STUDENT' && user?.groupId) {
+      const raw = await SubmissionService.listGroupSubmissions(user.groupId);
+      submissions = raw.map((d) => ({
+        id: d.id,
+        groupId: d.groupId,
+        type: d.type,
+        status: d.status,
+        version: d.version,
+        submittedAt: d.createdAt,
+      }));
+    } else {
+      submissions = [];
+    }
+
+    res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Submissions retrieved successfully',
+      data: submissions,
+    });
+  } catch (error) {
+    console.error('Error listing submissions:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to retrieve submissions' });
   }
 }
 
@@ -188,4 +213,7 @@ module.exports = {
   listDeliverables,
   submitDeliverableValidation,
   listDeliverableValidation,
+  getSubmission,
+  listSubmissions,
+  getSubmissionValidation,
 };

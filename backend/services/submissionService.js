@@ -1,31 +1,14 @@
 /**
  * services/submissionService.js
  *
- * Business logic for handling deliverable submissions.
- * Implements async audit logging to D6 (Issue #257, Connector f13).
+ * Business logic for deliverable submissions (D6 audit logging, Issue #257)
+ * and committee review document retrieval (D5, Issue #249).
  */
 
-const { Deliverable, AuditLog, Group, User } = require('../models');
+const { Deliverable, AuditLog, GradingRubric, Grade, User, Group, DeliverableWeightConfiguration } = require('../models');
 
 class SubmissionService {
-  /**
-   * Submit a new deliverable for a group.
-   * 
-   * Fire-and-forget async logging: Audit events are dispatched asynchronously
-   * and do not block the API response. Logging failures are silently caught.
-   *
-   * @param {Object} params
-   * @param {string} params.groupId - Group UUID
-   * @param {string} params.type - 'PROPOSAL' or 'SOW'
-   * @param {string} params.content - Markdown content
-   * @param {Array} params.images - Array of image URLs (optional)
-   * @param {string} params.submitBy - User ID (team leader)
-   *
-   * @returns {Promise<Object>} Created Deliverable
-   * @throws {Error} Validation errors with code property
-   */
   static async submitDeliverable({ groupId, type, content, images, submitBy }) {
-    // Validate inputs
     if (!groupId || typeof groupId !== 'string') {
       const error = new Error('Invalid group ID');
       error.code = 'INVALID_GROUP_ID';
@@ -50,7 +33,6 @@ class SubmissionService {
       throw error;
     }
 
-    // Verify group exists
     const group = await Group.findByPk(groupId);
     if (!group) {
       const error = new Error('Group not found');
@@ -58,14 +40,10 @@ class SubmissionService {
       throw error;
     }
 
-    // Check for existing deliverable of this type
-    const existing = await Deliverable.findOne({
-      where: { groupId, type },
-    });
+    const existing = await Deliverable.findOne({ where: { groupId, type } });
 
     let deliverable;
     if (existing) {
-      // Update existing deliverable
       existing.content = content.trim();
       existing.images = images || [];
       existing.version = (existing.version || 1) + 1;
@@ -73,7 +51,6 @@ class SubmissionService {
       await existing.save();
       deliverable = existing;
     } else {
-      // Create new deliverable
       deliverable = await Deliverable.create({
         groupId,
         type,
@@ -84,7 +61,6 @@ class SubmissionService {
       });
     }
 
-    // Fire-and-forget: Log submission asynchronously without blocking response
     SubmissionService._logSubmission({
       deliverableId: deliverable.id,
       groupId,
@@ -94,36 +70,12 @@ class SubmissionService {
       submittedBy: submitBy,
     }).catch((error) => {
       console.error('[SubmissionService] Failed to log submission:', error);
-      // Silently fail to prevent blocking the main response
     });
 
     return deliverable;
   }
 
-  /**
-   * Internal: Log deliverable submission to D6 (Audit Logs).
-   * 
-   * Creates an AuditLog entry with action=DELIVERABLE_SUBMITTED and metadata
-   * identifying this as a SUBMISSION_EVENT.
-   *
-   * @param {Object} eventData
-   * @param {string} eventData.deliverableId - Deliverable UUID
-   * @param {string} eventData.groupId - Group ID
-   * @param {string} eventData.deliverableType - 'PROPOSAL' or 'SOW'
-   * @param {number} eventData.version - Version number
-   * @param {string} eventData.status - Current status
-   * @param {string} eventData.submittedBy - User ID
-   *
-   * @returns {Promise<AuditLog>}
-   */
-  static async _logSubmission({
-    deliverableId,
-    groupId,
-    deliverableType,
-    version,
-    status,
-    submittedBy,
-  }) {
+  static async _logSubmission({ deliverableId, groupId, deliverableType, version, status, submittedBy }) {
     return AuditLog.create({
       action: 'DELIVERABLE_SUBMITTED',
       actorId: submittedBy,
@@ -140,86 +92,112 @@ class SubmissionService {
     });
   }
 
-  /**
-   * Get a submission for review with all context.
-   *
-   * @param {string} deliverableId - Deliverable UUID
-   * @returns {Promise<Object|null>} Deliverable with group context
-   */
-  static async getSubmissionForReview(deliverableId) {
-    const deliverable = await Deliverable.findByPk(deliverableId, {
-      include: [
-        {
-          model: Group,
-          as: 'group',
-          attributes: ['id', 'name', 'leaderId'],
-        },
-      ],
+  static async fetchSubmissionForReview(submissionId) {
+    const deliverable = await Deliverable.findByPk(submissionId, {
+      include: [{ model: Group, attributes: ['id', 'name', 'leaderId'] }],
     });
 
-    return deliverable;
-  }
+    if (!deliverable) {
+      const error = new Error('Submission not found');
+      error.code = 'SUBMISSION_NOT_FOUND';
+      error.statusCode = 404;
+      throw error;
+    }
 
-  /**
-   * List all submissions (for coordinator/professor access).
-   *
-   * @returns {Promise<Array>}
-   */
-  static async listAllSubmissions() {
-    return Deliverable.findAll({
-      include: [
-        {
-          model: Group,
-          as: 'group',
-          attributes: ['id', 'name', 'leaderId'],
-        },
-      ],
+    const rubric = await GradingRubric.findOne({
+      where: { deliverableType: deliverable.type, isActive: true },
+      order: [['createdAt', 'DESC']],
+      limit: 1,
+    });
+
+    const weightConfig = await DeliverableWeightConfiguration.findOne({
+      where: { deliverableType: deliverable.type, isActive: true },
+      order: [['createdAt', 'DESC']],
+      limit: 1,
+    });
+
+    const previousGrades = await Grade.findAll({
+      where: { deliverableId: submissionId },
+      include: [{ model: User, as: 'grader', attributes: ['id', 'fullName', 'email', 'role'] }],
       order: [['createdAt', 'DESC']],
     });
+
+    return {
+      submission: {
+        id: deliverable.id,
+        groupId: deliverable.groupId,
+        groupName: deliverable.Group?.name,
+        leaderId: deliverable.Group?.leaderId,
+        type: deliverable.type,
+        status: deliverable.status,
+        version: deliverable.version,
+        submittedAt: deliverable.createdAt,
+        lastUpdatedAt: deliverable.updatedAt,
+      },
+      document: {
+        content: deliverable.content,
+        images: deliverable.images || [],
+      },
+      rubric: rubric
+        ? { id: rubric.id, name: rubric.name, deliverableType: rubric.deliverableType, criteria: rubric.criteria || [] }
+        : null,
+      weightConfiguration: weightConfig
+        ? { id: weightConfig.id, deliverableType: weightConfig.deliverableType, weight: weightConfig.weight, description: weightConfig.description, sprintNumber: weightConfig.sprintNumber }
+        : null,
+      previousGrades: previousGrades.map((grade) => ({
+        id: grade.id,
+        gradeType: grade.gradeType,
+        scores: grade.scores || [],
+        comments: grade.comments,
+        gradedBy: { id: grade.grader?.id, name: grade.grader?.fullName, email: grade.grader?.email, role: grade.grader?.role },
+        submittedAt: grade.createdAt,
+      })),
+    };
   }
 
-  /**
-   * List submissions for a specific group.
-   *
-   * @param {string} groupId - Group UUID
-   * @returns {Promise<Array>}
-   */
+  static async getSubmissionById(submissionId) {
+    return Deliverable.findByPk(submissionId);
+  }
+
+  static async canUserAccessSubmission(submissionId, user) {
+    if (!user) return false;
+    if (['ADMIN', 'COORDINATOR'].includes(user.role)) return true;
+
+    const submission = await Deliverable.findByPk(submissionId);
+    if (!submission) return false;
+
+    if (user.role === 'PROFESSOR') return true;
+
+    if (user.role === 'STUDENT') {
+      return String(submission.groupId) === String(user.groupId);
+    }
+
+    return false;
+  }
+
+  static async listAllSubmissions() {
+    const submissions = await Deliverable.findAll({
+      attributes: ['id', 'groupId', 'type', 'status', 'version', 'createdAt', 'updatedAt'],
+      include: [{ model: Group, attributes: ['id', 'name', 'leaderId'] }],
+      order: [['createdAt', 'DESC']],
+    });
+
+    return submissions.map((sub) => ({
+      id: sub.id,
+      groupId: sub.groupId,
+      groupName: sub.Group?.name,
+      type: sub.type,
+      status: sub.status,
+      version: sub.version,
+      submittedAt: sub.createdAt,
+    }));
+  }
+
   static async listGroupSubmissions(groupId) {
     return Deliverable.findAll({
       where: { groupId },
       order: [['type', 'ASC'], ['createdAt', 'DESC']],
     });
-  }
-
-  /**
-   * Check if user can access a submission.
-   *
-   * @param {string} deliverableId - Deliverable UUID
-   * @param {Object} user - User object with id and role
-   * @returns {Promise<boolean>}
-   */
-  static async canUserAccessSubmission(deliverableId, user) {
-    const deliverable = await Deliverable.findByPk(deliverableId);
-    if (!deliverable) return false;
-
-    // Coordinator/Admin can access all
-    if (['COORDINATOR', 'ADMIN'].includes(user.role)) {
-      return true;
-    }
-
-    // Professor (advisor) can access their group's submissions
-    if (user.role === 'PROFESSOR') {
-      const group = await Group.findByPk(deliverable.groupId);
-      return group && group.advisorId === user.id;
-    }
-
-    // Student can access own group's submissions
-    if (user.role === 'STUDENT') {
-      const group = await Group.findByPk(deliverable.groupId);
-      return group && group.memberIds && group.memberIds.map(String).includes(String(user.id));
-    }
-
-    return false;
   }
 }
 
