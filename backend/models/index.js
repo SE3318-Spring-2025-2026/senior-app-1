@@ -18,7 +18,10 @@ const Invitation = require('./Invitation');
 const AuditLog = require('./AuditLog');
 const Notification = require('./Notification');
 const Grade = require('./Grade');
+const DeliverableRubric = require('./DeliverableRubric');
 const Deliverable = require('./Deliverable');
+const GradingRubric = require('./GradingRubric');
+const CommitteeReview = require('./CommitteeReview');
 
 module.exports = {
   User,
@@ -33,5 +36,8 @@ module.exports = {
   AuditLog,
   Notification,
   Grade,
+  DeliverableRubric,
   Deliverable,
+  GradingRubric,
+  CommitteeReview,
 };

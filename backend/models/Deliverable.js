@@ -1,10 +1,3 @@
-/**
- * models/Deliverable.js
- *
- * Stores submission documents (deliverables) for groups.
- * A deliverable is a document submitted by a group (e.g., proposal, SOW).
- */
-
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
 const Group = require('./Group');
@@ -14,53 +7,44 @@ const Deliverable = sequelize.define(
   {
     id: {
       type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
-      allowNull: false,
+      defaultValue: DataTypes.UUIDV4,
     },
     groupId: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING,
       allowNull: false,
-      references: {
-        model: 'Groups',
-        key: 'id',
-      },
     },
     type: {
       type: DataTypes.ENUM('PROPOSAL', 'SOW'),
       allowNull: false,
-      comment: 'Type of deliverable: PROPOSAL or Statement of Work (SOW)',
     },
     content: {
       type: DataTypes.TEXT,
-      allowNull: true,
-      comment: 'Main document content (Markdown)',
+      allowNull: false,
     },
     images: {
       type: DataTypes.JSON,
       allowNull: false,
       defaultValue: [],
-      comment: 'Array of image URLs/references',
     },
     status: {
-      type: DataTypes.ENUM('DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED'),
-      defaultValue: 'DRAFT',
+      type: DataTypes.ENUM('DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'GRADED'),
+      allowNull: false,
+      defaultValue: 'SUBMITTED',
     },
     version: {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 1,
-      comment: 'Document version number',
     },
-    createdAt: {
+    submittedAt: {
       type: DataTypes.DATE,
       allowNull: false,
       defaultValue: DataTypes.NOW,
     },
-    updatedAt: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
+    sprintNumber: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
     },
   },
   {
@@ -75,7 +59,6 @@ const Deliverable = sequelize.define(
   }
 );
 
-// Associations
 Deliverable.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
 
 module.exports = Deliverable;

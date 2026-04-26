@@ -66,6 +66,9 @@ const apiClient = {
   patch(path, body) {
     return request('PATCH', path, body);
   },
+  put(path, body) {
+    return request('PUT', path, body);
+  },
   delete(path) {
     return request('DELETE', path);
   },
