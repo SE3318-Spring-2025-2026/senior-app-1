@@ -3,12 +3,13 @@
  *
  * Asserts D6-style audit dispatch after POST /api/v1/groups/:groupId/deliverables succeeds.
  * Requires: deliverables route + audit writer (#221 and logging connector).
+ *
+ * submitDeliverableValidation: field is `images` (not imageUrls); `content` min length 10.
  */
 require('./setupTestEnv');
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const sequelize = require('../db');
@@ -86,8 +87,8 @@ test('successful deliverable POST increases audit log rows (D6 dispatch after D3
     },
     body: JSON.stringify({
       type: 'PROPOSAL',
-      content: '## Doc',
-      imageUrls: [],
+      content: '## Proposal document for audit dispatch test.',
+      images: [],
     }),
   });
 
@@ -142,7 +143,11 @@ test('parallel deliverable POSTs on different groups complete without cross-corr
   const probe = await request(`/api/v1/groups/${groups[0].id}/deliverables`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ type: 'PROPOSAL', content: 'p', imageUrls: [] }),
+    body: JSON.stringify({
+      type: 'PROPOSAL',
+      content: '## Probe deliverable body for route check.',
+      images: [],
+    }),
   });
   if (probe.response.status === 404) {
     t.skip('deliverables route not mounted');
@@ -158,8 +163,8 @@ test('parallel deliverable POSTs on different groups complete without cross-corr
         headers,
         body: JSON.stringify({
           type: 'PROPOSAL',
-          content: `Parallel body ${i}`,
-          imageUrls: [],
+          content: `Parallel deliverable body ${i} for concurrent audit.`,
+          images: [],
         }),
       }),
     ),
