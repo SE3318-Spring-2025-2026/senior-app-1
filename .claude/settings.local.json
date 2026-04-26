@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test *)",
+      "Bash(gh pr create --title 'feat\\(#253\\): Store grades and committee review connector' --body ' *)",
+      "Bash(grep -iE \"\\\\.jsx$\")",
+      "Bash(grep -iE \"\\\\.css$\")"
+    ]
+  }
+}

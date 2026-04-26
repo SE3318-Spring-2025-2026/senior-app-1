@@ -17,10 +17,11 @@ const GroupAdvisorAssignment = require('./GroupAdvisorAssignment');
 const Invitation = require('./Invitation');
 const AuditLog = require('./AuditLog');
 const Notification = require('./Notification');
-const Deliverable = require('./Deliverable');
 const GradingRubric = require('./GradingRubric');
 const Grade = require('./Grade');
-const DeliverableWeightConfiguration = require('./DeliverableWeightConfiguration');
+const DeliverableRubric = require('./DeliverableRubric');
+const Deliverable = require('./Deliverable');
+const CommitteeReview = require('./CommitteeReview');
 
 module.exports = {
   User,
@@ -34,8 +35,9 @@ module.exports = {
   Invitation,
   AuditLog,
   Notification,
-  Deliverable,
   GradingRubric,
   Grade,
-  DeliverableWeightConfiguration,
+  DeliverableRubric,
+  Deliverable,
+  CommitteeReview,
 };

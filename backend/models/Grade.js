@@ -1,78 +1,59 @@
 /**
  * models/Grade.js
  *
- * Represents a grade assigned by committee member or advisor to a deliverable.
+ * Stores grading decisions made by committee members for deliverables.
  */
 
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
-const Deliverable = require('./Deliverable');
 const User = require('./User');
+const Deliverable = require('./Deliverable');
 
 const Grade = sequelize.define(
   'Grade',
   {
     id: {
       type: DataTypes.UUID,
-      primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+      allowNull: false,
     },
-    
-    /**
-     * Reference to the Deliverable being graded
-     */
     deliverableId: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: Deliverable,
+        model: 'Deliverables',
         key: 'id',
       },
-      onDelete: 'CASCADE',
     },
-    
-    /**
-     * User ID of the person submitting the grade
-     */
     gradedBy: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.STRING,
       allowNull: false,
-      references: {
-        model: User,
-        key: 'id',
-      },
-      onDelete: 'CASCADE',
+      comment: 'User ID of the grader (committee member)',
     },
-    
-    /**
-     * Type of grade submission
-     */
     gradeType: {
       type: DataTypes.ENUM('ADVISOR_SOFT', 'COMMITTEE_FINAL', 'PEER_REVIEW'),
       allowNull: false,
     },
-    
-    /**
-     * JSON array of criterion scores
-     * Each score has:
-     * {
-     *   criterionId: UUID,
-     *   value: number | string,
-     *   note?: string
-     * }
-     */
     scores: {
       type: DataTypes.JSON,
       allowNull: false,
       defaultValue: [],
+      comment: 'Array of {criterionId, value, note}',
     },
-    
-    /**
-     * Overall comments on the deliverable
-     */
     comments: {
       type: DataTypes.TEXT,
       allowNull: true,
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
     },
   },
   {
@@ -80,16 +61,15 @@ const Grade = sequelize.define(
     timestamps: true,
     indexes: [
       {
-        fields: ['deliverableId', 'gradedBy'],
         unique: true,
+        fields: ['deliverableId', 'gradedBy'],
       },
     ],
   }
 );
 
 // Associations
-Grade.belongsTo(Deliverable, { foreignKey: 'deliverableId' });
+Grade.belongsTo(Deliverable, { foreignKey: 'deliverableId', as: 'deliverable' });
 Grade.belongsTo(User, { foreignKey: 'gradedBy', as: 'grader' });
-Deliverable.hasMany(Grade, { foreignKey: 'deliverableId' });
 
 module.exports = Grade;
