@@ -31,6 +31,7 @@ import './styles.css';
 import AdvisorRequestsPage from './AdvisorRequestsPage';
 import ProfessorCommitteeSubmissionsPage from './ProfessorCommitteeSubmissionsPage';
 import CommitteeGradingPage from './CommitteeGradingPage';
+import SubmissionEditorPage from './SubmissionEditorPage';
 import CoordinatorWeightConfigurationPage from './CoordinatorWeightConfigurationPage';
 import AuthGuard from './components/AuthGuard';
 
@@ -49,6 +50,7 @@ export default function App() {
               <Route path="/students/groups/manage" element={<StudentGroupShellPage />} />
               <Route path="/students/groups/new" element={<StudentGroupShellPage />} />
               <Route path="/students/notifications" element={<StudentInvitationsPage />} />
+              <Route path="/team-leader/submission" element={<AuthGuard allowedRoles={['STUDENT']}><SubmissionEditorPage /></AuthGuard>} />
               <Route path="/team-leader/advisor-requests/new" element={<SubmitAdvisorRequestPage />} />
               <Route path="/team-leader/advisor-requests/:requestId" element={<TeamLeaderAdvisorRequestDetailsPage />} />
               <Route path="/professors/login" element={<AuthPage />} />
