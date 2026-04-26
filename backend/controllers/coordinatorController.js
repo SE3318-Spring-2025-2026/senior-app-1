@@ -40,7 +40,49 @@ const updateGroupMembership = [
   },
 ];
 
+const createRubric = [
+  body('deliverableName').isString().trim().notEmpty(),
+  body('criteria').isArray({ min: 1 }),
+  body('criteria.*.name').isString().trim().notEmpty(),
+  body('criteria.*.description').optional().isString().trim(),
+  body('criteria.*.maxPoints').isNumeric(),
+  body('totalPoints').isNumeric(),
+  body('courseId').optional().isInt(),
+
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        code: 'INVALID_RUBRIC_INPUT',
+        message: 'Rubric payload failed validation.',
+        errors: errors.array(),
+      });
+    }
+
+    try {
+      const { deliverableName, criteria, totalPoints, courseId } = req.body;
+
+      const rubric = await req.app.locals.models.DeliverableRubric.create({
+        deliverableName,
+        criteria,
+        totalPoints,
+        courseId: courseId ?? null,
+      });
+
+      return res.status(201).json(rubric);
+    } catch (error) {
+      if (error.status && error.code) {
+        return res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+      }
+      return next(error);
+    }
+  },
+];
+
 module.exports = {
   updateGroupMembership,
+  createRubric,
 };
-

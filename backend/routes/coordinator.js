@@ -18,6 +18,8 @@ router.post(
   authorize(['COORDINATOR']),
   importValidStudentIds,
 );
+router.post('/rubrics', authenticate, authorize(['COORDINATOR']), createRubric);
+
 router.get('/advisors', authenticate, authorize(['COORDINATOR']), listCoordinatorAdvisors);
 router.get('/groups', authenticate, authorize(['COORDINATOR']), groupController.listGroups);
 router.patch('/groups/:groupId/advisor-transfer', authenticate, authorize(['COORDINATOR']), transferByCoordinator);

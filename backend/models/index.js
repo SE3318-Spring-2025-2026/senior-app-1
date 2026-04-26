@@ -30,4 +30,5 @@ module.exports = {
   Invitation,
   AuditLog,
   Notification,
+  DeliverableRubric,
 };
