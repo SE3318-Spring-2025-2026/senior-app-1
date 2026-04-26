@@ -31,6 +31,8 @@ import './styles.css';
 import AdvisorRequestsPage from './AdvisorRequestsPage';
 import ProfessorCommitteeSubmissionsPage from './ProfessorCommitteeSubmissionsPage';
 import CommitteeGradingPage from './CommitteeGradingPage';
+import CoordinatorWeightConfigurationPage from './CoordinatorWeightConfigurationPage';
+import AuthGuard from './components/AuthGuard';
 
 export default function App() {
   return (
@@ -66,6 +68,7 @@ export default function App() {
               <Route path="/coordinator/groups/manage" element={<CoordinatorGroupMembershipPage />} />
               <Route path="/coordinator/groups/transfer" element={<CoordinatorAdvisorTransferPage />} />
               <Route path="/coordinator/groups/cleanup" element={<GroupCleanupPage role="COORDINATOR" />} />
+              <Route path="/coordinator/grading/weight-configuration" element={<AuthGuard allowedRoles={['COORDINATOR']}><CoordinatorWeightConfigurationPage /></AuthGuard>} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="/advisor/requests" element={<AdvisorRequestsPage />} />
               <Route path="/professors/committee-submissions" element={<ProfessorCommitteeSubmissionsPage />} />
