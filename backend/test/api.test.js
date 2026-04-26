@@ -20,6 +20,7 @@ const {
   ValidStudentId,
   LinkedGitHubAccount,
   OAuthState,
+  DeliverableRubric,
   Deliverable,
   GradingRubric,
   CommitteeReview,
@@ -3628,6 +3629,215 @@ test('team leader can submit a new request to the same advisor after advisor rel
   assert.equal(retryResponse.response.status, 201);
   assert.equal(retryResponse.json.status, 'PENDING');
   assert.equal(retryResponse.json.advisorId, advisor.id);
+});
+
+test('coordinator can create a rubric with valid payload', async () => {
+  const coordinator = await User.create({
+    email: 'rubric-coordinator@example.edu',
+    fullName: 'Rubric Coordinator',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const payload = {
+    deliverableName: 'Sprint 1 Report',
+    criteria: [
+      { name: 'Code Quality', description: 'Clean and readable code', maxPoints: 40 },
+      { name: 'Documentation', maxPoints: 60 },
+    ],
+    totalPoints: 100,
+    courseId: 1,
+  };
+
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  assert.equal(response.response.status, 201);
+  assert.equal(response.json.code, 'CREATED');
+  assert.equal(response.json.data.deliverableName, payload.deliverableName);
+  assert.equal(response.json.data.totalPoints, payload.totalPoints);
+  assert.equal(response.json.data.courseId, payload.courseId);
+  assert.deepEqual(response.json.data.criteria, payload.criteria);
+  assert.ok(response.json.data.id);
+});
+
+test('coordinator can create a rubric without optional courseId', async () => {
+  const coordinator = await User.create({
+    email: 'rubric-coordinator-nocourse@example.edu',
+    fullName: 'Rubric Coordinator No Course',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const payload = {
+    deliverableName: 'Final Presentation',
+    criteria: [{ name: 'Clarity', maxPoints: 100 }],
+    totalPoints: 100,
+  };
+
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  assert.equal(response.response.status, 201);
+  assert.equal(response.json.code, 'CREATED');
+  assert.equal(response.json.data.deliverableName, payload.deliverableName);
+  assert.equal(response.json.data.courseId, null);
+});
+
+test('POST /api/v1/coordinator/rubrics rejects request without authentication', async () => {
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      deliverableName: 'Test',
+      criteria: [{ name: 'Criterion', maxPoints: 10 }],
+      totalPoints: 10,
+    }),
+  });
+
+  assert.equal(response.response.status, 401);
+});
+
+test('POST /api/v1/coordinator/rubrics rejects non-coordinator role', async () => {
+  const student = await User.create({
+    email: 'rubric-student@example.edu',
+    fullName: 'Rubric Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(student)),
+    },
+    body: JSON.stringify({
+      deliverableName: 'Test',
+      criteria: [{ name: 'Criterion', maxPoints: 10 }],
+      totalPoints: 10,
+    }),
+  });
+
+  assert.equal(response.response.status, 403);
+});
+
+test('POST /api/v1/coordinator/rubrics rejects missing deliverableName', async () => {
+  const coordinator = await User.create({
+    email: 'rubric-val-1@example.edu',
+    fullName: 'Rubric Validator 1',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({
+      criteria: [{ name: 'Criterion', maxPoints: 10 }],
+      totalPoints: 10,
+    }),
+  });
+
+  assert.equal(response.response.status, 400);
+  assert.equal(response.json.code, 'INVALID_RUBRIC_INPUT');
+});
+
+test('POST /api/v1/coordinator/rubrics rejects empty criteria array', async () => {
+  const coordinator = await User.create({
+    email: 'rubric-val-2@example.edu',
+    fullName: 'Rubric Validator 2',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({
+      deliverableName: 'Sprint 1',
+      criteria: [],
+      totalPoints: 10,
+    }),
+  });
+
+  assert.equal(response.response.status, 400);
+  assert.equal(response.json.code, 'INVALID_RUBRIC_INPUT');
+});
+
+test('POST /api/v1/coordinator/rubrics rejects non-integer maxPoints', async () => {
+  const coordinator = await User.create({
+    email: 'rubric-val-3@example.edu',
+    fullName: 'Rubric Validator 3',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({
+      deliverableName: 'Sprint 1',
+      criteria: [{ name: 'Criterion', maxPoints: 9.5 }],
+      totalPoints: 10,
+    }),
+  });
+
+  assert.equal(response.response.status, 400);
+  assert.equal(response.json.code, 'INVALID_RUBRIC_INPUT');
+});
+
+test('POST /api/v1/coordinator/rubrics rejects negative totalPoints', async () => {
+  const coordinator = await User.create({
+    email: 'rubric-val-4@example.edu',
+    fullName: 'Rubric Validator 4',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const response = await request('/api/v1/coordinator/rubrics', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({
+      deliverableName: 'Sprint 1',
+      criteria: [{ name: 'Criterion', maxPoints: 10 }],
+      totalPoints: -5,
+    }),
+  });
+
+  assert.equal(response.response.status, 400);
+  assert.equal(response.json.code, 'INVALID_RUBRIC_INPUT');
 });
 
 // ─── Committee Review ───────────────────────────────────────────────────────
