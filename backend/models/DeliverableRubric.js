@@ -25,7 +25,7 @@ const DeliverableRubric = sequelize.define('DeliverableRubric', {
     allowNull: true,
   },
 }, {
-  tableName: 'deliverable_rubrics',
+  tableName: 'DeliverableRubrics',
   timestamps: true,
 });
 
