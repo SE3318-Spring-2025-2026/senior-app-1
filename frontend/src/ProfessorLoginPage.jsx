@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import apiClient from './services/apiClient';
 
 const initialForm = {
   email: '',
@@ -54,19 +55,7 @@ export default function ProfessorLoginPage() {
     });
 
     try {
-      const response = await fetch('/api/v1/professors/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(form),
-      });
-      const result = await response.json();
-
-      if (!response.ok) {
-        setFeedback(mapLoginError(result, response.status));
-        return;
-      }
+      const { data: result } = await apiClient.post('/v1/professors/login', form);
 
       window.localStorage.setItem('professorToken', result.token);
       window.localStorage.setItem('authToken', result.token);
@@ -86,17 +75,21 @@ export default function ProfessorLoginPage() {
       window.setTimeout(() => {
         navigate('/home');
       }, 500);
-    } catch {
-      setFeedback({
-        type: 'error',
-        title: 'Request failed',
-        message: 'The professor login request could not reach the backend. Check whether the backend server is running.',
-      });
-      notify({
-        type: 'error',
-        title: 'Professor login failed',
-        message: 'The professor login request could not reach the backend.',
-      });
+    } catch (err) {
+      if (err.response) {
+        setFeedback(mapLoginError(err.response.data || {}, err.response.status));
+      } else {
+        setFeedback({
+          type: 'error',
+          title: 'Request failed',
+          message: 'The professor login request could not reach the backend. Check whether the backend server is running.',
+        });
+        notify({
+          type: 'error',
+          title: 'Professor login failed',
+          message: 'The professor login request could not reach the backend.',
+        });
+      }
     } finally {
       setSubmitting(false);
     }

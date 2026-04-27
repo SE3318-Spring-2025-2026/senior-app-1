@@ -31,8 +31,8 @@ export default function ProfessorCommitteeSubmissionsPage() {
 
     async function load() {
       try {
-        const res = await apiClient.get('/v1/committee/submissions/pending');
-        setSubmissions(res.data?.submissions || []);
+        const res = await apiClient.get('/v1/committee/submissions');
+        setSubmissions(Array.isArray(res.data?.data) ? res.data.data : []);
       } catch (err) {
         notify({
           type: 'error',
@@ -111,8 +111,8 @@ export default function ProfessorCommitteeSubmissionsPage() {
                   </div>
                   <div>
                     <p className="audit-log-label">Group</p>
-                    <p className="audit-log-value" style={{ fontSize: '0.88rem', wordBreak: 'break-all' }}>
-                      {submission.groupId}
+                    <p className="audit-log-value" style={{ fontSize: '0.88rem' }}>
+                      {submission.groupName ?? submission.groupId}
                     </p>
                   </div>
                   {submission.sprintNumber != null && (

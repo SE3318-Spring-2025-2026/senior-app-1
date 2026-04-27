@@ -27,6 +27,11 @@ const submitDeliverableValidation = [
     .optional()
     .isArray()
     .withMessage('Images must be an array of URLs'),
+  body('sprintNumber')
+    .optional()
+    .isInt({ min: 1 })
+    .toInt()
+    .withMessage('Sprint number must be a positive integer'),
 ];
 
 const listDeliverableValidation = [
@@ -56,7 +61,7 @@ async function submitDeliverable(req, res) {
   }
 
   const { groupId } = req.params;
-  const { type, content, images } = req.body;
+  const { type, content, images, sprintNumber } = req.body;
   const submittedBy = req.user?.id;
 
   try {
@@ -65,6 +70,7 @@ async function submitDeliverable(req, res) {
       type,
       content,
       images,
+      sprintNumber: sprintNumber ?? null,
       submitBy: submittedBy,
     });
 
@@ -75,6 +81,7 @@ async function submitDeliverable(req, res) {
         id: deliverable.id,
         groupId: deliverable.groupId,
         type: deliverable.type,
+        sprintNumber: deliverable.sprintNumber,
         status: deliverable.status,
         version: deliverable.version,
         createdAt: deliverable.createdAt,
@@ -113,6 +120,9 @@ async function listDeliverables(req, res) {
       data: deliverables.map((d) => ({
         id: d.id,
         type: d.type,
+        sprintNumber: d.sprintNumber ?? null,
+        content: d.content,
+        images: d.images ?? [],
         status: d.status,
         version: d.version,
         createdAt: d.createdAt,
@@ -139,6 +149,12 @@ async function getSubmission(req, res) {
   const user = req.user;
 
   try {
+    // Existence check runs first so a missing submission returns 404, not 403.
+    const submission = await SubmissionService.getSubmissionById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ code: 'SUBMISSION_NOT_FOUND', message: 'Submission not found' });
+    }
+
     const hasAccess = await SubmissionService.canUserAccessSubmission(submissionId, user);
     if (!hasAccess) {
       return res.status(403).json({ code: 'FORBIDDEN', message: 'You do not have access to this submission' });

@@ -11,6 +11,12 @@ const roleMenuSections = {
         { to: '/students/groups/manage', label: 'Manage Group', icon: 'GR' },
       ],
     },
+    {
+      title: 'Deliverables',
+      items: [
+        { to: '/team-leader/submission', label: 'My Submission', icon: 'SB' },
+      ],
+    },
   ],
   Professor: [
     {

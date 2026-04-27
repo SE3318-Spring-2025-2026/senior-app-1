@@ -77,6 +77,9 @@ const ensureSqliteColumns = async () => {
 };
 
 const seedRubricCriteria = async () => {
+  if (!RubricCriterion) {
+    return;
+  }
   await RubricCriterion.bulkCreate([
     { deliverableType: 'PROPOSAL', question: 'Technical Feasibility', criterionType: 'SOFT', maxPoints: 10, weight: 0.4 },
     { deliverableType: 'PROPOSAL', question: 'Project Scope Clarity', criterionType: 'SOFT', maxPoints: 10, weight: 0.4 },

@@ -14,7 +14,8 @@ const jwt = require('jsonwebtoken');
 
 const sequelize = require('../db');
 const app = require('../app');
-const { User, Group, AuditLog } = require('../models');
+const models = require('../models');
+const { User, Group, AuditLog } = models;
 const { createStudent, ensureValidStudentRegistry } = require('../services/studentService');
 
 let server;
@@ -55,10 +56,26 @@ test.after(async () => {
   await sequelize.close();
 });
 
+async function destroyIfPresent(modelName) {
+  const Model = models[modelName];
+  if (Model) {
+    await Model.destroy({ where: {} });
+  }
+}
+
 test.beforeEach(async () => {
-  await AuditLog.destroy({ where: {} });
-  await Group.destroy({ where: {} });
-  await User.destroy({ where: {} });
+  await destroyIfPresent('CommitteeReview');
+  await destroyIfPresent('Grade');
+  await destroyIfPresent('DeliverableSubmission');
+  await destroyIfPresent('GroupDeliverable');
+  await destroyIfPresent('Deliverable');
+  await destroyIfPresent('GroupAdvisorAssignment');
+  await destroyIfPresent('Invitation');
+  await destroyIfPresent('AdvisorRequest');
+  await destroyIfPresent('Notification');
+  await destroyIfPresent('AuditLog');
+  await destroyIfPresent('Group');
+  await destroyIfPresent('User');
 });
 
 test('successful deliverable POST increases audit log rows (D6 dispatch after D3)', async (t) => {

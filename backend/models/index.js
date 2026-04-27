@@ -24,6 +24,8 @@ const Deliverable = require('./Deliverable');
 const CommitteeReview = require('./CommitteeReview');
 const SprintWeightConfiguration = require('./SprintWeightConfiguration');
 const DeliverableSubmission = require('./DeliverableSubmission');
+const DeliverableWeightConfiguration = require('./DeliverableWeightConfiguration');
+const GroupDeliverable = require('./GroupDeliverable');
 
 module.exports = {
   User,
@@ -44,4 +46,6 @@ module.exports = {
   CommitteeReview,
   SprintWeightConfiguration,
   DeliverableSubmission,
+  DeliverableWeightConfiguration,
+  GroupDeliverable,
 };

@@ -52,6 +52,24 @@ senior-app-1/
 
 ## Setup & Run
 
+### Prerequisites
+
+| Tool   | Required version | Why                                                                          |
+| ------ | ---------------- | ---------------------------------------------------------------------------- |
+| Node   | **≥ 20.19** (22 recommended) | Vite 7 uses `crypto.hash`, which lands in 20.19 / 22.12. |
+| npm    | ≥ 9              | Ships with Node 20+.                                                         |
+
+The repo includes a [`.nvmrc`](../.nvmrc) pinning Node 22. With nvm:
+
+```bash
+nvm use            # picks up .nvmrc
+node --version     # should print v22.x or v20.19+
+```
+
+If `nvm` is not installed, follow https://github.com/nvm-sh/nvm#installing-and-updating, or use Node 22 from your distro's package manager.
+
+### Install & seed
+
 ```bash
 # from repo root
 npm install                       # root deps (concurrently runners)
@@ -70,11 +88,14 @@ npm run dev
 # frontend → http://localhost:5173
 ```
 
-Run tests:
+### Run tests
+
 ```bash
-npm test                         # runs the backend test suite
+npm test                         # runs the backend test suite (node:test)
 npm --prefix frontend test       # runs frontend tests (Jest + Playwright)
 ```
+
+The backend test suite uses `:memory:` SQLite, so no extra setup is needed. If you see `crypto.hash is not a function` when starting the frontend, your Node is too old — upgrade to ≥ 20.19.
 
 ---
 
