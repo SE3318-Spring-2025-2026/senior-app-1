@@ -1,0 +1,370 @@
+openapi: 3.0.3
+info:
+  title: Senior Project Management System - Deliverable Management API
+  description: "API specification for Process 4.0 Deliverable Management (Level 2 DFD). Covers P41-P44 and maps to D3 (Grading DB), D5 (Document Storage), and D6 (Audit Logs)."
+  version: 1.0.0
+servers:
+  - url: https://api.senior-project.edu/v1
+    description: Production server
+
+tags:
+  - name: 4.0 Deliverable Management
+    description: Rubric setup, weighting, deliverable submission, and committee grading.
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+
+  schemas:
+    Error:
+      type: object
+      required: [message, code]
+      properties:
+        message:
+          type: string
+          example: Rubric not found
+        code:
+          type: string
+          example: RUBRIC_NOT_FOUND
+
+    RubricCriterion:
+      type: object
+      required: [id, question, criterionType, maxPoints]
+      properties:
+        id:
+          type: string
+          example: crit_01
+        question:
+          type: string
+          example: Problem statement is clearly defined
+        criterionType:
+          type: string
+          description: Binary criteria are pass/fail style; soft criteria are graded on scale.
+          enum: [BINARY, SOFT]
+          example: SOFT
+        maxPoints:
+          type: number
+          format: float
+          example: 10
+
+    DeliverableRubric:
+      type: object
+      required: [id, deliverableType, criteria]
+      properties:
+        id:
+          type: string
+          example: rub_01HDELIVERABLE
+        deliverableType:
+          type: string
+          enum: [PROPOSAL, SOW]
+          example: PROPOSAL
+        criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/RubricCriterion'
+        sprintWeights:
+          type: array
+          description: Optional sprint-to-weight mapping configured by coordinator.
+          items:
+            type: object
+            required: [sprintNumber, weight]
+            properties:
+              sprintNumber:
+                type: integer
+                minimum: 1
+                example: 1
+              weight:
+                type: number
+                format: float
+                minimum: 0
+                maximum: 1
+                example: 0.25
+
+    DeliverableSubmission:
+      type: object
+      required: [id, groupId, deliverableType, title, status, submittedAt]
+      properties:
+        id:
+          type: string
+          example: del_01HC2A9SUBMISSION
+        groupId:
+          type: string
+          example: grp_123e4567-e89b-12d3-a456-426614174000
+        deliverableType:
+          type: string
+          enum: [PROPOSAL, SOW]
+          example: SOW
+        title:
+          type: string
+          example: Smart Campus Analytics SoW
+        markdownBody:
+          type: string
+          description: Markdown payload stored in document storage.
+        imageUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+          example:
+            - https://storage.senior-project.edu/groups/grp_123/images/diagram.png
+        status:
+          type: string
+          enum: [SUBMITTED, UNDER_REVIEW, GRADED]
+          example: SUBMITTED
+        submittedAt:
+          type: string
+          format: date-time
+
+    GradeReview:
+      type: object
+      required: [id, submissionId, committeeMemberId, score, comments, gradedAt]
+      properties:
+        id:
+          type: string
+          example: grv_01HGRADEREVIEW
+        submissionId:
+          type: string
+          example: del_01HC2A9SUBMISSION
+        committeeMemberId:
+          type: string
+          example: com_44
+        score:
+          type: number
+          format: float
+          example: 87.5
+        rubricSelections:
+          type: array
+          description: Per-criterion choices/points selected by reviewer.
+          items:
+            type: object
+            required: [criterionId, awardedPoints]
+            properties:
+              criterionId:
+                type: string
+                example: crit_01
+              awardedPoints:
+                type: number
+                format: float
+                example: 8.5
+              remark:
+                type: string
+                example: Scope is realistic and measurable.
+        comments:
+          type: string
+          example: Solid submission with clear milestones.
+        gradedAt:
+          type: string
+          format: date-time
+
+paths:
+  /deliverables/rubrics:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "P41 Define Deliverable Rubrics"
+      description: |
+        Coordinator defines rubric criteria (binary/soft) for Proposal or SoW.
+        Writes rubric configuration to D3: Grading DB.
+        Side effect: writes audit event to D6: Audit Logs (Log Configuration flow).
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliverableType, criteria]
+              properties:
+                deliverableType:
+                  type: string
+                  enum: [PROPOSAL, SOW]
+                criteria:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [question, criterionType, maxPoints]
+                    properties:
+                      question: { type: string }
+                      criterionType: { type: string, enum: [BINARY, SOFT] }
+                      maxPoints: { type: number, format: float, minimum: 0 }
+      responses:
+        "201":
+          description: Rubric created and persisted to D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliverableRubric'
+        "400":
+          description: Invalid rubric payload.
+        "403":
+          description: Coordinator role required.
+
+  /deliverables/rubrics/{rubricId}/weights:
+    patch:
+      tags: ["4.0 Deliverable Management"]
+      summary: "P42 Configure Grading Weights"
+      description: |
+        Coordinator updates weights and sprint associations for an existing rubric.
+        Writes updated weight configuration to D3: Grading DB.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: rubricId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sprintWeights]
+              properties:
+                sprintWeights:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [sprintNumber, weight]
+                    properties:
+                      sprintNumber: { type: integer, minimum: 1 }
+                      weight: { type: number, format: float, minimum: 0, maximum: 1 }
+      responses:
+        "200":
+          description: Weights updated in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliverableRubric'
+        "404":
+          description: Rubric not found in D3.
+
+  /groups/{groupId}/deliverables:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "P43 Submit Deliverable (Proposal/SoW)"
+      description: |
+        Team leader submits proposal or SoW content (markdown and optional images).
+        Writes document content to D5: Document Storage and submission metadata to D3: Grading DB.
+        Side effect: writes audit event to D6: Audit Logs (Log Submission flow).
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliverableType, title, markdownBody]
+              properties:
+                deliverableType:
+                  type: string
+                  enum: [PROPOSAL, SOW]
+                title:
+                  type: string
+                markdownBody:
+                  type: string
+                imageUrls:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+      responses:
+        "201":
+          description: Submission stored in D5 and indexed in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliverableSubmission'
+        "400":
+          description: Invalid submission payload.
+        "404":
+          description: Group not found.
+
+  /deliverables/{deliverableId}/review-context:
+    get:
+      tags: ["4.0 Deliverable Management"]
+      summary: "Load Submission + Rubric for Committee Review"
+      description: |
+        Helper endpoint for P44. Reads submitted document from D5 and rubric data from D3
+        to present a complete review context.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: deliverableId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Review context loaded successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submission:
+                    $ref: '#/components/schemas/DeliverableSubmission'
+                  rubric:
+                    $ref: '#/components/schemas/DeliverableRubric'
+        "404":
+          description: Submission or rubric not found.
+
+  /deliverables/{deliverableId}/reviews:
+    post:
+      tags: ["4.0 Deliverable Management"]
+      summary: "P44 Review and Grade Submission"
+      description: |
+        Committee records grade selections and comments against rubric criteria.
+        Writes grade output to D3: Grading DB.
+        Side effect: writes audit event to D6: Audit Logs (Log Grading flow).
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: deliverableId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [committeeMemberId, score, rubricSelections, comments]
+              properties:
+                committeeMemberId:
+                  type: string
+                score:
+                  type: number
+                  format: float
+                rubricSelections:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [criterionId, awardedPoints]
+                    properties:
+                      criterionId: { type: string }
+                      awardedPoints: { type: number, format: float }
+                      remark: { type: string }
+                comments:
+                  type: string
+      responses:
+        "201":
+          description: Grade and comments stored in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GradeReview'
+        "400":
+          description: Invalid grading payload.
+        "403":
+          description: Committee role required.
+        "404":
+          description: Deliverable not found.
