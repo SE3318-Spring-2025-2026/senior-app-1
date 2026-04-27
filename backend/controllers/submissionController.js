@@ -139,6 +139,12 @@ async function getSubmission(req, res) {
   const user = req.user;
 
   try {
+    // Existence check runs first so a missing submission returns 404, not 403.
+    const submission = await SubmissionService.getSubmissionById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ code: 'SUBMISSION_NOT_FOUND', message: 'Submission not found' });
+    }
+
     const hasAccess = await SubmissionService.canUserAccessSubmission(submissionId, user);
     if (!hasAccess) {
       return res.status(403).json({ code: 'FORBIDDEN', message: 'You do not have access to this submission' });

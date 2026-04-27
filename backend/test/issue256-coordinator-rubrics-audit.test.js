@@ -38,8 +38,12 @@ async function authHeaderFor(user) {
 
 function sampleRubric() {
   return {
-    deliverableType: 'PROPOSAL',
-    criteria: [{ question: 'Is the proposal clear?', type: 'SOFT', weight: 0.5 }],
+    deliverableName: 'Sprint 1 Proposal',
+    criteria: [
+      { name: 'Clarity', maxPoints: 50 },
+      { name: 'Feasibility', maxPoints: 50 },
+    ],
+    totalPoints: 100,
   };
 }
 

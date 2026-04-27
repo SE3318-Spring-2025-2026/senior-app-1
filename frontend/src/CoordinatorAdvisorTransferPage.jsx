@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import apiClient from './services/apiClient';
 
 const initialFeedback = {
   type: 'idle',
@@ -51,28 +52,13 @@ export default function CoordinatorAdvisorTransferPage() {
     async function loadTransferData() {
       setLoading(true);
       try {
-        const [groupsResponse, advisorsResponse] = await Promise.all([
-          fetch('/api/v1/coordinator/groups', {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch('/api/v1/coordinator/advisors', {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const [groupsResult, advisorsResult] = await Promise.all([
+          apiClient.get('/v1/coordinator/groups'),
+          apiClient.get('/v1/coordinator/advisors'),
         ]);
 
-        const groupsPayload = await groupsResponse.json().catch(() => ({}));
-        const advisorsPayload = await advisorsResponse.json().catch(() => ({}));
-
-        if (!groupsResponse.ok) {
-          throw new Error(groupsPayload.message || 'Could not load coordinator groups.');
-        }
-
-        if (!advisorsResponse.ok) {
-          throw new Error(advisorsPayload.message || 'Could not load advisor list.');
-        }
-
-        const nextGroups = normalizeGroups(groupsPayload);
-        const nextAdvisors = normalizeAdvisors(advisorsPayload);
+        const nextGroups = normalizeGroups(groupsResult.data);
+        const nextAdvisors = normalizeAdvisors(advisorsResult.data);
 
         setGroups(nextGroups);
         setAdvisors(nextAdvisors);
@@ -89,7 +75,7 @@ export default function CoordinatorAdvisorTransferPage() {
         setFeedback({
           type: 'error',
           title: 'Load failed',
-          message: error.message || 'Could not load transfer data.',
+          message: error.response?.data?.message || error.message || 'Could not load transfer data.',
         });
       } finally {
         setLoading(false);
@@ -172,22 +158,13 @@ export default function CoordinatorAdvisorTransferPage() {
     });
 
     try {
-      const response = await fetch(`/api/v1/coordinator/groups/${selectedGroupId}/advisor-transfer`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      await apiClient.patch(
+        `/v1/coordinator/groups/${selectedGroupId}/advisor-transfer`,
+        {
           newAdvisorId: Number(selectedAdvisorId),
           reason: reason.trim() || undefined,
-        }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.message || 'Advisor transfer failed.');
-      }
+        },
+      );
 
       const advisor = advisors.find((entry) => String(entry.id) === String(selectedAdvisorId)) || null;
       setGroups((current) => current.map((group) => (
@@ -218,16 +195,9 @@ export default function CoordinatorAdvisorTransferPage() {
       });
       setReason('');
     } catch (error) {
-      setFeedback({
-        type: 'error',
-        title: 'Transfer failed',
-        message: error.message || 'Advisor transfer failed.',
-      });
-      notify({
-        type: 'error',
-        title: 'Transfer failed',
-        message: error.message || 'Advisor transfer failed.',
-      });
+      const message = error.response?.data?.message || error.message || 'Advisor transfer failed.';
+      setFeedback({ type: 'error', title: 'Transfer failed', message });
+      notify({ type: 'error', title: 'Transfer failed', message });
     } finally {
       setSubmitting(false);
     }

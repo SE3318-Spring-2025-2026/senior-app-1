@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGroupFormation } from './hooks/useGroupFormation';
+import apiClient from './services/apiClient';
 
 const initialFeedback = {
   type: '',
@@ -87,18 +88,7 @@ export default function StudentGroupShellPage() {
     setGroupsLoading(true);
 
     try {
-      const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
-      const response = await fetch('/api/v1/groups', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.message || 'Could not load groups.');
-      }
-
+      const { data: payload } = await apiClient.get('/v1/groups');
       const rows = payload.data || [];
       setGroups(rows);
       setSelectedGroupId((current) => {
@@ -110,7 +100,7 @@ export default function StudentGroupShellPage() {
     } catch (loadError) {
       setGroups([]);
       setSelectedGroupId('');
-      showFeedback('error', 'Groups unavailable', loadError.message || 'Could not load groups.');
+      showFeedback('error', 'Groups unavailable', loadError.response?.data?.message || loadError.message || 'Could not load groups.');
     } finally {
       setGroupsLoading(false);
     }
@@ -156,25 +146,11 @@ export default function StudentGroupShellPage() {
     setManageFeedback(initialFeedback);
 
     try {
-      const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
-      const response = await fetch(`/api/v1/groups/${selectedGroup.groupId}`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const responsePayload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(responsePayload.message || 'Failed to update group.');
-      }
-
+      await apiClient.patch(`/v1/groups/${selectedGroup.groupId}`, payload);
       await loadGroupDirectory();
       showFeedback('success', successTitle, successMessage);
     } catch (updateError) {
-      showFeedback('error', 'Update failed', updateError.message || 'Failed to update group.');
+      showFeedback('error', 'Update failed', updateError.response?.data?.message || updateError.message || 'Failed to update group.');
     }
   }
 
@@ -215,23 +191,11 @@ export default function StudentGroupShellPage() {
     setManageFeedback(initialFeedback);
 
     try {
-      const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
-      const response = await fetch(`/api/v1/groups/${selectedGroup.groupId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.message || 'Failed to delete group.');
-      }
-
+      await apiClient.delete(`/v1/groups/${selectedGroup.groupId}`);
       await loadGroupDirectory();
       showFeedback('success', 'Group deleted', `"${selectedGroup.groupName}" was removed.`);
     } catch (deleteError) {
-      showFeedback('error', 'Delete failed', deleteError.message || 'Failed to delete group.');
+      showFeedback('error', 'Delete failed', deleteError.response?.data?.message || deleteError.message || 'Failed to delete group.');
     }
   }
 
@@ -243,24 +207,11 @@ export default function StudentGroupShellPage() {
     setManageFeedback(initialFeedback);
 
     try {
-      const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
-      const response = await fetch(`/api/v1/groups/${selectedGroup.groupId}/leave`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.message || 'Failed to leave group.');
-      }
-
+      await apiClient.post(`/v1/groups/${selectedGroup.groupId}/leave`);
       await loadGroupDirectory();
       showFeedback('success', 'Left group', 'You have left the selected group.');
     } catch (leaveError) {
-      showFeedback('error', 'Leave failed', leaveError.message || 'Failed to leave group.');
+      showFeedback('error', 'Leave failed', leaveError.response?.data?.message || leaveError.message || 'Failed to leave group.');
     }
   }
 
@@ -366,24 +317,12 @@ export default function StudentGroupShellPage() {
     setManageFeedback(initialFeedback);
 
     try {
-      const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
-      const response = await fetch(`/api/v1/groups/${selectedGroup.groupId}/members/${selectedKickMemberId}/kick`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.message || 'Failed to remove member.');
-      }
-
+      await apiClient.post(`/v1/groups/${selectedGroup.groupId}/members/${selectedKickMemberId}/kick`);
       await loadGroupDirectory();
       setSelectedKickMemberId('');
       showFeedback('success', 'Member removed', 'Selected member was removed from the group.');
     } catch (kickError) {
-      showFeedback('error', 'Kick failed', kickError.message || 'Failed to remove member.');
+      showFeedback('error', 'Kick failed', kickError.response?.data?.message || kickError.message || 'Failed to remove member.');
     }
   }
 

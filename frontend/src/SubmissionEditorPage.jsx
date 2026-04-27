@@ -25,13 +25,13 @@ export default function SubmissionEditorPage() {
   const [groupError, setGroupError] = useState(null);
 
   useEffect(() => {
-    apiClient.get('/v1/groups/my-groups')
+    apiClient.get('/v1/groups/mine')
       .then(({ data }) => {
-        const first = Array.isArray(data) ? data[0] : null;
-        if (!first) {
+        const group = Array.isArray(data) ? data[0] : data;
+        if (!group) {
           setGroupError('No group found. You must be a team leader with an active group to submit.');
         } else {
-          setGroupId(first.id ?? first.groupId);
+          setGroupId(group.id ?? group.groupId);
         }
       })
       .catch(() => setGroupError('Failed to load your group. Please try again.'))

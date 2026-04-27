@@ -94,7 +94,7 @@ class SubmissionService {
 
   static async fetchSubmissionForReview(submissionId) {
     const deliverable = await Deliverable.findByPk(submissionId, {
-      include: [{ model: Group, attributes: ['id', 'name', 'leaderId'] }],
+      include: [{ model: Group, as: 'group', attributes: ['id', 'name', 'leaderId'] }],
     });
 
     if (!deliverable) {
@@ -105,7 +105,7 @@ class SubmissionService {
     }
 
     const rubric = await GradingRubric.findOne({
-      where: { deliverableType: deliverable.type, isActive: true },
+      where: { deliverableType: deliverable.type },
       order: [['createdAt', 'DESC']],
       limit: 1,
     });
@@ -126,8 +126,8 @@ class SubmissionService {
       submission: {
         id: deliverable.id,
         groupId: deliverable.groupId,
-        groupName: deliverable.Group?.name,
-        leaderId: deliverable.Group?.leaderId,
+        groupName: deliverable.group?.name,
+        leaderId: deliverable.group?.leaderId,
         type: deliverable.type,
         status: deliverable.status,
         version: deliverable.version,
@@ -139,7 +139,7 @@ class SubmissionService {
         images: deliverable.images || [],
       },
       rubric: rubric
-        ? { id: rubric.id, name: rubric.name, deliverableType: rubric.deliverableType, criteria: rubric.criteria || [] }
+        ? { id: rubric.id, deliverableType: rubric.deliverableType, criteria: rubric.criteria || [] }
         : null,
       weightConfiguration: weightConfig
         ? { id: weightConfig.id, deliverableType: weightConfig.deliverableType, weight: weightConfig.weight, description: weightConfig.description, sprintNumber: weightConfig.sprintNumber }
@@ -178,14 +178,14 @@ class SubmissionService {
   static async listAllSubmissions() {
     const submissions = await Deliverable.findAll({
       attributes: ['id', 'groupId', 'type', 'status', 'version', 'createdAt', 'updatedAt'],
-      include: [{ model: Group, attributes: ['id', 'name', 'leaderId'] }],
+      include: [{ model: Group, as: 'group', attributes: ['id', 'name', 'leaderId'] }],
       order: [['createdAt', 'DESC']],
     });
 
     return submissions.map((sub) => ({
       id: sub.id,
       groupId: sub.groupId,
-      groupName: sub.Group?.name,
+      groupName: sub.group?.name,
       type: sub.type,
       status: sub.status,
       version: sub.version,

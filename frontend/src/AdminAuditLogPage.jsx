@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import apiClient from './services/apiClient';
 
 function formatDate(value) {
   if (!value) {
@@ -47,21 +48,11 @@ export default function AdminAuditLogPage() {
       setError('');
 
       try {
-        const response = await fetch('/api/v1/admin/audit-logs?limit=150', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.message || 'Audit logs could not be loaded.');
-        }
-
+        const { data: payload } = await apiClient.get('/v1/admin/audit-logs?limit=150');
         setLogs(Array.isArray(payload.data) ? payload.data : []);
       } catch (loadError) {
         setLogs([]);
-        setError(loadError.message || 'Audit logs could not be loaded.');
+        setError(loadError.response?.data?.message || loadError.message || 'Audit logs could not be loaded.');
       } finally {
         setLoading(false);
       }

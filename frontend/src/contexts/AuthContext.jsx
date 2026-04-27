@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState } from 'react';
 
 const AuthContext = createContext();
 
@@ -10,18 +10,23 @@ export const useAuth = () => {
   return context;
 };
 
-export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(null);
-  const [user, setUser] = useState(null); // { role, id, etc. }
-
-  // Load token from localStorage on mount
-  useEffect(() => {
-    const storedToken = localStorage.getItem('authToken');
-    if (storedToken) {
-      setToken(storedToken);
-      // TODO: Optionally fetch user info from backend using token
+function loadStoredUser() {
+  for (const key of ['adminUser', 'coordinatorUser', 'professorUser', 'studentUser']) {
+    const raw = localStorage.getItem(key);
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.role) return parsed;
+    } catch {
+      // ignore malformed entries
     }
-  }, []);
+  }
+  return null;
+}
+
+export const AuthProvider = ({ children }) => {
+  const [token, setToken] = useState(() => localStorage.getItem('authToken'));
+  const [user, setUser] = useState(() => loadStoredUser());
 
   const login = (newToken, userData) => {
     setToken(newToken);
