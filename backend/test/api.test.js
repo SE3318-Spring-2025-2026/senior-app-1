@@ -217,8 +217,15 @@ test('student can create an integration binding for a team', async () => {
     fullName: 'Integration Leader',
     password: 'StrongPass1!',
   });
+  const group = await Group.create({
+    id: 'team-294',
+    name: 'Integration Team',
+    leaderId: String(leader.id),
+    memberIds: [],
+    maxMembers: 4,
+  });
 
-  const result = await request('/api/v1/teams/team-294/integrations', {
+  const result = await request(`/api/v1/teams/${group.id}/integrations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -242,7 +249,7 @@ test('student can create an integration binding for a team', async () => {
   assert.equal(result.json.status, 'ACTIVE');
   assert.ok(result.json.createdAt);
 
-  const storedBinding = await IntegrationBinding.findOne({ where: { teamId: 'team-294' } });
+  const storedBinding = await IntegrationBinding.findOne({ where: { teamId: group.id } });
   assert.ok(storedBinding);
   assert.equal(storedBinding.organizationName, 'acme-org');
   assert.equal(storedBinding.repositoryName, 'senior-app');
@@ -257,9 +264,16 @@ test('integration binding creation rejects duplicate team bindings', async () =>
     fullName: 'Integration Duplicate',
     password: 'StrongPass1!',
   });
+  const group = await Group.create({
+    id: 'team-duplicate',
+    name: 'Duplicate Integration Team',
+    leaderId: String(leader.id),
+    memberIds: [],
+    maxMembers: 4,
+  });
 
   await IntegrationBinding.create({
-    teamId: 'team-duplicate',
+    teamId: group.id,
     providerSet: ['GITHUB'],
     organizationName: 'existing-org',
     repositoryName: 'existing-repo',
@@ -268,7 +282,7 @@ test('integration binding creation rejects duplicate team bindings', async () =>
     status: 'ACTIVE',
   });
 
-  const result = await request('/api/v1/teams/team-duplicate/integrations', {
+  const result = await request(`/api/v1/teams/${group.id}/integrations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -294,8 +308,15 @@ test('integration binding creation rejects invalid payloads', async () => {
     fullName: 'Integration Invalid',
     password: 'StrongPass1!',
   });
+  const group = await Group.create({
+    id: 'team-invalid',
+    name: 'Invalid Integration Team',
+    leaderId: String(leader.id),
+    memberIds: [],
+    maxMembers: 4,
+  });
 
-  const result = await request('/api/v1/teams/team-invalid/integrations', {
+  const result = await request(`/api/v1/teams/${group.id}/integrations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -322,8 +343,15 @@ test('integration binding creation rejects initiatedBy mismatches', async () => 
     fullName: 'Integration Forbidden',
     password: 'StrongPass1!',
   });
+  const group = await Group.create({
+    id: 'team-forbidden',
+    name: 'Forbidden Integration Team',
+    leaderId: String(leader.id),
+    memberIds: [],
+    maxMembers: 4,
+  });
 
-  const result = await request('/api/v1/teams/team-forbidden/integrations', {
+  const result = await request(`/api/v1/teams/${group.id}/integrations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -335,6 +363,73 @@ test('integration binding creation rejects initiatedBy mismatches', async () => 
       repositoryName: 'senior-app',
       jiraProjectKey: 'SPM',
       initiatedBy: '999999',
+    }),
+  });
+
+  assert.equal(result.response.status, 403);
+  assert.equal(result.json.code, 'FORBIDDEN');
+});
+
+test('integration binding creation returns 404 when the team does not exist', async () => {
+  const leader = await createStudent({
+    studentId: '11070009995',
+    email: 'integration-missing@example.edu',
+    fullName: 'Integration Missing',
+    password: 'StrongPass1!',
+  });
+
+  const result = await request('/api/v1/teams/team-missing/integrations', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      providerSet: ['GITHUB'],
+      organizationName: 'acme-org',
+      repositoryName: 'senior-app',
+      jiraProjectKey: 'SPM',
+      initiatedBy: String(leader.id),
+    }),
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'GROUP_NOT_FOUND');
+});
+
+test('integration binding creation rejects non-leader students for an existing team', async () => {
+  const leader = await createStudent({
+    studentId: '11070009996',
+    email: 'integration-owner@example.edu',
+    fullName: 'Integration Owner',
+    password: 'StrongPass1!',
+  });
+  const nonLeader = await createStudent({
+    studentId: '11070009997',
+    email: 'integration-nonleader@example.edu',
+    fullName: 'Integration Non Leader',
+    password: 'StrongPass1!',
+  });
+  const group = await Group.create({
+    id: 'team-owned',
+    name: 'Owned Integration Team',
+    leaderId: String(leader.id),
+    memberIds: [String(nonLeader.id)],
+    maxMembers: 4,
+  });
+
+  const result = await request(`/api/v1/teams/${group.id}/integrations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(nonLeader)),
+    },
+    body: JSON.stringify({
+      providerSet: ['GITHUB'],
+      organizationName: 'acme-org',
+      repositoryName: 'senior-app',
+      jiraProjectKey: 'SPM',
+      initiatedBy: String(nonLeader.id),
     }),
   });
 
