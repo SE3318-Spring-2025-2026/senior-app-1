@@ -3,8 +3,14 @@ const fs = require('fs');
 const path = require('path');
 
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('./middleware/asyncRouteErrors');
 
 const { User, Group, AuditLog } = require('./models');
+const {
+  errorResponseNormalizer,
+  globalErrorHandler,
+  notFoundHandler,
+} = require('./middleware/errorResponse');
 
 const adminRoutes = require('./routes/admin');
 const coordinatorRoutes = require('./routes/coordinator');
@@ -29,6 +35,7 @@ const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 
 app.use(express.json());
+app.use(errorResponseNormalizer);
 
 // Serve frontend if exists
 if (fs.existsSync(frontendDistPath)) {
@@ -58,10 +65,7 @@ app.use('/internal/integrations', internalIntegrationsRoutes);
 app.use('/api/v1/committee/submissions', submissionsRoutes);
 app.use('/api/v1/committee', committeeRoutes);
 
-// Global error handler
-app.use((err, req, res, _next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Internal Server Error' });
-});
+app.use(notFoundHandler);
+app.use(globalErrorHandler);
 
 module.exports = app;
