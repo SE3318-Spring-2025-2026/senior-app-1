@@ -15,7 +15,7 @@ const jwt = require('jsonwebtoken');
 
 const sequelize = require('../db');
 const app = require('../app');
-const { User } = require('../models');
+const { User, SprintWeightConfiguration } = require('../models');
 const { ensureValidStudentRegistry } = require('../services/studentService');
 
 let server;
@@ -68,6 +68,7 @@ test.after(async () => {
 });
 
 test.beforeEach(async () => {
+  await SprintWeightConfiguration.destroy({ where: {} });
   await User.destroy({ where: {} });
 });
 
@@ -81,7 +82,7 @@ test('PUT /api/v1/coordinator/weights rejects unauthenticated requests', async (
     t.skip('route not mounted');
     return;
   }
-  assert.ok([401, 403].includes(response.status), `expected 401/403, got ${response.status}`);
+  assert.equal(response.status, 401, `expected 401, got ${response.status}`);
 });
 
 test('PUT /api/v1/coordinator/weights rejects non-coordinator roles', async (t) => {
