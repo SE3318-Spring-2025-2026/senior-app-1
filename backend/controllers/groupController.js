@@ -3,9 +3,127 @@ const { Op } = require('sequelize');
 const GroupService = require('../services/groupService');
 const { Group, User, Invitation, Professor } = require('../models');
 
+// ==========================================
+// ADVISOR RELEASE & ASSIGNMENT REMOVAL LOGIC
+// ==========================================
+
+// Validation for advisor release (PATCH)
+exports.advisorReleaseValidation = [
+  param('groupId').isString().trim().notEmpty().withMessage('Group ID is required'),
+];
+
+// Validation for advisor assignment removal (DELETE)
+exports.removeAdvisorAssignmentValidation = [
+  param('groupId').isString().trim().notEmpty().withMessage('Group ID is required'),
+];
+
 /**
- * Validation middleware for creating a group
+ * Advisor releases themselves from group
+ * PATCH /api/v1/groups/:groupId/advisor-release
+ * Auth: Only assigned advisor
  */
+exports.advisorRelease = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
+    }
+    const { groupId } = req.params;
+    const result = await GroupService.releaseAdvisor(groupId, req.user.id);
+
+    return res.status(200).json({ code: 'SUCCESS', message: 'Advisor released from group', data: result });
+  } catch (error) {
+    if (error.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    }
+    if (error.code === 'NOT_ASSIGNED_ADVISOR') {
+      return res.status(403).json({ code: 'NOT_ASSIGNED_ADVISOR', message: 'You are not the assigned advisor for this group' });
+    }
+    if (error.code === 'NO_ADVISOR_ASSIGNED') {
+      return res.status(400).json({ code: 'NO_ADVISOR_ASSIGNED', message: 'No advisor assigned to this group' });
+    }
+    console.error('Error in advisorRelease:', error);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+};
+
+/**
+ * Remove advisor assignment from a group.
+ * Compatible path: DELETE /api/v1/groups/:groupId/advisor-assignment
+ */
+exports.removeAdvisorAssignment = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid group ID', errors: errors.array() });
+    }
+
+    const { groupId } = req.params;
+    const result = await GroupService.removeAdvisorAssignment(groupId, req.user);
+
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Advisor assignment removed successfully',
+      data: result,
+    });
+  } catch (error) {
+    if (error.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    }
+    if (error.code === 'NO_ADVISOR_ASSIGNED') {
+      return res.status(400).json({ code: 'NO_ADVISOR_ASSIGNED', message: 'No advisor assigned to this group' });
+    }
+    if (error.code === 'FORBIDDEN') {
+      return res.status(403).json({ code: 'FORBIDDEN', message: error.message });
+    }
+    console.error('Error in removeAdvisorAssignment:', error);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+};
+
+// ==========================================
+// ORPHAN GROUP DELETION LOGIC
+// ==========================================
+
+exports.deleteOrphanGroupValidation = [
+  param('groupId').isUUID().withMessage('Group ID must be a valid UUID'),
+];
+
+/**
+ * Delete orphan group (no advisor assigned)
+ * DELETE /api/v1/group-database/groups/:groupId
+ * Auth: ADMIN or COORDINATOR
+ */
+exports.deleteOrphanGroup = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
+    }
+
+    const { groupId } = req.params;
+    const result = await GroupService.deleteOrphanGroup(groupId, req.user);
+
+    return res.status(200).json({ code: 'SUCCESS', message: 'Group deleted successfully', data: result });
+  } catch (error) {
+    if (error.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    }
+    if (error.code === 'GROUP_HAS_ADVISOR') {
+      return res.status(403).json({ code: 'GROUP_HAS_ADVISOR', message: 'Group has an assigned advisor and cannot be deleted' });
+    }
+    if (error.code === 'DATA_INTEGRITY_ERROR') {
+      return res.status(409).json({ code: 'DATA_INTEGRITY_ERROR', message: error.message });
+    }
+    console.error('Error in deleteOrphanGroup:', error);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+};
+
+// ==========================================
+// CORE GROUP MANAGEMENT LOGIC
+// ==========================================
+
 exports.createGroupValidation = [
   body('groupName')
     .trim()
@@ -18,10 +136,6 @@ exports.createGroupValidation = [
     .withMessage('Max members must be between 1 and 10'),
 ];
 
-/**
- * Create a new group
- * POST /api/v1/groups
- */
 exports.createGroup = async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -30,7 +144,6 @@ exports.createGroup = async (req, res) => {
     }
 
     const { groupName, maxMembers } = req.body;
-    // Get authenticated user as the leader (if available from auth middleware)
     const leaderId = req.user?.id || null;
 
     const group = await GroupService.createGroup(groupName, maxMembers, leaderId);
@@ -60,9 +173,6 @@ exports.createGroup = async (req, res) => {
   }
 };
 
-/**
- * Validation middleware for finalizing membership
- */
 exports.finalizeMembershipValidation = [
   param('groupId')
     .isString()
@@ -74,10 +184,6 @@ exports.finalizeMembershipValidation = [
     .withMessage('Student ID must be an 11-digit number'),
 ];
 
-/**
- * Finalize membership for a student in a group
- * POST /api/v1/groups/:groupId/membership/finalize
- */
 exports.finalizeMembership = async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -108,45 +214,22 @@ exports.finalizeMembership = async (req, res) => {
   } catch (error) {
     console.error('Error in finalizeMembership:', error);
 
-    // Custom error handling
     if (error.code === 'DUPLICATE_MEMBER') {
-      return res.status(400).json({
-        code: 'DUPLICATE_MEMBER',
-        message: 'Student is already a member of this group',
-      });
+      return res.status(400).json({ code: 'DUPLICATE_MEMBER', message: 'Student is already a member of this group' });
     }
-
     if (error.code === 'MAX_MEMBERS_REACHED') {
-      return res.status(400).json({
-        code: 'MAX_MEMBERS_REACHED',
-        message: 'Group has reached maximum member capacity',
-      });
+      return res.status(400).json({ code: 'MAX_MEMBERS_REACHED', message: 'Group has reached maximum member capacity' });
     }
-
     if (error.code === 'GROUP_NOT_FOUND') {
-      return res.status(404).json({
-        code: 'GROUP_NOT_FOUND',
-        message: 'Group not found',
-      });
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
     }
-
     if (error.code === 'GROUP_FINALIZED') {
-      return res.status(400).json({
-        code: 'GROUP_FINALIZED',
-        message: 'Group has been finalized and no longer accepts members',
-      });
+      return res.status(400).json({ code: 'GROUP_FINALIZED', message: 'Group has been finalized and no longer accepts members' });
     }
-
-    res.status(500).json({
-      code: 'INTERNAL_ERROR',
-      message: 'Internal server error',
-    });
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 };
 
-/**
- * Validation middleware for getting group membership details
- */
 exports.getGroupMembershipValidation = [
   param('groupId')
     .isString()
@@ -155,24 +238,49 @@ exports.getGroupMembershipValidation = [
     .withMessage('Group ID is required'),
 ];
 
-/**
- * Get group membership details
- * GET /api/v1/groups/:groupId/membership
- */
 exports.getGroupMembership = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        code: 'VALIDATION_ERROR',
-        message: 'Invalid group ID',
-        errors: errors.array(),
-      });
+      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid group ID', errors: errors.array() });
     }
 
     const { groupId } = req.params;
-
     const groupData = await GroupService.getGroupMembership(groupId);
+    const leaderId = groupData.leaderId ? String(groupData.leaderId) : null;
+    const memberIds = Array.isArray(groupData.memberIds) ? groupData.memberIds.map((id) => String(id)) : [];
+    const participantIds = [...new Set([leaderId, ...memberIds].filter(Boolean))];
+
+    const users = participantIds.length > 0
+      ? await User.findAll({
+        where: { id: { [Op.in]: participantIds } },
+        attributes: ['id', 'fullName', 'studentId', 'email'],
+      })
+      : [];
+
+    const usersById = new Map(users.map((user) => [String(user.id), user]));
+
+    const advisorUser = groupData.advisorId
+      ? await User.findByPk(groupData.advisorId, { attributes: ['id', 'fullName', 'email'] })
+      : null;
+
+    const advisorProfessor = groupData.advisorId
+      ? await Professor.findOne({
+        where: { userId: groupData.advisorId },
+        attributes: ['userId', 'department', 'fullName'],
+      })
+      : null;
+
+    const members = participantIds.map((id) => {
+      const user = usersById.get(String(id));
+      return {
+        id: String(id),
+        fullName: user?.fullName || 'Unknown Student',
+        studentId: user?.studentId || null,
+        email: user?.email || null,
+        isLeader: String(id) === leaderId,
+      };
+    });
 
     res.status(200).json({
       code: 'SUCCESS',
@@ -181,26 +289,29 @@ exports.getGroupMembership = async (req, res) => {
         groupId: groupData.id,
         groupName: groupData.name,
         status: groupData.status,
+        advisorId: groupData.advisorId || null,
+        advisor: advisorUser
+          ? {
+            id: advisorUser.id,
+            fullName: advisorProfessor?.fullName || advisorUser.fullName,
+            email: advisorUser.email,
+            department: advisorProfessor?.department || null,
+          }
+          : null,
+        leaderId,
         maxMembers: groupData.maxMembers,
-        members: groupData.memberIds,
-        currentMemberCount: groupData.memberIds.length,
-        availableSlots: groupData.maxMembers - groupData.memberIds.length,
+        memberIds: members.map((member) => member.id),
+        members,
+        currentMemberCount: members.length,
+        availableSlots: Math.max(groupData.maxMembers - members.length, 0),
       },
     });
   } catch (error) {
     console.error('Error in getGroupMembership:', error);
-
     if (error.code === 'GROUP_NOT_FOUND') {
-      return res.status(404).json({
-        code: 'GROUP_NOT_FOUND',
-        message: 'Group not found',
-      });
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
     }
-
-    res.status(500).json({
-      code: 'INTERNAL_ERROR',
-      message: 'Internal server error',
-    });
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 };
 
@@ -214,8 +325,7 @@ exports.getMyGroup = async (req, res) => {
     const currentUserId = String(req.user.id);
     const mine = groups.find((group) => {
       const leaderMatches = String(group.leaderId || '') === currentUserId;
-      const memberMatches = Array.isArray(group.memberIds)
-        && group.memberIds.map((id) => String(id)).includes(currentUserId);
+      const memberMatches = Array.isArray(group.memberIds) && group.memberIds.map((id) => String(id)).includes(currentUserId);
       return leaderMatches || memberMatches;
     });
 
@@ -242,52 +352,31 @@ exports.getMyGroup = async (req, res) => {
 
 exports.listGroups = async (req, res) => {
   try {
-    const groups = await Group.findAll({
-      order: [['createdAt', 'DESC']],
-    });
+    const groups = await Group.findAll({ order: [['createdAt', 'DESC']] });
 
     const visibleGroups = req.user?.role === 'STUDENT'
       ? groups.filter((group) => {
         const currentUserId = String(req.user.id);
         const isLeader = String(group.leaderId || '') === currentUserId;
-        const isMember = Array.isArray(group.memberIds)
-          && group.memberIds.map((id) => String(id)).includes(currentUserId);
+        const isMember = Array.isArray(group.memberIds) && group.memberIds.map((id) => String(id)).includes(currentUserId);
         return isLeader || isMember;
       })
       : groups;
 
     const userIds = new Set();
     visibleGroups.forEach((group) => {
-      if (group.leaderId) {
-        userIds.add(Number(group.leaderId));
-      }
-
-      if (group.advisorId) {
-        userIds.add(Number(group.advisorId));
-      }
-
-      if (Array.isArray(group.memberIds)) {
-        group.memberIds.forEach((id) => userIds.add(Number(id)));
-      }
+      if (group.leaderId) userIds.add(Number(group.leaderId));
+      if (group.advisorId) userIds.add(Number(group.advisorId));
+      if (Array.isArray(group.memberIds)) group.memberIds.forEach((id) => userIds.add(Number(id)));
     });
 
     const users = userIds.size > 0
-      ? await User.findAll({
-        where: {
-          id: { [Op.in]: [...userIds] },
-        },
-        attributes: ['id', 'fullName', 'studentId', 'email'],
-      })
+      ? await User.findAll({ where: { id: { [Op.in]: [...userIds] } }, attributes: ['id', 'fullName', 'studentId', 'email'] })
       : [];
 
     const usersById = new Map(users.map((user) => [String(user.id), user]));
     const professorRows = userIds.size > 0
-      ? await Professor.findAll({
-        where: {
-          userId: { [Op.in]: [...userIds] },
-        },
-        attributes: ['userId', 'department', 'fullName'],
-      })
+      ? await Professor.findAll({ where: { userId: { [Op.in]: [...userIds] } }, attributes: ['userId', 'department', 'fullName'] })
       : [];
     const professorsByUserId = new Map(professorRows.map((professor) => [String(professor.userId), professor]));
 
@@ -305,47 +394,17 @@ exports.listGroups = async (req, res) => {
         status: group.status,
         maxMembers: group.maxMembers,
         membershipRole: isLeader ? 'LEADER' : 'MEMBER',
-        leader: leader
-          ? {
-            id: leader.id,
-            fullName: leader.fullName,
-            studentId: leader.studentId,
-            email: leader.email,
-          }
-          : null,
-        advisor: advisorUser
-          ? {
-            id: advisorUser.id,
-            fullName: advisorProfessor?.fullName || advisorUser.fullName,
-            email: advisorUser.email,
-            department: advisorProfessor?.department || null,
-          }
-          : null,
+        leader: leader ? { id: leader.id, fullName: leader.fullName, studentId: leader.studentId, email: leader.email } : null,
+        advisor: advisorUser ? { id: advisorUser.id, fullName: advisorProfessor?.fullName || advisorUser.fullName, email: advisorUser.email, department: advisorProfessor?.department || null } : null,
         members: memberIds.map((id) => {
           const user = usersById.get(String(id));
-          if (!user) {
-            return {
-              id,
-              fullName: 'Unknown Student',
-              studentId: null,
-              email: null,
-            };
-          }
-
-          return {
-            id: user.id,
-            fullName: user.fullName,
-            studentId: user.studentId,
-            email: user.email,
-          };
+          if (!user) return { id, fullName: 'Unknown Student', studentId: null, email: null };
+          return { id: user.id, fullName: user.fullName, studentId: user.studentId, email: user.email };
         }),
       };
     });
 
-    return res.status(200).json({
-      code: 'SUCCESS',
-      data,
-    });
+    return res.status(200).json({ code: 'SUCCESS', data });
   } catch (error) {
     console.error('Error in listGroups:', error);
     return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
@@ -354,69 +413,45 @@ exports.listGroups = async (req, res) => {
 
 exports.renameGroupValidation = [
   param('groupId').isString().trim().notEmpty().withMessage('Group ID is required'),
-  body('groupName')
-    .optional()
-    .trim()
-    .notEmpty()
-    .withMessage('Group name cannot be empty')
-    .isLength({ min: 1, max: 255 })
-    .withMessage('Group name must be between 1 and 255 characters'),
-  body('maxMembers')
-    .optional()
-    .isInt({ min: 1, max: 10 })
-    .withMessage('Max members must be between 1 and 10'),
+  body('groupName').optional().trim().notEmpty().withMessage('Group name cannot be empty').isLength({ min: 1, max: 255 }).withMessage('Group name must be between 1 and 255 characters'),
+  body('maxMembers').optional().isInt({ min: 1, max: 10 }).withMessage('Max members must be between 1 and 10'),
 ];
 
 exports.renameGroup = async (req, res) => {
   try {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
 
-    if (!req.user || req.user.role !== 'STUDENT') {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
-    }
+    if (!req.user || req.user.role !== 'STUDENT') return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
 
     const { groupId } = req.params;
     const { groupName, maxMembers } = req.body;
 
     const group = await Group.findByPk(groupId);
-    if (!group) {
-      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
-    }
+    if (!group) return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    if (String(group.leaderId || '') !== String(req.user.id)) return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group leader can rename the group' });
 
-    if (String(group.leaderId || '') !== String(req.user.id)) {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group leader can rename the group' });
-    }
-
-    if (typeof groupName === 'string') {
-      group.name = groupName.trim();
-    }
+    if (typeof groupName === 'string') group.name = groupName.trim();
 
     if (maxMembers !== undefined) {
       const nextMax = Number(maxMembers);
-      const memberCount = Array.isArray(group.memberIds) ? group.memberIds.length : 0;
-      if (nextMax < memberCount) {
-        return res.status(400).json({
-          code: 'INVALID_MAX_MEMBERS',
-          message: 'Max members cannot be lower than current member count.',
-        });
+      const participantIds = new Set();
+      if (group.leaderId) {
+        participantIds.add(String(group.leaderId));
+      }
+      (Array.isArray(group.memberIds) ? group.memberIds : []).forEach((memberId) => {
+        participantIds.add(String(memberId));
+      });
+
+      if (nextMax < participantIds.size) {
+        return res.status(400).json({ code: 'INVALID_MAX_MEMBERS', message: 'Max members cannot be lower than current member count.' });
       }
       group.maxMembers = nextMax;
     }
 
     await group.save();
 
-    return res.status(200).json({
-      code: 'SUCCESS',
-      message: 'Group updated successfully',
-      data: {
-        groupId: group.id,
-        groupName: group.name,
-        maxMembers: group.maxMembers,
-      },
-    });
+    return res.status(200).json({ code: 'SUCCESS', message: 'Group updated successfully', data: { groupId: group.id, groupName: group.name, maxMembers: group.maxMembers } });
   } catch (error) {
     console.error('Error in renameGroup:', error);
     return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
@@ -425,31 +460,18 @@ exports.renameGroup = async (req, res) => {
 
 exports.listJoinedGroups = async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'STUDENT') {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
-    }
+    if (!req.user || req.user.role !== 'STUDENT') return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
 
     const currentUserId = String(req.user.id);
-    const groups = await Group.findAll({
-      order: [['createdAt', 'DESC']],
-    });
+    const groups = await Group.findAll({ order: [['createdAt', 'DESC']] });
 
     const joined = groups.filter((group) => {
       const isLeader = String(group.leaderId || '') === currentUserId;
-      const isMember = Array.isArray(group.memberIds)
-        && group.memberIds.map((id) => String(id)).includes(currentUserId);
+      const isMember = Array.isArray(group.memberIds) && group.memberIds.map((id) => String(id)).includes(currentUserId);
       return isMember && !isLeader;
     });
 
-    return res.status(200).json({
-      code: 'SUCCESS',
-      data: joined.map((group) => ({
-        groupId: group.id,
-        groupName: group.name,
-        leaderId: group.leaderId,
-        members: group.memberIds || [],
-      })),
-    });
+    return res.status(200).json({ code: 'SUCCESS', data: joined.map((group) => ({ groupId: group.id, groupName: group.name, leaderId: group.leaderId, members: group.memberIds || [] })) });
   } catch (error) {
     console.error('Error in listJoinedGroups:', error);
     return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
@@ -463,25 +485,15 @@ exports.deleteGroupValidation = [
 exports.deleteGroup = async (req, res) => {
   try {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
 
-    if (!req.user || req.user.role !== 'STUDENT') {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
-    }
+    if (!req.user || req.user.role !== 'STUDENT') return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
 
     const { groupId } = req.params;
     const group = await Group.findByPk(groupId);
-    if (!group) {
-      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
-    }
+    if (!group) return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    if (String(group.leaderId || '') !== String(req.user.id)) return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the group leader can delete this group' });
 
-    if (String(group.leaderId || '') !== String(req.user.id)) {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the group leader can delete this group' });
-    }
-
-    const { Invitation } = require('../models');
     await Invitation.destroy({ where: { groupId: group.id } });
     await group.destroy();
 
@@ -499,28 +511,17 @@ exports.leaveGroupValidation = [
 exports.leaveGroup = async (req, res) => {
   try {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
 
-    if (!req.user || req.user.role !== 'STUDENT') {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
-    }
+    if (!req.user || req.user.role !== 'STUDENT') return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
 
     const { groupId } = req.params;
     const group = await Group.findByPk(groupId);
-    if (!group) {
-      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
-    }
-
-    if (String(group.leaderId || '') === String(req.user.id)) {
-      return res.status(400).json({ code: 'LEADER_CANNOT_LEAVE', message: 'Group leader cannot leave. Delete the group instead.' });
-    }
+    if (!group) return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    if (String(group.leaderId || '') === String(req.user.id)) return res.status(400).json({ code: 'LEADER_CANNOT_LEAVE', message: 'Group leader cannot leave. Delete the group instead.' });
 
     const currentMembers = Array.isArray(group.memberIds) ? group.memberIds.map((id) => String(id)) : [];
-    if (!currentMembers.includes(String(req.user.id))) {
-      return res.status(400).json({ code: 'NOT_A_MEMBER', message: 'You are not a member of this group' });
-    }
+    if (!currentMembers.includes(String(req.user.id))) return res.status(400).json({ code: 'NOT_A_MEMBER', message: 'You are not a member of this group' });
 
     group.memberIds = currentMembers.filter((id) => id !== String(req.user.id));
     await group.save();
@@ -540,34 +541,20 @@ exports.kickMemberValidation = [
 exports.kickMember = async (req, res) => {
   try {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
 
-    if (!req.user || req.user.role !== 'STUDENT') {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
-    }
+    if (!req.user || req.user.role !== 'STUDENT') return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
 
     const { groupId, memberId } = req.params;
     const normalizedMemberId = String(memberId);
 
     const group = await Group.findByPk(groupId);
-    if (!group) {
-      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
-    }
-
-    if (String(group.leaderId || '') !== String(req.user.id)) {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the group leader can remove members' });
-    }
-
-    if (normalizedMemberId === String(req.user.id)) {
-      return res.status(400).json({ code: 'LEADER_REMOVE_BLOCKED', message: 'Leader cannot remove themselves from the group' });
-    }
+    if (!group) return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    if (String(group.leaderId || '') !== String(req.user.id)) return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the group leader can remove members' });
+    if (normalizedMemberId === String(req.user.id)) return res.status(400).json({ code: 'LEADER_REMOVE_BLOCKED', message: 'Leader cannot remove themselves from the group' });
 
     const currentMembers = Array.isArray(group.memberIds) ? group.memberIds.map((id) => String(id)) : [];
-    if (!currentMembers.includes(normalizedMemberId)) {
-      return res.status(404).json({ code: 'MEMBER_NOT_FOUND', message: 'Selected student is not a member of this group' });
-    }
+    if (!currentMembers.includes(normalizedMemberId)) return res.status(404).json({ code: 'MEMBER_NOT_FOUND', message: 'Selected student is not a member of this group' });
 
     group.memberIds = currentMembers.filter((id) => id !== normalizedMemberId);
     await group.save();
@@ -598,28 +585,24 @@ exports.dispatchInvites = async (req, res) => {
       });
     }
 
-    if (!req.user || req.user.role !== 'STUDENT') {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
-    }
+    if (!req.user || req.user.role !== 'STUDENT') return res.status(403).json({ code: 'FORBIDDEN', message: 'Student account is required' });
 
     const { groupId } = req.params;
     const requestedStudentIds = [...new Set(req.body.studentIds.map((item) => String(item).trim()))];
 
     const group = await Group.findByPk(groupId);
-    if (!group) {
-      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
-    }
+    if (!group) return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    if (String(group.leaderId || '') !== String(req.user.id)) return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the group leader can send invitations' });
 
-    if (String(group.leaderId || '') !== String(req.user.id)) {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the group leader can send invitations' });
+    const participantIds = new Set();
+    if (group.leaderId) {
+      participantIds.add(String(group.leaderId));
     }
-
-    const users = await User.findAll({
-      where: {
-        role: 'STUDENT',
-        studentId: { [Op.in]: requestedStudentIds },
-      },
+    (Array.isArray(group.memberIds) ? group.memberIds : []).forEach((memberId) => {
+      participantIds.add(String(memberId));
     });
+
+    const users = await User.findAll({ where: { role: 'STUDENT', studentId: { [Op.in]: requestedStudentIds } } });
 
     const usersByStudentId = new Map(users.map((user) => [user.studentId, user]));
     const missing = requestedStudentIds.filter((studentId) => !usersByStudentId.has(studentId));
@@ -652,14 +635,9 @@ exports.dispatchInvites = async (req, res) => {
 
     const allGroups = await Group.findAll({ attributes: ['id', 'leaderId', 'memberIds'] });
     const alreadyAssigned = users.filter((user) => allGroups.some((candidate) => {
-      if (String(candidate.id) === String(group.id)) {
-        return false;
-      }
-
+      if (String(candidate.id) === String(group.id)) return false;
       const leaderMatches = String(candidate.leaderId || '') === String(user.id);
-      const memberMatches = Array.isArray(candidate.memberIds)
-        && candidate.memberIds.map((id) => String(id)).includes(String(user.id));
-
+      const memberMatches = Array.isArray(candidate.memberIds) && candidate.memberIds.map((id) => String(id)).includes(String(user.id));
       return leaderMatches || memberMatches;
     }));
 
@@ -672,11 +650,46 @@ exports.dispatchInvites = async (req, res) => {
     }
 
     const inviteeIds = users.map((user) => user.id);
+    const existingInvitations = await Invitation.findAll({
+      where: { groupId, inviteeId: inviteeIds },
+      attributes: ['inviteeId', 'status'],
+    });
+    const existingPendingInviteeIds = new Set(
+      existingInvitations
+        .filter((invitation) => invitation.status === 'PENDING')
+        .map((invitation) => invitation.inviteeId),
+    );
+    const pendingInvitationCount = await Invitation.count({
+      where: {
+        groupId,
+        status: 'PENDING',
+      },
+    });
+    const availableSlots = Math.max(
+      Number(group.maxMembers || 0) - participantIds.size - pendingInvitationCount,
+      0,
+    );
+    const additionalPendingInvitesNeeded = inviteeIds.filter(
+      (inviteeId) => !existingPendingInviteeIds.has(inviteeId),
+    ).length;
+
+    if (additionalPendingInvitesNeeded > 0 && availableSlots <= 0) {
+      return res.status(409).json({
+        code: 'GROUP_FULL',
+        message: 'This group is already at full capacity.',
+      });
+    }
+
+    if (additionalPendingInvitesNeeded > availableSlots) {
+      return res.status(409).json({
+        code: 'INVITE_CAPACITY_EXCEEDED',
+        message: `Only ${availableSlots} slot${availableSlots === 1 ? '' : 's'} available for new invitations.`,
+      });
+    }
+
     const { created, skipped } = await GroupService.dispatchInvites(groupId, inviteeIds);
 
-    const skippedStudentIds = skipped
-      .map((inviteeId) => users.find((user) => user.id === inviteeId)?.studentId)
-      .filter(Boolean);
+    const skippedStudentIds = skipped.map((inviteeId) => users.find((user) => user.id === inviteeId)?.studentId).filter(Boolean);
 
     const createdPayload = created.map((invitation) => {
       const invitee = users.find((user) => user.id === invitation.inviteeId);
@@ -688,19 +701,10 @@ exports.dispatchInvites = async (req, res) => {
       };
     });
 
-    return res.status(201).json({
-      created: createdPayload,
-      skippedStudentIds,
-    });
+    return res.status(201).json({ created: createdPayload, skippedStudentIds });
   } catch (error) {
-    if (error.code === 'GROUP_NOT_FOUND') {
-      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
-    }
-
-    if (error.code === 'DUPLICATE_INVITE') {
-      return res.status(409).json({ code: 'DUPLICATE_INVITE', message: 'One or more students were already invited' });
-    }
-
+    if (error.code === 'GROUP_NOT_FOUND') return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
+    if (error.code === 'DUPLICATE_INVITE') return res.status(409).json({ code: 'DUPLICATE_INVITE', message: 'One or more students were already invited' });
     console.error('Error in dispatchInvites:', error);
     return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }

@@ -26,7 +26,7 @@ const Notification = sequelize.define(
 
     /**
      * Notification type key.
-     * Known values: 'GROUP_INVITE'
+     * Known values: 'GROUP_INVITE', 'ADVISOR_RELEASED'
      * Kept as a plain string so new types require no migration.
      */
     type: {
@@ -48,10 +48,11 @@ const Notification = sequelize.define(
      * Delivery lifecycle:
      *   PENDING  – persisted, not yet pushed
      *   SENT     – successfully pushed to client
+     *   READ     – viewed by the recipient
      *   FAILED   – push failed; eligible for retry job
      */
     status: {
-      type: DataTypes.ENUM('PENDING', 'SENT', 'FAILED'),
+      type: DataTypes.ENUM('PENDING', 'SENT', 'READ', 'FAILED'),
       allowNull: false,
       defaultValue: 'PENDING',
     },

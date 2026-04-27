@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import apiClient from './services/apiClient';
 
 const initialForm = {
   email: '',
@@ -69,21 +70,7 @@ export default function AdminCoordinatorCreatePage() {
     });
 
     try {
-      const token = window.localStorage.getItem('adminToken') || window.localStorage.getItem('authToken');
-      const response = await fetch('/api/v1/admin/coordinators', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(form),
-      });
-      const result = await response.json();
-
-      if (!response.ok) {
-        setFeedback(mapRegisterError(result, response.status));
-        return;
-      }
+      const { data: result } = await apiClient.post('/v1/admin/coordinators', form);
 
       setFeedback({
         type: 'success',
@@ -97,18 +84,22 @@ export default function AdminCoordinatorCreatePage() {
         message: result.message || 'Coordinator account created successfully.',
       });
       setForm(initialForm);
-    } catch {
-      setFeedback({
-        type: 'error',
-        title: 'Request failed',
-        message: 'The coordinator creation request could not reach the backend.',
-        result: 'Network error',
-      });
-      notify({
-        type: 'error',
-        title: 'Coordinator creation failed',
-        message: 'The coordinator creation request could not reach the backend.',
-      });
+    } catch (err) {
+      if (err.response) {
+        setFeedback(mapRegisterError(err.response.data || {}, err.response.status));
+      } else {
+        setFeedback({
+          type: 'error',
+          title: 'Request failed',
+          message: 'The coordinator creation request could not reach the backend.',
+          result: 'Network error',
+        });
+        notify({
+          type: 'error',
+          title: 'Coordinator creation failed',
+          message: 'The coordinator creation request could not reach the backend.',
+        });
+      }
     } finally {
       setSubmitting(false);
     }

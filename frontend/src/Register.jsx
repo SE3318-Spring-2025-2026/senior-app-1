@@ -225,6 +225,7 @@ export default function Register() {
     });
 
     try {
+      // Bypasses apiClient: uses the paste-in dev token, not the localStorage authToken.
       const response = await fetch('/api/v1/students/me/github/link', {
         method: 'GET',
         headers: {
@@ -377,8 +378,8 @@ export default function Register() {
             <p className="feedback-label">GitHub Linking</p>
             <h2>Link GitHub</h2>
             <p className="token-copy">
-              This action is available only for authenticated active students. Until a full student auth feature exists,
-              provide a development token to test the linking flow.
+              Student-facing GitHub linking now belongs on Student Home after login. This panel remains only as a
+              development fallback for direct backend flow testing.
             </p>
 
             <label className="field">

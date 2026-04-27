@@ -11,6 +11,7 @@ const coordinatorRoutes = require('./routes/coordinator');
 const advisorRoutes = require('./routes/advisors');
 const advisorRequestRoutes = require('./routes/advisorRequests');
 const professorRoutes = require('./routes/professors');
+const teamLeaderRoutes = require('./routes/teamLeader');
 const studentRoutes = require('./routes/students');
 const authRoutes = require('./routes/auth');
 const invitationRoutes = require('./routes/invitations');
@@ -20,6 +21,8 @@ const userDatabaseRoutes = require('./routes/userDatabase');
 const groupRoutes = require('./routes/groups');
 const groupDatabaseRoutes = require('./routes/groupDatabase');
 const internalIntegrationsRoutes = require('./routes/internalIntegrations');
+const submissionsRoutes = require('./routes/submissions');
+const committeeRoutes = require('./routes/committee');
 
 const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
@@ -38,6 +41,7 @@ app.locals.models = { User, Group, AuditLog };
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/coordinator', coordinatorRoutes);
 app.use('/api/v1/advisors', advisorRoutes);
+app.use('/api/v1/team-leader', teamLeaderRoutes);
 app.use('/api/v1', advisorRequestRoutes);
 app.use('/api/v1/professors', professorRoutes);
 app.use('/api/v1', studentRoutes);
@@ -49,6 +53,8 @@ app.use('/api/v1/user-database', userDatabaseRoutes);
 app.use('/api/v1/group-database', groupDatabaseRoutes);
 app.use('/api/v1/groups', groupRoutes);
 app.use('/internal/integrations', internalIntegrationsRoutes);
+app.use('/api/v1/committee/submissions', submissionsRoutes);
+app.use('/api/v1/committee', committeeRoutes);
 
 // Global error handler
 app.use((err, req, res, _next) => {

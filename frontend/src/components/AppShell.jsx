@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import NotificationViewport from './NotificationViewport';
 
 const roleMenuSections = {
@@ -8,7 +8,13 @@ const roleMenuSections = {
       title: 'Workspace',
       items: [
         { to: '/home', label: 'Student Home', icon: 'HM' },
-        { to: '/students/groups/new', label: 'Manage Group', icon: 'GR' },
+        { to: '/students/groups/manage', label: 'Manage Group', icon: 'GR' },
+      ],
+    },
+    {
+      title: 'Deliverables',
+      items: [
+        { to: '/team-leader/submission', label: 'My Submission', icon: 'SB' },
       ],
     },
   ],
@@ -16,8 +22,9 @@ const roleMenuSections = {
     {
       title: 'Workspace',
       items: [
-        { to: '/home', label: 'Professor Home', icon: 'HM' },
+        { to: '/professors', label: 'Professor Home', icon: 'HM' },
         { to: '/professors/notifications', label: 'Advisor Requests', icon: 'AR' },
+        { to: '/professors/committee-submissions', label: 'Committee Review', icon: 'CR' },
       ],
     },
   ],
@@ -25,7 +32,7 @@ const roleMenuSections = {
     {
       title: 'Workspace',
       items: [
-        { to: '/home', label: 'Coordinator Home', icon: 'HM' },
+        { to: '/coordinator', label: 'Coordinator Home', icon: 'HM' },
       ],
     },
     {
@@ -34,6 +41,9 @@ const roleMenuSections = {
         { to: '/coordinator/student-id-registry/import', label: 'Student ID Import', icon: 'OP' },
         { to: '/coordinator/groups/manage', label: 'Group Membership Edit', icon: 'GM' },
         { to: '/coordinator/groups/transfer', label: 'Advisor Transfer', icon: 'AT' },
+        { to: '/coordinator/groups/cleanup', label: 'Group Cleanup', icon: 'GC' },
+        { to: '/coordinator/rubrics', label: 'Grading Rubrics', icon: 'RB' },
+        { to: '/coordinator/grading/weight-configuration', label: 'Weight Configuration', icon: 'WC' },
       ],
     },
   ],
@@ -41,7 +51,7 @@ const roleMenuSections = {
     {
       title: 'Workspace',
       items: [
-        { to: '/home', label: 'Admin Home', icon: 'HM' },
+        { to: '/admin', label: 'Admin Home', icon: 'HM' },
       ],
     },
     {
@@ -49,6 +59,8 @@ const roleMenuSections = {
       items: [
         { to: '/admin/professors/new', label: 'Create Professor Account', icon: 'MG' },
         { to: '/admin/coordinators/new', label: 'Create Coordinator Account', icon: 'CG' },
+        { to: '/admin/groups/cleanup', label: 'Group Cleanup', icon: 'GC' },
+        { to: '/admin/audit-logs', label: 'Audit Logs', icon: 'AL' },
       ],
     },
   ],
@@ -91,10 +103,31 @@ function readAuthenticatedUser() {
   return null;
 }
 
+function homeRouteForViewer(role) {
+  switch (role) {
+    case 'Admin':
+      return '/admin';
+    case 'Coordinator':
+      return '/coordinator';
+    case 'Professor':
+      return '/professors';
+    case 'Student':
+      return '/home';
+    default:
+      return '/';
+  }
+}
+
 export default function AppShell() {
   const [openMenu, setOpenMenu] = useState(false);
   const [openProfile, setOpenProfile] = useState(false);
-  const authenticatedUser = readAuthenticatedUser();
+  const location = useLocation();
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => readAuthenticatedUser());
+
+  useEffect(() => {
+    setAuthenticatedUser(readAuthenticatedUser());
+  }, [location.key]);
+
   const isAuthenticated = Boolean(authenticatedUser);
   const viewer = authenticatedUser || { label: 'Guest', role: 'Guest', initials: 'G' };
   const menuSections = isAuthenticated ? (roleMenuSections[authenticatedUser.role] || []) : [];
@@ -135,7 +168,7 @@ export default function AppShell() {
             </div>
 
             <div className="app-brand-wrap">
-              <Link className="app-brand" to="/">
+              <Link className="app-brand" to={homeRouteForViewer(viewer.role)}>
                 Senior App
               </Link>
               <span className="app-brand-subtitle">Home</span>

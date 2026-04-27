@@ -1,5 +1,14 @@
+// Controller for mentor matching operations, including advisor transfers and synchronization
+// - POST /api/v1/mentor-matching/groups/:groupId/transfer: Transfer advisor in Group DB
+// - POST /api/v1/mentor-matching/groups/:groupId/sync: Sync advisor assignment to User DB
+// - POST /api/v1/mentor-matching/groups/:groupId/transfer-by-coordinator: Transfer advisor by coordinator action
+// - DELETE /api/v1/mentor-matching/groups/:groupId/advisor: Remove advisor assignment from group
+// - DELETE /api/v1/mentor-matching/groups/:groupId/orphan: Delete orphan group without advisor
+// - GET /api/v1/mentor-matching/coordinator-advisors: List advisors available for coordinator actions
+
 const { body, param, validationResult } = require('express-validator');
 const mentorMatchingService = require('../services/mentorMatchingService');
+const GroupService = require('../services/groupService');
 
 const transferInGroupDatabase = [
   param('groupId').isString().trim().notEmpty(),
@@ -88,6 +97,7 @@ const transferByCoordinator = [
       const assignment = await mentorMatchingService.transferAdvisorByCoordinator({
         groupId: req.params.groupId,
         newAdvisorId: req.body.newAdvisorId,
+        actorId: req.user.id,
       });
 
       return res.status(200).json(assignment);
@@ -140,6 +150,53 @@ const removeAdvisorAssignment = [
   },
 ];
 
+const deleteOrphanGroup = [
+  param('groupId').isUUID().withMessage('Group ID must be a valid UUID'),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        code: 'VALIDATION_ERROR',
+        message: 'Validation failed',
+        errors: errors.array(),
+      });
+    }
+
+    try {
+      const result = await GroupService.deleteOrphanGroup(req.params.groupId, req.user);
+      return res.status(200).json({
+        code: 'SUCCESS',
+        message: 'Group deleted successfully',
+        data: result,
+      });
+    } catch (error) {
+      if (error.code === 'GROUP_NOT_FOUND') {
+        return res.status(404).json({
+          code: 'GROUP_NOT_FOUND',
+          message: 'Group not found',
+        });
+      }
+      if (error.code === 'GROUP_HAS_ADVISOR') {
+        return res.status(403).json({
+          code: 'GROUP_HAS_ADVISOR',
+          message: 'Group has an assigned advisor and cannot be deleted',
+        });
+      }
+      if (error.code === 'DATA_INTEGRITY_ERROR') {
+        return res.status(409).json({
+          code: 'DATA_INTEGRITY_ERROR',
+          message: error.message,
+        });
+      }
+
+      return res.status(500).json({
+        code: 'GROUP_DELETE_FAILED',
+        message: 'Group cleanup could not be completed.',
+      });
+    }
+  },
+];
+
 const listCoordinatorAdvisors = async (_req, res) => {
   try {
     const advisors = await mentorMatchingService.listActiveAdvisors();
@@ -153,6 +210,7 @@ const listCoordinatorAdvisors = async (_req, res) => {
 };
 
 module.exports = {
+  deleteOrphanGroup,
   listCoordinatorAdvisors,
   removeAdvisorAssignment,
   syncUserDatabaseAssignment,

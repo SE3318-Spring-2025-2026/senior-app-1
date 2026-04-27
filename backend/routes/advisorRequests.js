@@ -1,15 +1,44 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireNonEmptyBody } = require('../middleware/requestValidation');
+const NotificationService = require('../services/notificationService');
+const sequelize = require('../db');
+const { syncAdvisorAssignmentsForGroup } = require('../services/mentorMatchingService');
+const { getAdvisorRequestDetails } = require('../controllers/advisorController');
 const {
+  createAdvisorRequest,
   getPendingAdvisorRequest,
   updatePendingAdvisorRequestStatus,
+  listAdvisorRequests,
 } = require('../controllers/advisorRequestController');
-const { AdvisorRequest, AuditLog, Group } = require('../models');
+const { AdvisorRequest, AuditLog, Group, User } = require('../models');
 
 const router = express.Router();
 
 const buildErrorResponse = (message, code) => ({ message, code });
+
+router.post(
+  '/advisor-requests',
+  authenticate,
+  authorize(['STUDENT']),
+  requireNonEmptyBody,
+  createAdvisorRequest,
+);
+
+router.get(
+  '/advisor-requests',
+  authenticate,
+  authorize(['PROFESSOR']),
+  listAdvisorRequests,
+);
+
+router.get(
+  '/advisor-requests/:requestId',
+  authenticate,
+  authorize(['STUDENT']),
+  getAdvisorRequestDetails,
+);
 
 router.get(
   '/pending-advisor-requests/:requestId',
@@ -22,6 +51,7 @@ router.patch(
   '/pending-advisor-requests/:requestId/status',
   authenticate,
   authorize(['PROFESSOR']),
+  requireNonEmptyBody,
   body('status').isString().trim().notEmpty(),
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -39,6 +69,7 @@ router.patch(
   '/advisor-requests/:requestId/decision',
   authenticate,
   authorize(['PROFESSOR']),
+  requireNonEmptyBody,
   body('decision')
     .isString()
     .trim()
@@ -75,25 +106,63 @@ router.patch(
       const normalizedDecision = String(req.body.decision).toUpperCase();
       const nextStatus = normalizedDecision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
       const note = typeof req.body.note === 'string' ? req.body.note.trim() : null;
+      let group = await Group.findByPk(request.groupId);
 
       if (normalizedDecision === 'APPROVE') {
-        const group = await Group.findByPk(request.groupId);
         if (!group) {
           return res.status(404).json(
             buildErrorResponse('Group not found for this advisor request.', 'GROUP_NOT_FOUND'),
           );
         }
 
-        await group.update({
-          advisorId: String(req.user.id),
-        });
+        if (group.advisorId && String(group.advisorId) !== String(req.user.id)) {
+          return res.status(409).json(
+            buildErrorResponse('Group already has an assigned advisor.', 'GROUP_ALREADY_HAS_ADVISOR'),
+          );
+        }
       }
 
-      await request.update({
-        status: nextStatus,
-        note: note || null,
-        decidedAt: new Date(),
+      await sequelize.transaction(async (transaction) => {
+        if (normalizedDecision === 'APPROVE') {
+          group = await Group.findByPk(request.groupId, { transaction, lock: transaction.LOCK.UPDATE });
+          await group.update({
+            advisorId: String(req.user.id),
+            status: 'HAS_ADVISOR',
+          }, { transaction });
+
+          await syncAdvisorAssignmentsForGroup({
+            groupId: request.groupId,
+            advisorId: req.user.id,
+            transaction,
+          });
+        }
+
+        await request.update({
+          status: nextStatus,
+          note: note || null,
+          decidedAt: new Date(),
+        }, { transaction });
       });
+
+      const advisorUser = await User.findByPk(req.user.id, {
+        attributes: ['id', 'fullName', 'email'],
+      });
+
+      if (request.teamLeaderId) {
+        await NotificationService.notifyTeamLeaderAdvisorDecision({
+          leaderId: request.teamLeaderId,
+          requestId: request.id,
+          groupId: request.groupId,
+          groupName: group?.name || null,
+          advisorDecision: nextStatus,
+          advisorId: advisorUser?.id ?? req.user.id,
+          advisorName: advisorUser?.fullName ?? null,
+          advisorEmail: advisorUser?.email ?? null,
+          message: group?.name
+            ? `Advisor request for ${group.name} was ${nextStatus.toLowerCase()}.`
+            : `Your advisor request was ${nextStatus.toLowerCase()}.`,
+        });
+      }
 
       await AuditLog.create({
         action: nextStatus === 'APPROVED' ? 'ADVISOR_REQUEST_APPROVED' : 'ADVISOR_REQUEST_REJECTED',

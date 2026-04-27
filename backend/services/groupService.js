@@ -1,9 +1,141 @@
 const Group = require('../models/Group');
-const { Invitation, AuditLog } = require('../models');
+const {
+  Invitation,
+  AuditLog,
+  AdvisorRequest,
+  GroupAdvisorAssignment,
+} = require('../models');
 const sequelize = require('../db');
 const NotificationService = require('./notificationService');
+const mentorMatchingService = require('./mentorMatchingService');
+
+function getParticipantSet(group) {
+  const participantIds = new Set();
+
+  if (group?.leaderId) {
+    participantIds.add(String(group.leaderId));
+  }
+
+  (Array.isArray(group?.memberIds) ? group.memberIds : []).forEach((memberId) => {
+    participantIds.add(String(memberId));
+  });
+
+  return participantIds;
+}
 
 class GroupService {
+
+  /**
+   * Release advisor from group
+   */
+  static async releaseAdvisor(groupId, advisorId) {
+    const group = await Group.findByPk(groupId);
+    if (!group) {
+      const error = new Error('Group not found');
+      error.code = 'GROUP_NOT_FOUND';
+      throw error;
+    }
+    if (!group.advisorId) {
+      const error = new Error('No advisor assigned');
+      error.code = 'NO_ADVISOR_ASSIGNED';
+      throw error;
+    }
+    if (String(group.advisorId) !== String(advisorId)) {
+      const error = new Error('Not assigned advisor');
+      error.code = 'NOT_ASSIGNED_ADVISOR';
+      throw error;
+    }
+
+    const result = await mentorMatchingService.removeAdvisorAssignmentFromGroup({
+      groupId,
+      actorId: Number.parseInt(String(advisorId), 10),
+    });
+    const updatedGroup = await Group.findByPk(groupId);
+
+    return {
+      groupId: result.groupId,
+      advisorId: updatedGroup?.advisorId ?? null,
+      status: updatedGroup?.status ?? 'LOOKING_FOR_ADVISOR',
+    };
+  }
+
+  /**
+   * Remove advisor assignment as admin/coordinator or current advisor.
+   */
+  static async removeAdvisorAssignment(groupId, actor) {
+    const group = await Group.findByPk(groupId);
+    if (!group) {
+      const error = new Error('Group not found');
+      error.code = 'GROUP_NOT_FOUND';
+      throw error;
+    }
+    if (!group.advisorId) {
+      const error = new Error('No advisor assigned');
+      error.code = 'NO_ADVISOR_ASSIGNED';
+      throw error;
+    }
+
+    const allowedRoles = ['ADMIN', 'COORDINATOR'];
+    if (!allowedRoles.includes(actor?.role) && String(group.advisorId) !== String(actor?.id)) {
+      const error = new Error('You are not authorized to remove this advisor assignment');
+      error.code = 'FORBIDDEN';
+      throw error;
+    }
+
+    const result = await mentorMatchingService.removeAdvisorAssignmentFromGroup({ groupId });
+    const updatedGroup = await Group.findByPk(groupId);
+
+    return {
+      groupId: result.groupId,
+      advisorId: updatedGroup?.advisorId ?? null,
+      status: updatedGroup?.status ?? 'LOOKING_FOR_ADVISOR',
+      previousAdvisorId: result.previousAdvisorId,
+      removed: result.removed,
+    };
+  }
+
+  /**
+   * Delete orphan group (group without advisor assignment).
+   */
+  static async deleteOrphanGroup(groupId, actor) {
+    const group = await Group.findByPk(groupId);
+    if (!group) {
+      const error = new Error('Group not found');
+      error.code = 'GROUP_NOT_FOUND';
+      throw error;
+    }
+    if (group.advisorId) {
+      const error = new Error('Group has an assigned advisor');
+      error.code = 'GROUP_HAS_ADVISOR';
+      throw error;
+    }
+
+    try {
+      await Invitation.destroy({ where: { groupId: group.id } });
+      await AdvisorRequest.destroy({ where: { groupId: group.id } });
+      await GroupAdvisorAssignment.destroy({ where: { groupId: group.id } });
+      await group.destroy();
+    } catch (err) {
+      const error = new Error(err.message || 'Data integrity error during group deletion');
+      error.code = 'DATA_INTEGRITY_ERROR';
+      throw error;
+    }
+
+    AuditLog.create({
+      action: 'DELETE_ORPHAN_GROUP',
+      actorId: actor?.id || null,
+      targetType: 'GROUP',
+      targetId: group.id,
+      metadata: {
+        groupId: group.id,
+        groupName: group.name,
+        reason: 'No advisor assigned',
+      },
+    }).catch((err) => console.error('Audit log failed (DELETE_ORPHAN_GROUP):', err));
+
+    return { groupId: group.id, removed: true };
+  }
+
   static async findAnyGroupForUser(userId, options = {}) {
     const normalizedUserId = String(userId);
     const excludedGroupId = options.excludeGroupId ? String(options.excludeGroupId) : null;
@@ -20,7 +152,7 @@ class GroupService {
 
       const leaderMatches = String(group.leaderId || '') === normalizedUserId;
       const memberMatches = Array.isArray(group.memberIds)
-        && group.memberIds.map((id) => String(id)).includes(normalizedUserId);
+        && group.memberIds.map(String).includes(normalizedUserId);
 
       return leaderMatches || memberMatches;
     }) || null;
@@ -40,7 +172,7 @@ class GroupService {
         }
 
         return Array.isArray(group.memberIds)
-          && group.memberIds.map((id) => String(id)).includes(userId);
+          && group.memberIds.map(String).includes(userId);
       });
 
       if (isMemberInAnotherGroup) {
@@ -102,7 +234,8 @@ class GroupService {
         throw error;
       }
 
-      const currentMembers = group.memberIds || [];
+      const currentMembers = Array.isArray(group.memberIds) ? group.memberIds.map(String) : [];
+      const currentParticipants = getParticipantSet(group);
 
       const existingGroup = await GroupService.findAnyGroupForUser(studentId, {
         excludeGroupId: group.id,
@@ -114,19 +247,20 @@ class GroupService {
         throw error;
       }
 
-      if (currentMembers.includes(studentId)) {
+      if (currentMembers.includes(String(studentId))) {
         const error = new Error('Student is already a member of this group');
         error.code = 'DUPLICATE_MEMBER';
         throw error;
       }
 
-      if (currentMembers.length >= group.maxMembers) {
+      if (currentParticipants.size >= group.maxMembers) {
         const error = new Error('Group has reached maximum member capacity');
         error.code = 'MAX_MEMBERS_REACHED';
         throw error;
       }
 
-      const updatedMembers = [...currentMembers, studentId];
+      const updatedMembers = [...currentMembers, String(studentId)];
+      const updatedTotalMembers = currentParticipants.size + 1;
       await group.update({ memberIds: updatedMembers }, { transaction });
       await transaction.commit();
 
@@ -135,7 +269,7 @@ class GroupService {
           groupId: group.id,
           leaderId: group.leaderId,
           studentId,
-          totalMembers: updatedMembers.length,
+          totalMembers: updatedTotalMembers,
           maxMembers: group.maxMembers,
         });
       }
@@ -143,7 +277,7 @@ class GroupService {
       return {
         groupId: group.id,
         studentId,
-        totalMembers: updatedMembers.length,
+        totalMembers: updatedTotalMembers,
         maxMembers: group.maxMembers,
         success: true,
       };
@@ -185,12 +319,19 @@ class GroupService {
 
     const existing = await Invitation.findAll({
       where: { groupId, inviteeId: uniqueInviteeIds },
-      attributes: ['inviteeId'],
+      attributes: ['id', 'groupId', 'inviteeId', 'status'],
     });
 
-    const alreadyInvited = new Set(existing.map((inv) => inv.inviteeId));
-    const toInsert = uniqueInviteeIds.filter((id) => !alreadyInvited.has(id));
-    const skipped = uniqueInviteeIds.filter((id) => alreadyInvited.has(id));
+    const pendingInviteeIds = new Set(
+      existing
+        .filter((invitation) => invitation.status === 'PENDING')
+        .map((invitation) => invitation.inviteeId),
+    );
+    const recyclableInvitations = existing.filter((invitation) => invitation.status !== 'PENDING');
+    const recyclableInviteeIds = new Set(recyclableInvitations.map((invitation) => invitation.inviteeId));
+
+    const toInsert = uniqueInviteeIds.filter((id) => !pendingInviteeIds.has(id) && !recyclableInviteeIds.has(id));
+    const skipped = uniqueInviteeIds.filter((id) => pendingInviteeIds.has(id));
 
     let created = [];
     if (toInsert.length > 0) {
@@ -199,6 +340,15 @@ class GroupService {
         { returning: true },
       );
     }
+
+    const requeued = await Promise.all(
+      recyclableInvitations.map(async (invitation) => {
+        await invitation.update({ status: 'PENDING' });
+        return invitation;
+      }),
+    );
+
+    created = [...created, ...requeued];
 
     for (const invitation of created) {
       NotificationService.queueInviteAlert(
@@ -291,18 +441,16 @@ class GroupService {
   // Internal helpers
   // ---------------------------------------------------------------------------
 
-  static async _writeAuditLog({ invitationId, groupId, actorId, action }) {
-    try {
-      await AuditLog.create({
-        entityType: 'INVITATION',
-        entityId: invitationId,
-        actorId,
-        action,
-        metadata: JSON.stringify({ groupId }),
-      });
-    } catch (err) {
+  static _writeAuditLog({ invitationId, groupId, actorId, action }) {
+    AuditLog.create({
+      targetType: 'INVITATION',
+      targetId: invitationId,
+      actorId,
+      action,
+      metadata: { groupId },
+    }).catch((err) => {
       console.error('[GroupService] _writeAuditLog failed', { invitationId, action }, err);
-    }
+    });
   }
 }
 

@@ -11,22 +11,47 @@ export default function GroupPage() {
   const [group, setGroup] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
-  const [userStudentId, setUserStudentId] = useState(null);
+  const [releasing, setReleasing] = useState(false);
+  const [studentUserId, setStudentUserId] = useState(null);
+  const [studentNumber, setStudentNumber] = useState(null);
+  const [userAdvisorId, setUserAdvisorId] = useState(null);
   const [error, setError] = useState(null);
+  const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
+  const [isStudentViewer, setIsStudentViewer] = useState(false);
 
-  // Get current user's student ID from auth token or localStorage
+  const loadGroupData = async () => {
+    const response = await apiClient.get(`/v1/groups/${groupId}/membership`);
+    return response.data.data;
+  };
+
   useEffect(() => {
-    const studentId = window.localStorage.getItem('studentId');
-    setUserStudentId(studentId);
+    const legacyStudentId = window.localStorage.getItem('studentId');
+
+    try {
+      const studentUser = JSON.parse(window.localStorage.getItem('studentUser') || '{}');
+      setStudentUserId(studentUser?.id ? String(studentUser.id) : null);
+      setStudentNumber(studentUser?.studentId || legacyStudentId || null);
+      setIsStudentViewer(Boolean(studentUser?.id || legacyStudentId));
+    } catch {
+      setStudentUserId(null);
+      setStudentNumber(legacyStudentId || null);
+      setIsStudentViewer(Boolean(legacyStudentId));
+    }
+
+    try {
+      const professorUser = JSON.parse(window.localStorage.getItem('professorUser') || '{}');
+      setUserAdvisorId(professorUser?.id ? String(professorUser.id) : null);
+    } catch {
+      setUserAdvisorId(null);
+    }
   }, []);
 
-  // Fetch group membership details
   useEffect(() => {
     const fetchGroupData = async () => {
       try {
         setLoading(true);
-        const response = await apiClient.get(`/v1/groups/${groupId}/membership`);
-        setGroup(response.data.data);
+        const data = await loadGroupData();
+        setGroup(data);
         setError(null);
       } catch (err) {
         console.error('Error fetching group data:', err);
@@ -46,13 +71,48 @@ export default function GroupPage() {
     }
   }, [groupId, notify]);
 
-  // Handle joining group
-  const handleJoinGroup = async () => {
-    if (!userStudentId) {
+  async function confirmAdvisorRelease() {
+    if (!userAdvisorId) {
       notify({
         type: 'error',
         title: 'Not authenticated',
-        message: 'Please log in first',
+        message: 'Please log in as advisor.',
+      });
+      return;
+    }
+
+    try {
+      setReleasing(true);
+      const response = await apiClient.patch(`/v1/groups/${groupId}/advisor-release`);
+      setGroup((prev) => ({
+        ...prev,
+        advisorId: null,
+        advisor: null,
+        status: response.data?.data?.status || 'LOOKING_FOR_ADVISOR',
+      }));
+      setShowReleaseConfirm(false);
+      notify({
+        type: 'success',
+        title: 'Advisor released',
+        message: 'You have released your advisor assignment.',
+      });
+    } catch (err) {
+      notify({
+        type: 'error',
+        title: 'Release failed',
+        message: err.response?.data?.message || 'Could not release advisor assignment.',
+      });
+    } finally {
+      setReleasing(false);
+    }
+  }
+
+  async function handleJoinGroup() {
+    if (!studentNumber) {
+      notify({
+        type: 'error',
+        title: 'Not authenticated',
+        message: 'Please log in first.',
       });
       navigate('/');
       return;
@@ -61,43 +121,37 @@ export default function GroupPage() {
     try {
       setJoining(true);
 
-      const response = await apiClient.post(`/v1/groups/${groupId}/membership/finalize`, {
-        studentId: userStudentId,
+      await apiClient.post(`/v1/groups/${groupId}/membership/finalize`, {
+        studentId: studentNumber,
       });
 
-      // Update local state
-      setGroup((prevGroup) => ({
-        ...prevGroup,
-        members: response.data.data.members || [...(prevGroup?.members || []), userStudentId],
-        currentMemberCount: response.data.data.totalMembers,
-      }));
+      const refreshedGroup = await loadGroupData();
+      setGroup(refreshedGroup);
 
-      // Show success notification
       notify({
         type: 'success',
         title: 'Joined group successfully',
-        message: `Welcome to ${group?.groupName || 'the group'}!`,
+        message: `Welcome to ${group?.groupName || 'the group'}.`,
       });
     } catch (err) {
       console.error('Error joining group:', err);
 
-      // Check for specific error codes
       const errorCode = err.response?.data?.code;
       let errorTitle = 'Failed to join group';
-      let errorMessage = 'Please try again';
+      let errorMessage = 'Please try again.';
 
       if (errorCode === 'DUPLICATE_MEMBER') {
         errorTitle = 'Already a member';
-        errorMessage = 'You are already a member of this group';
+        errorMessage = 'You are already a member of this group.';
       } else if (errorCode === 'MAX_MEMBERS_REACHED') {
         errorTitle = 'Group is full';
-        errorMessage = 'This group has reached maximum capacity';
+        errorMessage = 'This group has reached maximum capacity.';
       } else if (errorCode === 'GROUP_FINALIZED') {
         errorTitle = 'Group is closed';
-        errorMessage = 'This group is no longer accepting members';
+        errorMessage = 'This group is no longer accepting members.';
       } else if (errorCode === 'GROUP_NOT_FOUND') {
         errorTitle = 'Group not found';
-        errorMessage = 'Unable to find this group';
+        errorMessage = 'Unable to find this group.';
       }
 
       notify({
@@ -108,149 +162,176 @@ export default function GroupPage() {
     } finally {
       setJoining(false);
     }
-  };
+  }
 
   if (loading) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <p>Loading group details...</p>
-      </div>
+      <main className="page page-group-view">
+        <div className="feedback feedback-loading">
+          <div className="feedback-label">loading</div>
+          <h2>Loading group</h2>
+          <p>Fetching group details...</p>
+        </div>
+      </main>
     );
   }
 
   if (error || !group) {
     return (
-      <div style={{ padding: '2rem' }}>
-        <h2>Group Not Found</h2>
-        <p>{error}</p>
-        <button onClick={() => navigate('/')}>Go Back</button>
-      </div>
+      <main className="page page-group-view">
+        <div className="feedback feedback-error">
+          <div className="feedback-label">error</div>
+          <h2>Group not found</h2>
+          <p>{error || 'The requested group could not be loaded.'}</p>
+        </div>
+        <div className="group-action-row">
+          <button type="button" onClick={() => navigate('/')}>Back</button>
+        </div>
+      </main>
     );
   }
 
-  const isAlreadyMember = userStudentId && group.members?.includes(userStudentId);
+  const isAlreadyMember = Boolean(
+    studentUserId
+    && (group.memberIds || group.members?.map((member) => String(member.id)) || []).includes(String(studentUserId)),
+  );
   const isFull = group.currentMemberCount >= group.maxMembers;
   const isFinalized = group.status === 'COMPLETED' || group.status === 'DISBANDED';
+  const isAdvisor = userAdvisorId && group.advisorId && String(group.advisorId) === String(userAdvisorId);
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
-      {/* Group Header */}
-      <div style={{ marginBottom: '2rem' }}>
+    <main className="page page-group-view">
+      <section className="hero group-page-header">
+        <p className="eyebrow">Group Workspace</p>
         <h1>{group.groupName || 'Unnamed Group'}</h1>
-        <p style={{ color: '#666' }}>Status: <strong>{group.status}</strong></p>
-      </div>
+        <p className="group-page-status">
+          Status <strong>{group.status}</strong>
+        </p>
+      </section>
 
-      {/* Group Info */}
-      <div style={{ 
-        border: '1px solid #ddd', 
-        padding: '1rem', 
-        borderRadius: '8px', 
-        marginBottom: '2rem',
-        backgroundColor: '#f9f9f9',
-      }}>
-        <div style={{ marginBottom: '1rem' }}>
+      <section className="group-details-card">
+        <div className="group-details-summary">
           <h3>Group Details</h3>
-          <p><strong>Status:</strong> {group.status}</p>
-          <p><strong>Members:</strong> {group.currentMemberCount} / {group.maxMembers}</p>
-          <p><strong>Available Slots:</strong> {group.availableSlots}</p>
+          <div className="group-summary-grid">
+            <div className="group-summary-item">
+              <span>Status</span>
+              <strong>{group.status}</strong>
+            </div>
+            <div className="group-summary-item">
+              <span>Members</span>
+              <strong>{group.currentMemberCount} / {group.maxMembers}</strong>
+            </div>
+            <div className="group-summary-item">
+              <span>Available Slots</span>
+              <strong>{group.availableSlots}</strong>
+            </div>
+            <div className="group-summary-item">
+              <span>Advisor</span>
+              <strong>
+                {group.advisor
+                  ? `${group.advisor.fullName || group.advisor.email}${group.advisor.department ? ` (${group.advisor.department})` : ''}`
+                  : 'None assigned'}
+              </strong>
+            </div>
+          </div>
         </div>
 
-        {/* Member List */}
         <div>
-          <h3>Members ({group.members?.length || 0})</h3>
+          <h3>Members ({group.currentMemberCount || 0})</h3>
           {group.members && group.members.length > 0 ? (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {group.members.map((memberId, index) => (
-                <li
-                  key={`${memberId}-${index}`}
-                  style={{
-                    padding: '0.5rem',
-                    backgroundColor: '#fff',
-                    borderRadius: '4px',
-                    marginBottom: '0.5rem',
-                    border: '1px solid #eee',
-                  }}
-                >
-                  {memberId}
-                  {memberId === userStudentId && (
-                    <span style={{ marginLeft: '0.5rem', color: '#28a745', fontWeight: 'bold' }}>
-                      (You)
-                    </span>
+            <ul className="group-members-list">
+              {group.members.map((member, index) => (
+                <li key={`${member.id}-${index}`} className="group-member-chip">
+                  <span>
+                    {member.fullName || member.email || member.studentId || member.id}
+                    {member.isLeader ? ' (Leader)' : ''}
+                  </span>
+                  {String(member.id) === String(studentUserId) && (
+                    <span className="group-member-you">(You)</span>
                   )}
                 </li>
               ))}
             </ul>
           ) : (
-            <p style={{ color: '#999' }}>No members yet</p>
+            <p className="group-muted">No members yet.</p>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '1rem' }}>
-        {isAlreadyMember ? (
-          <div style={{ 
-            padding: '1rem', 
-            backgroundColor: '#d4edda', 
-            color: '#155724', 
-            borderRadius: '4px',
-            flex: 1,
-          }}>
-            ✓ You are a member of this group
+      <section className="group-action-stack">
+        {isStudentViewer && isAlreadyMember && (
+          <div className="group-callout group-callout-success">
+            You are already a member of this group.
           </div>
-        ) : isFinalized ? (
-          <div style={{ 
-            padding: '1rem', 
-            backgroundColor: '#f8d7da', 
-            color: '#721c24', 
-            borderRadius: '4px',
-            flex: 1,
-          }}>
-            This group is no longer accepting members
-          </div>
-        ) : isFull ? (
-          <div style={{ 
-            padding: '1rem', 
-            backgroundColor: '#fff3cd', 
-            color: '#856404', 
-            borderRadius: '4px',
-            flex: 1,
-          }}>
-            This group is at full capacity
-          </div>
-        ) : (
-          <button
-            onClick={handleJoinGroup}
-            disabled={joining}
-            style={{
-              padding: '0.75rem 1.5rem',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: joining ? 'not-allowed' : 'pointer',
-              opacity: joining ? 0.6 : 1,
-              flex: 1,
-            }}
-          >
-            {joining ? 'Joining...' : 'Join Group'}
-          </button>
         )}
 
-        <button
-          onClick={() => navigate('/')}
-          style={{
-            padding: '0.75rem 1.5rem',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Back
-        </button>
-      </div>
-    </div>
+        {isStudentViewer && !isAlreadyMember && isFinalized && (
+          <div className="group-callout group-callout-error">
+            This group is no longer accepting members.
+          </div>
+        )}
+
+        {isStudentViewer && !isAlreadyMember && !isFinalized && isFull && (
+          <div className="group-callout group-callout-warning">
+            This group is currently at full capacity.
+          </div>
+        )}
+
+        <div className="group-action-row">
+          {isStudentViewer && !isAlreadyMember && !isFinalized && !isFull && (
+            <button type="button" onClick={handleJoinGroup} disabled={joining}>
+              {joining ? 'Joining...' : 'Join Group'}
+            </button>
+          )}
+
+          {isAdvisor && (
+            <button
+              type="button"
+              className="cleanup-delete-button"
+              onClick={() => setShowReleaseConfirm(true)}
+              disabled={releasing}
+            >
+              {releasing ? 'Releasing...' : 'Release Advisor Assignment'}
+            </button>
+          )}
+
+          <button type="button" onClick={() => navigate('/')}>Back</button>
+        </div>
+      </section>
+
+      {showReleaseConfirm && (
+        <div className="dialog-overlay" role="dialog" aria-modal="true" aria-label="Release advisor assignment">
+          <div
+            className="dialog-backdrop"
+            aria-hidden="true"
+            onClick={() => {
+              if (!releasing) {
+                setShowReleaseConfirm(false);
+              }
+            }}
+          />
+          <section className="dialog-card">
+            <span className="mail-topic">Advisor Release</span>
+            <h2>Confirm release</h2>
+            <p>
+              Release your advisor assignment from <strong>{group.groupName}</strong>? The group will return to the advisor search state.
+            </p>
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="cleanup-delete-button"
+                onClick={confirmAdvisorRelease}
+                disabled={releasing}
+              >
+                {releasing ? 'Releasing...' : 'Yes, Release'}
+              </button>
+              <button type="button" onClick={() => setShowReleaseConfirm(false)} disabled={releasing}>
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </main>
   );
 }

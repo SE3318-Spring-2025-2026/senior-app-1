@@ -1,5 +1,6 @@
 const { body, param, validationResult } = require('express-validator');
 const coordinatorGroupService = require('../services/coordinatorGroupService');
+const deliverableRubricService = require('../services/deliverableRubricService');
 
 const updateGroupMembership = [
   param('groupId').isString().trim().notEmpty(),
@@ -40,7 +41,61 @@ const updateGroupMembership = [
   },
 ];
 
+const createRubric = [
+  body('deliverableName').isString().trim().notEmpty(),
+  body('criteria').isArray({ min: 1 }),
+  body('criteria.*.name').isString().trim().notEmpty(),
+  body('criteria.*.description').optional().isString().trim(),
+  body('criteria.*.maxPoints').isInt({ min: 0 }).toInt(),
+  body('totalPoints').isInt({ min: 0 }).toInt(),
+  body('courseId').optional().isInt().toInt(),
+
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        code: 'INVALID_RUBRIC_INPUT',
+        message: 'Rubric payload failed validation.',
+        errors: errors.array(),
+      });
+    }
+
+    try {
+      const { deliverableName, criteria, totalPoints, courseId } = req.body;
+
+      const rubric = await deliverableRubricService.createRubric({
+        deliverableName,
+        criteria,
+        totalPoints,
+        courseId,
+        actorId: req.user?.id ?? null,
+      });
+
+      return res.status(201).json({
+        code: 'CREATED',
+        message: 'Rubric created successfully.',
+        data: {
+          id: rubric.id,
+          deliverableName: rubric.deliverableName,
+          criteria: rubric.criteria,
+          totalPoints: rubric.totalPoints,
+          courseId: rubric.courseId,
+          createdAt: rubric.createdAt,
+        },
+      });
+    } catch (error) {
+      if (error.status && error.code) {
+        return res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+      }
+      return next(error);
+    }
+  },
+];
+
 module.exports = {
   updateGroupMembership,
+  createRubric,
 };
-

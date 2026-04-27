@@ -18,6 +18,15 @@ const Invitation = require('./Invitation');
 const AuditLog = require('./AuditLog');
 const Notification = require('./Notification');
 const IntegrationTokenReference = require('./IntegrationTokenReference');
+const GradingRubric = require('./GradingRubric');
+const Grade = require('./Grade');
+const DeliverableRubric = require('./DeliverableRubric');
+const Deliverable = require('./Deliverable');
+const CommitteeReview = require('./CommitteeReview');
+const SprintWeightConfiguration = require('./SprintWeightConfiguration');
+const DeliverableSubmission = require('./DeliverableSubmission');
+const DeliverableWeightConfiguration = require('./DeliverableWeightConfiguration');
+const GroupDeliverable = require('./GroupDeliverable');
 
 module.exports = {
   User,
@@ -32,4 +41,13 @@ module.exports = {
   AuditLog,
   Notification,
   IntegrationTokenReference,
+  GradingRubric,
+  Grade,
+  DeliverableRubric,
+  Deliverable,
+  CommitteeReview,
+  SprintWeightConfiguration,
+  DeliverableSubmission,
+  DeliverableWeightConfiguration,
+  GroupDeliverable,
 };
