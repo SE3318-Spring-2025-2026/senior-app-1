@@ -12,6 +12,14 @@ function mapErrorResponse(payload) {
       return { type: 'error', title: 'Student not eligible', result: 'Rejected' };
     case 'GITHUB_ACCOUNT_ALREADY_LINKED_FOR_STUDENT':
       return { type: 'warning', title: 'GitHub already linked', result: 'Already linked' };
+    case 'DUPLICATE_MEMBER':
+      return { type: 'warning', title: 'Already a member', result: 'Already joined' };
+    case 'MAX_MEMBERS_REACHED':
+      return { type: 'warning', title: 'Group is full', result: 'At capacity' };
+    case 'GROUP_FINALIZED':
+      return { type: 'error', title: 'Group is closed', result: 'No longer accepting' };
+    case 'GROUP_NOT_FOUND':
+      return { type: 'error', title: 'Group not found', result: 'Not found' };
     default:
       return { type: 'error', title: 'Validation failed', result: 'Failed' };
   }
@@ -54,6 +62,18 @@ const apiClient = {
   },
   post(path, body) {
     return request('POST', path, body);
+  },
+  put(path, body) {
+    return request('PUT', path, body);
+  },
+  patch(path, body) {
+    return request('PATCH', path, body);
+  },
+  put(path, body) {
+    return request('PUT', path, body);
+  },
+  delete(path) {
+    return request('DELETE', path);
   },
 };
 

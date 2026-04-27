@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 process.env.JWT_SECRET = 'test-secret';
 process.env.SQLITE_STORAGE = ':memory:';
 process.env.FRONTEND_URL = 'http://localhost:5173';
+process.env.FRONTEND_GITHUB_RETURN_URL = 'http://localhost:5173/home';
 process.env.GITHUB_CLIENT_ID = '';
 process.env.GITHUB_CLIENT_SECRET = '';
 
@@ -518,7 +519,6 @@ test('POST /groups/:groupId/invitations returns 400 for ineligible student IDs',
 });
 
 
-
 //sprint 3
 
 async function createUserWithRole(role, overrides = {}) {
@@ -588,6 +588,7 @@ test('GET /committee/submissions/:id returns aggregated review packet with corre
   let Submission, DeliverableRubric;
   try {
     ({ Submission, DeliverableRubric } = require('../models'));
+    if (!Submission || !DeliverableRubric) throw new Error('missing');
   } catch (_) {
     assert.fail('Submission and DeliverableRubric models must be exported from ../models');
   }
@@ -636,6 +637,7 @@ test('GET /committee/submissions/:id returns packet even when weight config is m
   let Submission, DeliverableRubric;
   try {
     ({ Submission, DeliverableRubric } = require('../models'));
+    if (!Submission || !DeliverableRubric) throw new Error('missing');
   } catch (_) {
     assert.fail('Submission and DeliverableRubric models must be exported from ../models');
   }
@@ -710,6 +712,7 @@ test('submission packet preserves markdown content integrity from D5 store', asy
   let Submission, DeliverableRubric, Document;
   try {
     ({ Submission, DeliverableRubric, Document } = require('../models'));
+    if (!Submission || !DeliverableRubric || !Document) throw new Error('missing');
   } catch (_) {
     assert.fail('Submission, DeliverableRubric, Document models must exist');
   }
@@ -763,6 +766,7 @@ test('corrupted or missing documentRef in D5 store returns 404 not 500', async (
   let Submission, DeliverableRubric;
   try {
     ({ Submission, DeliverableRubric } = require('../models'));
+    if (!Submission || !DeliverableRubric) throw new Error('missing');
   } catch (_) {
     assert.fail('Submission and DeliverableRubric models must exist');
   }
@@ -835,6 +839,7 @@ test('POST /coordinator/rubrics with valid payload returns 201 and persists to D
   let DeliverableRubric, RubricCriterion;
   try {
     ({ DeliverableRubric, RubricCriterion } = require('../models'));
+    if (!DeliverableRubric || !RubricCriterion) throw new Error('missing');
   } catch (_) {
     assert.fail('DeliverableRubric and RubricCriterion models must exist');
   }

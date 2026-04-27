@@ -487,6 +487,64 @@ components:
         message: Student GitHub link updated successfully
 
 paths:
+  /api/v1/auth/register:
+    post:
+      tags: ["Student"]
+      summary: Unified auth-page sign up (student-only)
+      description: Public sign-up endpoint used by the unified auth page. Only `role=STUDENT` is accepted. Requests for PROFESSOR, COORDINATOR, or ADMIN are rejected to preserve privilege boundaries.
+      operationId: registerStudentViaUnifiedAuth
+      requestBody:
+        required: true
+        description: Student sign-up payload from unified auth page.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role, studentId, email, fullName, password]
+              properties:
+                role:
+                  type: string
+                  example: STUDENT
+                studentId:
+                  type: string
+                  example: "11070001000"
+                email:
+                  type: string
+                  format: email
+                  example: student@university.edu
+                fullName:
+                  type: string
+                  example: Ali Veli
+                password:
+                  type: string
+                  format: password
+                  example: StrongPassword123!
+      responses:
+        201:
+          description: Student account created successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+        400:
+          description: Missing or malformed registration fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Non-student role sign-up is not allowed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        409:
+          description: Student is already registered or email is already in use.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/user-database/valid-student-ids:
     post:
       tags: ["User Database", "Internal"]

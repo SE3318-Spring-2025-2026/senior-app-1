@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
 
 const initialForm = {
-  email: '',
+  setupToken: '',
   newPassword: '',
 };
 
 const initialFeedback = {
   type: 'idle',
   title: 'Create your professor password',
-  message: 'Enter your professor email and choose a strong password to activate your account.',
+  message: 'Enter your setup token and choose a strong password to activate your account.',
   result: '',
 };
 
@@ -59,8 +60,11 @@ function mapSetupError(payload, status) {
 }
 
 export default function ProfessorPasswordSetupPage() {
+  const [searchParams] = useSearchParams();
+  const tokenFromUrl = searchParams.get('token') || '';
   const [form, setForm] = useState(() => ({
     ...initialForm,
+    setupToken: tokenFromUrl,
   }));
   const [feedback, setFeedback] = useState(initialFeedback);
   const [submitting, setSubmitting] = useState(false);
@@ -78,7 +82,7 @@ export default function ProfessorPasswordSetupPage() {
     setFeedback({
       type: 'loading',
       title: 'Setting your password',
-      message: 'Checking the professor email and saving your new password.',
+      message: 'Validating setup token and saving your new password.',
       result: '',
     });
 
@@ -89,7 +93,7 @@ export default function ProfessorPasswordSetupPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: form.email,
+          setupToken: form.setupToken,
           newPassword: form.newPassword,
         }),
       });
@@ -113,7 +117,7 @@ export default function ProfessorPasswordSetupPage() {
       });
       setForm((current) => ({
         ...current,
-        email: '',
+        setupToken: tokenFromUrl,
         newPassword: '',
       }));
     } catch (error) {
@@ -147,22 +151,20 @@ export default function ProfessorPasswordSetupPage() {
         <p className="eyebrow">Professor Access</p>
         <h1>Professor Initial Password Setup</h1>
         <p className="subtitle">
-          Newly invited professors activate their account here by entering their professor email and choosing their
-          first password.
+          Newly invited professors activate their account by using the setup token generated during admin registration.
         </p>
       </section>
 
       <section className="panel">
         <form className="form" onSubmit={handleSubmit}>
           <label className="field">
-            <span>Professor Email</span>
+            <span>Setup Token</span>
             <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              placeholder="prof@example.edu"
-              value={form.email}
+              id="setupToken"
+              name="setupToken"
+              type="text"
+              placeholder="pst_xxx"
+              value={form.setupToken}
               onChange={handleChange}
               required
             />
@@ -194,8 +196,8 @@ export default function ProfessorPasswordSetupPage() {
             <p className="feedback-label">How It Works</p>
             <h2>First-time professor access</h2>
             <p className="token-copy">
-              Enter the same professor email used during account creation, choose a strong password, and submit once.
-              Only professor accounts that are still waiting for first-time password setup can be activated here.
+              Enter the setup token from admin registration, choose a strong password, and submit once.
+              Tokens are one-time use and expire automatically.
             </p>
           </section>
 

@@ -35,8 +35,24 @@ function buildAuthorizationUrl(state) {
   return `https://github.com/login/oauth/authorize?${params.toString()}`;
 }
 
+function normalizeFrontendReturnUrl(rawUrl) {
+  const url = new URL(rawUrl);
+  if (url.pathname === '/' || url.pathname === '') {
+    url.pathname = '/home';
+  }
+  return url.toString();
+}
+
 function getFrontendUrl() {
-  return process.env.FRONTEND_GITHUB_RETURN_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
+  if (process.env.FRONTEND_GITHUB_RETURN_URL) {
+    return normalizeFrontendReturnUrl(process.env.FRONTEND_GITHUB_RETURN_URL);
+  }
+
+  if (process.env.FRONTEND_URL) {
+    return normalizeFrontendReturnUrl(process.env.FRONTEND_URL);
+  }
+
+  return 'http://localhost:5173/home';
 }
 
 async function createOAuthState(userId) {

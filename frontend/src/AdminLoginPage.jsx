@@ -75,7 +75,7 @@ export default function AdminLoginPage() {
       setFeedback({
         type: 'success',
         title: 'Signed in successfully',
-        message: result.message || 'Admin login successful. Redirecting to the admin workspace.',
+        message: result.message || 'Admin login successful. Redirecting to home.',
       });
       notify({
         type: 'success',
@@ -84,7 +84,7 @@ export default function AdminLoginPage() {
       });
 
       window.setTimeout(() => {
-        navigate('/admin');
+        navigate('/home');
       }, 500);
     } catch (error) {
       setFeedback({

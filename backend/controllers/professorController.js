@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const professorService = require('../services/professorService');
+const { Professor, User } = require('../models');
 
 const buildErrorResponse = (message, errorCode) => ({
   message,
@@ -62,9 +63,9 @@ const loginProfessor = [
 ];
 
 const setupProfessorPassword = [
+  body('newPassword').isString().notEmpty(),
   body('setupToken').optional().isString().trim().notEmpty(),
   body('email').optional().isEmail().normalizeEmail(),
-  body('newPassword').isString().notEmpty(),
 
   async (req, res) => {
     const errors = validationResult(req);
@@ -74,16 +75,18 @@ const setupProfessorPassword = [
       );
     }
 
-    const { email, setupToken, newPassword } = req.body;
+    const { setupToken, email, newPassword } = req.body;
+    const hasSetupToken = typeof setupToken === 'string' && setupToken.trim().length > 0;
+    const hasEmail = typeof email === 'string' && email.trim().length > 0;
 
-    if (!setupToken && !email) {
+    if (!hasSetupToken && !hasEmail) {
       return res.status(400).json(
-        buildErrorResponse('Either setup token or professor email is required', 'VALIDATION_FAILED')
+        buildErrorResponse('setupToken or email is required', 'VALIDATION_FAILED')
       );
     }
 
     try {
-      const result = setupToken
+      const result = hasSetupToken
         ? await professorService.setInitialPassword(setupToken, newPassword)
         : await professorService.setInitialPasswordByEmail(email, newPassword);
 
@@ -94,18 +97,6 @@ const setupProfessorPassword = [
           buildErrorResponse(
             'Setup token is invalid, expired, or already used',
             'SETUP_TOKEN_NOT_FOUND'
-          )
-        );
-      }
-
-      if (
-        error.message === 'INVALID_PROFESSOR_EMAIL' ||
-        error.message === 'PROFESSOR_SETUP_NOT_FOUND'
-      ) {
-        return res.status(404).json(
-          buildErrorResponse(
-            'Professor setup request was not found for this email',
-            'PROFESSOR_SETUP_NOT_FOUND'
           )
         );
       }
@@ -128,6 +119,15 @@ const setupProfessorPassword = [
         );
       }
 
+      if (error.message === 'PROFESSOR_SETUP_NOT_FOUND' || error.message === 'INVALID_PROFESSOR_EMAIL') {
+        return res.status(404).json(
+          buildErrorResponse(
+            'Professor setup request not found or already completed',
+            'PROFESSOR_SETUP_NOT_FOUND'
+          )
+        );
+      }
+
       return res.status(500).json(
         buildErrorResponse('Internal Server Error', 'INTERNAL_SERVER_ERROR')
       );
@@ -135,4 +135,35 @@ const setupProfessorPassword = [
   },
 ];
 
-module.exports = { loginProfessor, setupProfessorPassword };
+async function listProfessors(req, res) {
+  try {
+    const professors = await Professor.findAll({
+      include: [
+        {
+          model: User,
+          attributes: ['id', 'fullName', 'email', 'role'],
+          where: { role: 'PROFESSOR' },
+        },
+      ],
+    });
+
+    return res.status(200).json(
+      professors
+        .map((professor) => ({
+        id: professor.userId,
+        professorProfileId: professor.id,
+        fullName: professor.User?.fullName || '',
+        email: professor.User?.email || '',
+        department: professor.department || '',
+        }))
+        .sort((left, right) => left.fullName.localeCompare(right.fullName)),
+    );
+  } catch (error) {
+    console.error('Error listing professors:', error);
+    return res.status(500).json(
+      buildErrorResponse('Failed to fetch professors', 'INTERNAL_SERVER_ERROR'),
+    );
+  }
+}
+
+module.exports = { loginProfessor, setupProfessorPassword, listProfessors };

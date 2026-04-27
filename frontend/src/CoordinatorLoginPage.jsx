@@ -75,7 +75,7 @@ export default function CoordinatorLoginPage() {
       setFeedback({
         type: 'success',
         title: 'Signed in successfully',
-        message: result.message || 'Coordinator login successful. Redirecting to the coordinator workspace.',
+        message: result.message || 'Coordinator login successful. Redirecting to home.',
       });
       notify({
         type: 'success',
@@ -84,7 +84,7 @@ export default function CoordinatorLoginPage() {
       });
 
       window.setTimeout(() => {
-        navigate('/coordinator');
+        navigate('/home');
       }, 500);
     } catch {
       setFeedback({

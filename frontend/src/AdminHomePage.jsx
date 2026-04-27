@@ -1,4 +1,7 @@
 import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useNotification } from './contexts/NotificationContext';
 
 function getAdminName() {
   try {
@@ -25,16 +28,48 @@ const adminTools = [
   },
   {
     eyebrow: 'Registry',
-    title: 'Coordinator Workspace',
-    description: 'Open the coordinator area, where valid student ID import appears as one of the available tools.',
-    href: '/coordinator',
-    cta: 'Open Coordinator Workspace',
+    title: 'Add Coordinator',
+    description: 'Create a coordinator account that can manage student ID imports and manual group membership edits.',
+    href: '/admin/coordinators/new',
+    cta: 'Open Add Coordinator',
+    status: 'Ready',
+  },
+  {
+    eyebrow: 'Groups',
+    title: 'Group Cleanup',
+    description: 'Delete orphan groups from the group database when they no longer have an assigned advisor.',
+    href: '/admin/groups/cleanup',
+    cta: 'Open Cleanup Tool',
+    status: 'Ready',
+  },
+  {
+    eyebrow: 'Compliance',
+    title: 'Audit Logs',
+    description: 'Inspect recorded actions and trace actor, target, and metadata from the admin workspace.',
+    href: '/admin/audit-logs',
+    cta: 'Open Audit Logs',
     status: 'Ready',
   },
 ];
 
 export default function AdminHomePage() {
+  const navigate = useNavigate();
+  const { notify } = useNotification();
   const adminName = getAdminName();
+  const token = window.localStorage.getItem('adminToken') || '';
+
+  useEffect(() => {
+    if (token) {
+      return;
+    }
+
+    notify({
+      type: 'warning',
+      title: 'Admin login required',
+      message: 'Please sign in before opening the admin workspace.',
+    });
+    navigate('/admin/login', { replace: true });
+  }, [navigate, notify, token]);
 
   return (
     <main className="page">

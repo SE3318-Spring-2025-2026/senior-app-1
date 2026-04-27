@@ -192,11 +192,34 @@ const loginStudent = [
         fullName: student.fullName,
         email: student.email,
         role: student.role,
+        githubLinked: student.githubLinked,
+        githubUsername: student.githubUsername,
       },
       message: 'Student login successful.',
     });
   },
 ];
+
+async function getCurrentStudent(req, res) {
+  if (!req.user || req.user.role !== 'STUDENT') {
+    return res.status(403).json({
+      code: 'STUDENT_AUTH_REQUIRED',
+      message: 'Active authenticated student account required.',
+    });
+  }
+
+  return res.status(200).json({
+    user: {
+      id: req.user.id,
+      studentId: req.user.studentId,
+      fullName: req.user.fullName,
+      email: req.user.email,
+      role: req.user.role,
+      githubLinked: req.user.githubLinked,
+      githubUsername: req.user.githubUsername,
+    },
+  });
+}
 
 async function getStudentValidation(req, res) {
   const { studentId } = req.params;
@@ -427,6 +450,7 @@ const storeLinkedGitHubAccount = [
 ];
 
 module.exports = {
+  getCurrentStudent,
   getStudentValidation,
   handleGitHubCallback,
   loginStudent,

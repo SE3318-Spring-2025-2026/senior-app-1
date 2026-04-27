@@ -25,6 +25,38 @@ const coordinatorTools = [
     cta: 'Open Import Tool',
     status: 'Ready',
   },
+  {
+    eyebrow: 'Groups',
+    title: 'Manual Group Membership',
+    description: 'Add or remove students from groups using coordinator override operations.',
+    href: '/coordinator/groups/manage',
+    cta: 'Open Membership Manager',
+    status: 'Ready',
+  },
+  {
+    eyebrow: 'Groups',
+    title: 'Advisor Transfer',
+    description: 'Transfer a group from its current advisor to another active advisor.',
+    href: '/coordinator/groups/transfer',
+    cta: 'Open Transfer Tool',
+    status: 'Ready',
+  },
+  {
+    eyebrow: 'Groups',
+    title: 'Group Cleanup',
+    description: 'Delete orphan groups from the group database when they no longer have an assigned advisor.',
+    href: '/coordinator/groups/cleanup',
+    cta: 'Open Cleanup Tool',
+    status: 'Ready',
+  },
+  {
+    eyebrow: 'Grading',
+    title: 'Grading Rubric Configuration',
+    description: 'Define the grading criteria and maximum points for PROPOSAL and SOW deliverable types.',
+    href: '/coordinator/rubrics',
+    cta: 'Configure Rubrics',
+    status: 'Ready',
+  },
 ];
 
 export default function CoordinatorHomePage() {
