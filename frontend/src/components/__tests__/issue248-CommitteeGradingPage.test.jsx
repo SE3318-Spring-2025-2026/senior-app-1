@@ -18,15 +18,15 @@ import CommitteeGradingPage from '../../CommitteeGradingPage.jsx';
 const criteriaFixture = [
   {
     id: 'c-bin',
-    name: 'Binary gate',
-    gradeType: 'BINARY',
+    question: 'Binary gate',
+    criterionType: 'BINARY',
     maxPoints: 10,
     weight: 0.25,
   },
   {
     id: 'c-soft',
-    name: 'Soft quality',
-    gradeType: 'SOFT',
+    question: 'Soft quality',
+    criterionType: 'SOFT',
     maxPoints: 40,
     weight: 0.75,
   },
