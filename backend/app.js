@@ -21,6 +21,7 @@ const userDatabaseRoutes = require('./routes/userDatabase');
 const groupRoutes = require('./routes/groups');
 const groupDatabaseRoutes = require('./routes/groupDatabase');
 const internalIntegrationsRoutes = require('./routes/internalIntegrations');
+const teamRoutes = require('./routes/teams');
 const submissionsRoutes = require('./routes/submissions');
 const committeeRoutes = require('./routes/committee');
 
@@ -52,6 +53,7 @@ app.use('/api/v1/password-setup-token-store', passwordSetupTokenStoreRoutes);
 app.use('/api/v1/user-database', userDatabaseRoutes);
 app.use('/api/v1/group-database', groupDatabaseRoutes);
 app.use('/api/v1/groups', groupRoutes);
+app.use('/api/v1/teams', teamRoutes);
 app.use('/internal/integrations', internalIntegrationsRoutes);
 app.use('/api/v1/committee/submissions', submissionsRoutes);
 app.use('/api/v1/committee', committeeRoutes);
