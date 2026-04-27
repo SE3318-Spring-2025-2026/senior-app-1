@@ -1,5 +1,6 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
+const { requireNonEmptyBody } = require('../middleware/requestValidation');
 const {
   getCurrentStudent,
   getStudentValidation,
@@ -15,15 +16,15 @@ const { Group } = require('../models');
 
 const router = express.Router();
 
-router.post('/students/login', loginStudent);
-router.post('/students/registration-validation', registerStudentValidation);
-router.post('/students/register', registerStudent);
+router.post('/students/login', requireNonEmptyBody, loginStudent);
+router.post('/students/registration-validation', requireNonEmptyBody, registerStudentValidation);
+router.post('/students/register', requireNonEmptyBody, registerStudent);
 router.get('/students/me', authenticate, getCurrentStudent);
 router.get('/user-database/students/:studentId/validation', getStudentValidation);
-router.patch('/user-database/students/:studentId/github-link', updateStudentGitHubLink);
+router.patch('/user-database/students/:studentId/github-link', requireNonEmptyBody, updateStudentGitHubLink);
 router.get('/students/me/github/link', authenticate, startGitHubLink);
 router.get('/auth/github/callback', handleGitHubCallback);
-router.post('/linked-github-account-store/links', storeLinkedGitHubAccount);
+router.post('/linked-github-account-store/links', requireNonEmptyBody, storeLinkedGitHubAccount);
 
 /**
  * GET /api/v1/groups/my-groups
