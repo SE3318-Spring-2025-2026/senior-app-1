@@ -49,6 +49,14 @@ const coordinatorTools = [
     cta: 'Open Cleanup Tool',
     status: 'Ready',
   },
+  {
+    eyebrow: 'Grading',
+    title: 'Grading Rubric Configuration',
+    description: 'Define the grading criteria and maximum points for PROPOSAL and SOW deliverable types.',
+    href: '/coordinator/rubrics',
+    cta: 'Configure Rubrics',
+    status: 'Ready',
+  },
 ];
 
 export default function CoordinatorHomePage() {

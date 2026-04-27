@@ -1,0 +1,1216 @@
+openapi: 3.0.3
+info:
+  title: Senior Project Management System - Sprint Monitoring API
+  description: "API specification for Process 5.0 Sprint Monitoring. Enforces a strict 1:1 mapping between the 19 defined sprint monitoring business flows and 19 endpoint operations."
+  version: 1.1.0
+
+servers:
+  - url: https://api.senior-project.edu/v1
+    description: Production server
+
+tags:
+  - name: 5.0 Sprint Monitoring
+    description: "Operations for integration binding, JIRA story sync, GitHub PR verification, AI implementation validation, sprint history retrieval, sprint evaluation, metric persistence, and audit logging."
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    internalApiKey:
+      type: apiKey
+      in: header
+      name: X-Internal-Api-Key
+
+  parameters:
+    TeamIdParam:
+      name: teamId
+      in: path
+      required: true
+      description: "Unique identifier of the team."
+      schema:
+        type: string
+      example: team_01HR9W2Q6NQ7G6M3K4J8
+    SprintIdParam:
+      name: sprintId
+      in: path
+      required: true
+      description: "Unique identifier of the sprint."
+      schema:
+        type: string
+      example: sprint_2026_03
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message, timestamp]
+      properties:
+        code:
+          type: string
+          example: SPRINT_MONITORING_ERROR
+        message:
+          type: string
+          example: The requested sprint monitoring operation could not be completed.
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-04-23T12:40:00Z"
+
+    ActionResponse:
+      type: object
+      required: [id, status, message, recordedAt]
+      properties:
+        id:
+          type: string
+          example: op_01HS3MB6R5T2N7K9P4Q8
+        status:
+          type: string
+          example: ACCEPTED
+        message:
+          type: string
+          example: Operation processed successfully.
+        recordedAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T12:40:00Z"
+
+    IntegrationBindingRequest:
+      type: object
+      required:
+        - providerSet
+        - organizationName
+        - repositoryName
+        - jiraProjectKey
+        - initiatedBy
+      properties:
+        providerSet:
+          type: array
+          items:
+            type: string
+            enum: [GITHUB, JIRA]
+          example: [GITHUB, JIRA]
+        organizationName:
+          type: string
+          example: acme-senior-design
+        repositoryName:
+          type: string
+          example: sprint-monitoring-service
+        jiraWorkspaceId:
+          type: string
+          example: workspace-acme
+        jiraProjectKey:
+          type: string
+          example: SPM
+        defaultBranch:
+          type: string
+          example: main
+        initiatedBy:
+          type: string
+          example: leader_1024
+
+    IntegrationBindingResponse:
+      type: object
+      required:
+        - bindingId
+        - teamId
+        - providerSet
+        - status
+        - createdAt
+      properties:
+        bindingId:
+          type: string
+          example: int_01HS3K0Q7R4M2P8C5N6V
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        providerSet:
+          type: array
+          items:
+            type: string
+            enum: [GITHUB, JIRA]
+          example: [GITHUB, JIRA]
+        status:
+          type: string
+          enum: [ACTIVE, PENDING_REAUTH, INVALID]
+          example: ACTIVE
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T12:00:00Z"
+
+    IntegrationTokenStoreRequest:
+      type: object
+      required: [teamId, githubTokenRef, jiraTokenRef]
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        githubTokenRef:
+          type: string
+          example: vault://integrations/team_01/github
+        jiraTokenRef:
+          type: string
+          example: vault://integrations/team_01/jira
+        rotatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T12:01:00Z"
+
+    AuditLogRequest:
+      type: object
+      required: [eventType, actorId, actorType]
+      properties:
+        teamId:
+          type: string
+          nullable: true
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          nullable: true
+          example: sprint_2026_03
+        eventType:
+          type: string
+          example: INTEGRATION_BOUND
+        actorId:
+          type: string
+          example: leader_1024
+        actorType:
+          type: string
+          enum: [TEAM_LEADER, SYSTEM, INTERNAL_SERVICE]
+          example: TEAM_LEADER
+        details:
+          type: string
+          example: GitHub and JIRA integrations were successfully bound for the team.
+
+    JiraSyncTriggerRequest:
+      type: object
+      required: [requestedBy, boardId]
+      properties:
+        requestedBy:
+          type: string
+          example: leader_1024
+        boardId:
+          type: string
+          example: board_42
+        includeStatuses:
+          type: array
+          items:
+            type: string
+          example: [To Do, In Progress, Done]
+
+    JiraIssue:
+      type: object
+      required: [issueKey, title, status, sprintId]
+      properties:
+        issueKey:
+          type: string
+          example: SPM-214
+        title:
+          type: string
+          example: Implement sprint evaluation aggregation endpoint
+        description:
+          type: string
+          example: Build the endpoint that combines story, PR, and AI validation metrics.
+        status:
+          type: string
+          example: IN_PROGRESS
+        storyPoints:
+          type: number
+          format: float
+          example: 5
+        assigneeId:
+          type: string
+          example: stu_20230017
+        sprintId:
+          type: string
+          example: sprint_2026_03
+
+    JiraIssueIngestionRequest:
+      type: object
+      required: [teamId, sprintId, issues, receivedAt]
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          example: sprint_2026_03
+        receivedAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T12:10:00Z"
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/JiraIssue'
+
+    StoryMetric:
+      type: object
+      required: [issueKey, metricName, metricValue]
+      properties:
+        issueKey:
+          type: string
+          example: SPM-214
+        metricName:
+          type: string
+          example: storyCompletionScore
+        metricValue:
+          type: number
+          format: float
+          example: 0.85
+        unit:
+          type: string
+          example: ratio
+
+    StoryMetricStoreRequest:
+      type: object
+      required: [teamId, sprintId, stories]
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          example: sprint_2026_03
+        stories:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoryMetric'
+
+    IntegrationConfigResponse:
+      type: object
+      required:
+        - teamId
+        - github
+        - jira
+        - lastUpdatedAt
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        github:
+          type: object
+          required: [organizationName, repositoryName, defaultBranch]
+          properties:
+            organizationName:
+              type: string
+              example: acme-senior-design
+            repositoryName:
+              type: string
+              example: sprint-monitoring-service
+            defaultBranch:
+              type: string
+              example: main
+        jira:
+          type: object
+          required: [workspaceId, projectKey]
+          properties:
+            workspaceId:
+              type: string
+              example: workspace-acme
+            projectKey:
+              type: string
+              example: SPM
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T12:01:00Z"
+
+    GitHubVerificationTriggerRequest:
+      type: object
+      required: [requestedBy]
+      properties:
+        requestedBy:
+          type: string
+          example: leader_1024
+        branchNames:
+          type: array
+          items:
+            type: string
+          example: [feature/SPM-214-evaluation-endpoint]
+        relatedIssueKeys:
+          type: array
+          items:
+            type: string
+          example: [SPM-214, SPM-219]
+
+    PullRequestData:
+      type: object
+      required: [prNumber, branchName, prStatus]
+      properties:
+        prNumber:
+          type: integer
+          example: 142
+        issueKey:
+          type: string
+          nullable: true
+          example: SPM-214
+        branchName:
+          type: string
+          example: feature/SPM-214-evaluation-endpoint
+        prStatus:
+          type: string
+          example: MERGED
+        mergeStatus:
+          type: string
+          example: MERGED
+        diffSummary:
+          type: string
+          example: Added evaluation controller, service, persistence mapping, and tests.
+        changedFiles:
+          type: array
+          items:
+            type: string
+          example:
+            - src/modules/sprint-monitoring/evaluation.controller.ts
+            - src/modules/sprint-monitoring/evaluation.service.ts
+
+    GitHubPrDataIngestionRequest:
+      type: object
+      required: [teamId, sprintId, pullRequests, receivedAt]
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          example: sprint_2026_03
+        receivedAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T12:20:00Z"
+        pullRequests:
+          type: array
+          items:
+            $ref: '#/components/schemas/PullRequestData'
+
+    PrMetric:
+      type: object
+      required: [prNumber, metricName, metricValue]
+      properties:
+        prNumber:
+          type: integer
+          example: 142
+        metricName:
+          type: string
+          example: reviewReadinessScore
+        metricValue:
+          type: number
+          format: float
+          example: 0.92
+        unit:
+          type: string
+          example: ratio
+
+    PrMetricStoreRequest:
+      type: object
+      required: [teamId, sprintId, pullRequests]
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          example: sprint_2026_03
+        pullRequests:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrMetric'
+
+    StoryEvaluationForwardRequest:
+      type: object
+      required: [teamId, sprintId, stories]
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          example: sprint_2026_03
+        stories:
+          type: array
+          items:
+            $ref: '#/components/schemas/JiraIssue'
+
+    PrEvaluationForwardRequest:
+      type: object
+      required: [teamId, sprintId, pullRequests]
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          example: sprint_2026_03
+        pullRequests:
+          type: array
+          items:
+            $ref: '#/components/schemas/PullRequestData'
+
+    AIValidationRequest:
+      type: object
+      required: [issueKey, issueDescription, fileDiffs]
+      properties:
+        issueKey:
+          type: string
+          example: SPM-214
+        issueDescription:
+          type: string
+          example: Implement the sprint performance evaluation endpoint and persist aggregated metrics.
+        fileDiffs:
+          type: array
+          items:
+            type: object
+            required: [path, diff]
+            properties:
+              path:
+                type: string
+                example: src/modules/sprint-monitoring/evaluation.service.ts
+              diff:
+                type: string
+                example: "@@ -1,2 +1,24 @@"
+        prNumber:
+          type: integer
+          nullable: true
+          example: 142
+
+    AIValidationResult:
+      type: object
+      required: [validationId, issueKey, validationStatus, confidence, validatedAt]
+      properties:
+        validationId:
+          type: string
+          example: val_01HS3M4A0B8Z9Q7R2C6D
+        issueKey:
+          type: string
+          example: SPM-214
+        validationStatus:
+          type: string
+          enum: [MATCHED, PARTIAL_MATCH, NOT_MATCHED]
+          example: MATCHED
+        confidence:
+          type: number
+          format: float
+          example: 0.91
+        feedback:
+          type: string
+          example: Implementation aligns strongly with the Jira issue description.
+        validatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T12:30:00Z"
+
+    ValidationResultForwardRequest:
+      type: object
+      required: [teamId, sprintId, result]
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          example: sprint_2026_03
+        result:
+          $ref: '#/components/schemas/AIValidationResult'
+
+    AIValidationStoreRequest:
+      type: object
+      required: [teamId, sprintId, validations]
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          example: sprint_2026_03
+        validations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIValidationResult'
+
+    SprintHistoryEntry:
+      type: object
+      required: [sprintId, syncedStoryCount, verifiedPrCount, validationCount, evaluationScore]
+      properties:
+        sprintId:
+          type: string
+          example: sprint_2026_02
+        syncedStoryCount:
+          type: integer
+          example: 10
+        verifiedPrCount:
+          type: integer
+          example: 6
+        validationCount:
+          type: integer
+          example: 5
+        evaluationScore:
+          type: number
+          format: float
+          example: 82.4
+        evaluatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-10T19:00:00Z"
+
+    SprintHistoryResponse:
+      type: object
+      required: [teamId, sprintId, history]
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          example: sprint_2026_03
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/SprintHistoryEntry'
+
+    SprintEvaluationCreateRequest:
+      type: object
+      required: [aggregatedScore, completionRate, createdBy]
+      properties:
+        aggregatedScore:
+          type: number
+          format: float
+          example: 86.2
+        completionRate:
+          type: number
+          format: float
+          example: 0.84
+        createdBy:
+          type: string
+          example: evaluation-service
+        gradingSummary:
+          type: string
+          example: Team met sprint objectives with acceptable implementation traceability.
+
+    SprintEvaluationResponse:
+      type: object
+      required: [evaluationId, teamId, sprintId, status, createdAt]
+      properties:
+        evaluationId:
+          type: string
+          example: eval_01HS3M9H4XJ7V0K2A5P1
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          example: sprint_2026_03
+        status:
+          type: string
+          enum: [COMPLETED, FAILED]
+          example: COMPLETED
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T12:35:00Z"
+
+    EvaluationMetric:
+      type: object
+      required: [metricName, metricValue]
+      properties:
+        metricName:
+          type: string
+          example: validationMatchRate
+        metricValue:
+          type: number
+          format: float
+          example: 0.78
+        unit:
+          type: string
+          example: ratio
+
+    EvaluationMetricStoreRequest:
+      type: object
+      required: [teamId, sprintId, metrics]
+      properties:
+        teamId:
+          type: string
+          example: team_01HR9W2Q6NQ7G6M3K4J8
+        sprintId:
+          type: string
+          example: sprint_2026_03
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluationMetric'
+
+paths:
+  /teams/{teamId}/integrations:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "1. Team Leader -> Bind External Integrations"
+      description: "Business Flow 1 of 19. Creates the team-level external integration binding for JIRA and GitHub."
+      operationId: bindExternalIntegrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationBindingRequest'
+      responses:
+        "201":
+          description: "Integration binding created."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationBindingResponse'
+        "400":
+          description: "Invalid integration binding payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Authentication required."
+        "409":
+          description: "A conflicting integration binding already exists."
+
+  /internal/integrations/tokens:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "2. Bind External Integrations -> Store Integration Tokens"
+      description: "Business Flow 2 of 19. Persists token references for the integration binding."
+      operationId: storeIntegrationTokens
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationTokenStoreRequest'
+      responses:
+        "201":
+          description: "Integration tokens stored."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid token persistence payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
+
+  /internal/audit-logs/integrations:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "3. Bind External Integrations -> Log Integration Activity"
+      description: "Business Flow 3 of 19. Records integration-related audit events."
+      operationId: logIntegrationActivity
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditLogRequest'
+      responses:
+        "201":
+          description: "Integration audit log recorded."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid audit log payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
+
+  /teams/{teamId}/sprints/{sprintId}/jira-sync:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "4. Fetch and Sync JIRA Stories -> Send Sync Request"
+      description: "Business Flow 4 of 19. Triggers a JIRA sprint synchronization request."
+      operationId: sendJiraSyncRequest
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - $ref: '#/components/parameters/SprintIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JiraSyncTriggerRequest'
+      responses:
+        "202":
+          description: "JIRA sync request accepted."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid JIRA sync request payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Authentication required."
+
+  /internal/jira/issues:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "5. JIRA -> Receive Issues"
+      description: "Business Flow 5 of 19. Receives JIRA issue data returned from the sync operation."
+      operationId: receiveJiraIssues
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JiraIssueIngestionRequest'
+      responses:
+        "201":
+          description: "JIRA issues received."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid JIRA issue ingestion payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
+
+  /internal/sprint-sync/stories:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "6. Fetch and Sync JIRA Stories -> Store Story Metrics"
+      description: "Business Flow 6 of 19. Persists synchronized story metrics into sprint sync storage."
+      operationId: storeStoryMetrics
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoryMetricStoreRequest'
+      responses:
+        "201":
+          description: "Story metrics stored."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid story metric payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
+
+  /teams/{teamId}/integrations/config:
+    get:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "7. Fetch and Sync JIRA Stories -> Retrieve Integration Config"
+      description: "Business Flow 7 of 19. Returns the active team integration configuration required for synchronization."
+      operationId: retrieveIntegrationConfig
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+      responses:
+        "200":
+          description: "Integration configuration returned."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationConfigResponse'
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Integration configuration not found."
+
+  /teams/{teamId}/sprints/{sprintId}/github-verifications:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "8. Verify GitHub PRs and Merges -> Send PR Fetch Request"
+      description: "Business Flow 8 of 19. Triggers retrieval of GitHub branch, PR, and merge evidence for a sprint."
+      operationId: sendGitHubPrFetchRequest
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - $ref: '#/components/parameters/SprintIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GitHubVerificationTriggerRequest'
+      responses:
+        "202":
+          description: "GitHub verification request accepted."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid GitHub verification payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Authentication required."
+
+  /internal/github/pr-data:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "9. GitHub -> Receive Branch, PR Status, Diffs"
+      description: "Business Flow 9 of 19. Receives branch, PR status, and diff data from GitHub."
+      operationId: receiveGitHubPrData
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GitHubPrDataIngestionRequest'
+      responses:
+        "201":
+          description: "GitHub PR data received."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid GitHub PR data payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
+
+  /internal/sprint-sync/pr-metrics:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "10. Verify GitHub PRs and Merges -> Store PR Metrics"
+      description: "Business Flow 10 of 19. Persists PR verification metrics into sprint sync storage."
+      operationId: storePrMetrics
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrMetricStoreRequest'
+      responses:
+        "201":
+          description: "PR metrics stored."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid PR metric payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
+
+  /internal/evaluations/pr-data:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "11. Verify GitHub PRs and Merges -> Forward PR Data for Evaluation"
+      description: "Business Flow 11 of 19. Forwards verified PR evidence to the sprint evaluation pipeline."
+      operationId: forwardPrDataForEvaluation
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrEvaluationForwardRequest'
+      responses:
+        "202":
+          description: "PR data forwarded for evaluation."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid PR evaluation forwarding payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
+
+  /internal/evaluations/story-data:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "12. Fetch and Sync JIRA Stories -> Forward Story Data for Evaluation"
+      description: "Business Flow 12 of 19. Forwards synchronized story evidence to the sprint evaluation pipeline."
+      operationId: forwardStoryDataForEvaluation
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoryEvaluationForwardRequest'
+      responses:
+        "202":
+          description: "Story data forwarded for evaluation."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid story evaluation forwarding payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
+
+  /teams/{teamId}/sprints/{sprintId}/ai-validations:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "13. Verify GitHub PRs and Merges -> Send Issue Description and File Diffs for AI Validation"
+      description: "Business Flow 13 of 19. Sends issue details and file diffs to the AI validation service."
+      operationId: sendAiValidationRequest
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - $ref: '#/components/parameters/SprintIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIValidationRequest'
+      responses:
+        "202":
+          description: "AI validation request accepted."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid AI validation payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Authentication required."
+
+  /internal/evaluations/validation-results:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "14. AI Implementation Validation -> Return Validation Results for Evaluation"
+      description: "Business Flow 14 of 19. Returns AI validation results to the evaluation pipeline."
+      operationId: returnValidationResultsForEvaluation
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationResultForwardRequest'
+      responses:
+        "201":
+          description: "Validation results returned for evaluation."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid validation result payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
+
+  /internal/sprint-sync/ai-validations:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "15. AI Implementation Validation -> Store AI Validation Result"
+      description: "Business Flow 15 of 19. Persists AI validation results into sprint sync storage."
+      operationId: storeAiValidationResult
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIValidationStoreRequest'
+      responses:
+        "201":
+          description: "AI validation results stored."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid AI validation store payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
+
+  /teams/{teamId}/sprints/{sprintId}/history:
+    get:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "16. Sprint Sync Data -> Provide Sprint History"
+      description: "Business Flow 16 of 19. Returns sprint history for the requested team sprint context."
+      operationId: provideSprintHistory
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - $ref: '#/components/parameters/SprintIdParam'
+      responses:
+        "200":
+          description: "Sprint history returned."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SprintHistoryResponse'
+        "401":
+          description: "Authentication required."
+        "404":
+          description: "Sprint history not found."
+
+  /teams/{teamId}/sprints/{sprintId}/evaluations:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "17. Evaluate Sprint Performance -> Store Sprint Evaluation Results"
+      description: "Business Flow 17 of 19. Stores the final sprint evaluation result for the team sprint."
+      operationId: storeSprintEvaluationResults
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - $ref: '#/components/parameters/SprintIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SprintEvaluationCreateRequest'
+      responses:
+        "201":
+          description: "Sprint evaluation result stored."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SprintEvaluationResponse'
+        "400":
+          description: "Invalid sprint evaluation payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Authentication required."
+
+  /internal/sprint-sync/evaluation-metrics:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "18. Evaluate Sprint Performance -> Store Sprint Evaluation Metrics"
+      description: "Business Flow 18 of 19. Persists computed sprint evaluation metrics into sprint sync storage."
+      operationId: storeSprintEvaluationMetrics
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluationMetricStoreRequest'
+      responses:
+        "201":
+          description: "Sprint evaluation metrics stored."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid evaluation metrics payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
+
+  /internal/audit-logs/evaluations:
+    post:
+      tags: ["5.0 Sprint Monitoring"]
+      summary: "19. Evaluate Sprint Performance -> Log Sync and Evaluation Events"
+      description: "Business Flow 19 of 19. Records sprint synchronization and evaluation audit events."
+      operationId: logSyncAndEvaluationEvents
+      security:
+        - internalApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditLogRequest'
+      responses:
+        "201":
+          description: "Evaluation audit log recorded."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        "400":
+          description: "Invalid evaluation audit log payload."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: "Internal API key required."
