@@ -18,6 +18,7 @@ const roleMenuSections = {
       items: [
         { to: '/professors', label: 'Professor Home', icon: 'HM' },
         { to: '/professors/notifications', label: 'Advisor Requests', icon: 'AR' },
+        { to: '/professors/committee-submissions', label: 'Committee Review', icon: 'CR' },
       ],
     },
   ],
@@ -35,6 +36,8 @@ const roleMenuSections = {
         { to: '/coordinator/groups/manage', label: 'Group Membership Edit', icon: 'GM' },
         { to: '/coordinator/groups/transfer', label: 'Advisor Transfer', icon: 'AT' },
         { to: '/coordinator/groups/cleanup', label: 'Group Cleanup', icon: 'GC' },
+        { to: '/coordinator/rubrics', label: 'Grading Rubrics', icon: 'RB' },
+        { to: '/coordinator/grading/weight-configuration', label: 'Weight Configuration', icon: 'WC' },
       ],
     },
   ],

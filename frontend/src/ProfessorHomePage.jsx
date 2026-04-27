@@ -26,6 +26,14 @@ const professorTools = [
     status: 'Ready',
   },
   {
+    eyebrow: 'Committee',
+    title: 'Committee Review',
+    description: 'Grade deliverable submissions by scoring each rubric criterion and submitting your committee review.',
+    href: '/professors/committee-submissions',
+    cta: 'Open Committee Grading',
+    status: 'Ready',
+  },
+  {
     eyebrow: 'Account',
     title: 'Password Setup',
     description: 'Create or update the password used to sign in to the professor workspace.',
