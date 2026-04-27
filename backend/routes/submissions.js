@@ -6,6 +6,7 @@
 
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireNonEmptyBody } = require('../middleware/requestValidation');
 const submissionController = require('../controllers/submissionController');
 const gradingController = require('../controllers/gradingController');
 
@@ -28,6 +29,7 @@ router.post(
   '/:submissionId/grade',
   authenticate,
   authorize(['PROFESSOR']),
+  requireNonEmptyBody,
   gradingController.submitGradeValidation,
   gradingController.submitGrade
 );
