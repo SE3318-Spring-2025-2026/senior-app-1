@@ -159,6 +159,66 @@ test('admin can log in with email and password', async () => {
   assert.equal(invalidResult.json.code, 'INVALID_CREDENTIALS');
 });
 
+test('auth middleware returns standardized error payload when token is missing', async () => {
+  const response = await request('/api/v1/admin/audit-logs');
+
+  assert.equal(response.response.status, 401);
+  assert.equal(response.json.success, false);
+  assert.equal(response.json.code, 'AUTH_TOKEN_MISSING');
+  assert.equal(response.json.message, 'Access denied');
+});
+
+test('validation failures expose standardized details payload', async () => {
+  const result = await request('/api/v1/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      role: '',
+      email: 'not-an-email',
+      fullName: 'Al',
+      password: '123',
+      studentId: 'abc',
+    }),
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.success, false);
+  assert.equal(result.json.code, 'INVALID_SIGNUP_INPUT');
+  assert.equal(result.json.message, 'Sign up input is invalid.');
+  assert.ok(Array.isArray(result.json.details));
+  assert.ok(result.json.details.length > 0);
+  assert.equal(result.json.details[0].field !== undefined, true);
+  assert.equal(result.json.details[0].message !== undefined, true);
+});
+
+test('unexpected async controller errors are converted to standardized internal errors', async () => {
+  const originalValidateAndCreateStudent = studentRegistrationService.validateAndCreateStudent;
+  studentRegistrationService.validateAndCreateStudent = async () => {
+    throw new Error('database exploded');
+  };
+
+  try {
+    const result = await request('/api/v1/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        role: 'STUDENT',
+        email: 'new-student@example.edu',
+        fullName: 'New Student',
+        password: 'StrongPass1!',
+        studentId: '11070001999',
+      }),
+    });
+
+    assert.equal(result.response.status, 500);
+    assert.equal(result.json.success, false);
+    assert.equal(result.json.code, 'INTERNAL_ERROR');
+    assert.equal(result.json.message, 'Internal server error');
+  } finally {
+    studentRegistrationService.validateAndCreateStudent = originalValidateAndCreateStudent;
+  }
+});
+
 test('audit log feed is admin-only', async () => {
   const admin = await User.create({
     email: 'audit-admin@example.com',
