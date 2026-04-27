@@ -222,6 +222,12 @@ export default function IntegrationConfigurationPage() {
         </div>
       </section>
 
+      <div className="group-action-row">
+        <Link className="workspace-button workspace-button-primary" to={`/students/groups/${configuration.teamId}/sprints/evaluation`}>
+          Run Sprint Evaluation
+        </Link>
+      </div>
+
       <p className="back-link-wrap">
         <Link className="back-link" to="/students/groups/manage">Back to Group Management</Link>
       </p>
