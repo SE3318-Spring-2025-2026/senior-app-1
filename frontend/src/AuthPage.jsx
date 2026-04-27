@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import { useAuth } from './contexts/AuthContext';
 import apiClient from './services/apiClient';
 
 const LOGIN_ROLES = [
@@ -91,6 +92,7 @@ export default function AuthPage() {
 
   const navigate = useNavigate();
   const { notify } = useNotification();
+  const { login } = useAuth();
 
   const isStudent = role === 'student';
 
@@ -132,6 +134,7 @@ export default function AuthPage() {
       window.localStorage.setItem(userKey, JSON.stringify(result.user || {}));
       window.localStorage.setItem(tokenKey, result.token || '');
       window.localStorage.setItem('authToken', result.token || '');
+      login(result.token, result.user);
 
       setFeedback({
         type: 'success',

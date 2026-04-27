@@ -28,7 +28,7 @@
                 <mxCell id="COORD" value="Coordinator" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="80" y="170" width="40" height="80" as="geometry"/>
                 </mxCell>
-                <mxCell id="TL" value="Team Leader" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;" parent="1" vertex="1">
+                <mxCell id="TL" value="Student&#xa;(Team Leader)" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="20" y="480" width="40" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="COM" value="Committee" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;fontStyle=1;" parent="1" vertex="1">
@@ -162,6 +162,23 @@
                     <mxGeometry relative="1" as="geometry">
                         <Array as="points">
                             <mxPoint x="950" y="1105"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="f15" value="Submission Confirmation&#xa;/ View Status" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" parent="1" source="P43" target="TL" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="310" y="700"/>
+                            <mxPoint x="40" y="700"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="f16" value="Grade Results&#xa;&amp; Feedback" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" parent="1" source="P44" target="TL" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="870" y="900"/>
+                            <mxPoint x="40" y="900"/>
+                            <mxPoint x="40" y="580"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>

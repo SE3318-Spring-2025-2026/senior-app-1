@@ -75,8 +75,8 @@ export default function App() {
               <Route path="/coordinator/grading/weight-configuration" element={<AuthGuard allowedRoles={['COORDINATOR']}><CoordinatorWeightConfigurationPage /></AuthGuard>} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="/advisor/requests" element={<AdvisorRequestsPage />} />
-              <Route path="/professors/committee-submissions" element={<ProfessorCommitteeSubmissionsPage />} />
-              <Route path="/professors/committee-review/:submissionId" element={<CommitteeGradingPage />} />
+              <Route path="/professors/committee-submissions" element={<AuthGuard allowedRoles={['PROFESSOR']}><ProfessorCommitteeSubmissionsPage /></AuthGuard>} />
+              <Route path="/professors/committee-review/:submissionId" element={<AuthGuard allowedRoles={['PROFESSOR']}><CommitteeGradingPage /></AuthGuard>} />
               <Route path="*" element={<HomePage />} />
             </Route>
           </Routes>

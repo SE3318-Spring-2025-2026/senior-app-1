@@ -8,7 +8,7 @@
 const { Deliverable, AuditLog, GradingRubric, Grade, User, Group, DeliverableWeightConfiguration } = require('../models');
 
 class SubmissionService {
-  static async submitDeliverable({ groupId, type, content, images, submitBy }) {
+  static async submitDeliverable({ groupId, type, content, images, sprintNumber, submitBy }) {
     if (!groupId || typeof groupId !== 'string') {
       const error = new Error('Invalid group ID');
       error.code = 'INVALID_GROUP_ID';
@@ -46,6 +46,7 @@ class SubmissionService {
     if (existing) {
       existing.content = content.trim();
       existing.images = images || [];
+      if (sprintNumber != null) existing.sprintNumber = sprintNumber;
       existing.version = (existing.version || 1) + 1;
       existing.status = 'SUBMITTED';
       await existing.save();
@@ -56,6 +57,7 @@ class SubmissionService {
         type,
         content: content.trim(),
         images: images || [],
+        sprintNumber: sprintNumber ?? null,
         version: 1,
         status: 'SUBMITTED',
       });
