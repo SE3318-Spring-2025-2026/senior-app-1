@@ -22,3 +22,6 @@ if (process.env.GITHUB_CLIENT_ID === undefined) {
 if (process.env.GITHUB_CLIENT_SECRET === undefined) {
   process.env.GITHUB_CLIENT_SECRET = '';
 }
+if (process.env.INTERNAL_API_KEY === undefined) {
+  process.env.INTERNAL_API_KEY = 'test-internal-api-key';
+}

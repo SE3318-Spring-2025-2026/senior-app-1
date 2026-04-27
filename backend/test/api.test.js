@@ -19,6 +19,7 @@ const {
   AdvisorRequest,
   AuditLog,
   Notification,
+  IntegrationTokenReference,
 } = require('../models');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
@@ -61,6 +62,7 @@ test.beforeEach(async () => {
   await GroupAdvisorAssignment.destroy({ where: {} });
   await AdvisorRequest.destroy({ where: {} });
   await Notification.destroy({ where: {} });
+  await IntegrationTokenReference.destroy({ where: {} });
   await AuditLog.destroy({ where: {} });
   await Group.destroy({ where: {} });
   await LinkedGitHubAccount.destroy({ where: {} });
@@ -269,6 +271,90 @@ test('pending advisor request status update returns 404 for unknown request ids'
 
   assert.equal(result.response.status, 404);
   assert.equal(result.json.code, 'REQUEST_NOT_FOUND');
+});
+
+test('internal integration token store persists github and jira token references for a team', async () => {
+  const result = await request('/internal/integrations/tokens', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-internal-api-key': process.env.INTERNAL_API_KEY,
+    },
+    body: JSON.stringify({
+      teamId: 'team-alpha',
+      githubTokenRef: 'vault://github/team-alpha',
+      jiraTokenRef: 'vault://jira/team-alpha',
+    }),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.code, 'SUCCESS');
+  assert.equal(result.json.success, true);
+  assert.equal(result.json.teamId, 'team-alpha');
+  assert.equal(result.json.githubTokenRef, undefined);
+  assert.equal(result.json.jiraTokenRef, undefined);
+
+  const storedRecord = await IntegrationTokenReference.findByPk('team-alpha');
+  assert.ok(storedRecord);
+  assert.equal(storedRecord.teamId, 'team-alpha');
+  assert.equal(storedRecord.githubTokenRef, 'vault://github/team-alpha');
+  assert.equal(storedRecord.jiraTokenRef, 'vault://jira/team-alpha');
+});
+
+test('internal integration token store accepts partial token reference payloads', async () => {
+  const result = await request('/internal/integrations/tokens', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-internal-api-key': process.env.INTERNAL_API_KEY,
+    },
+    body: JSON.stringify({
+      teamId: 'team-beta',
+      githubTokenRef: 'vault://github/team-beta',
+    }),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.code, 'SUCCESS');
+
+  const storedRecord = await IntegrationTokenReference.findByPk('team-beta');
+  assert.ok(storedRecord);
+  assert.equal(storedRecord.githubTokenRef, 'vault://github/team-beta');
+  assert.equal(storedRecord.jiraTokenRef, null);
+});
+
+test('internal integration token store rejects requests without a valid internal api key', async () => {
+  const result = await request('/internal/integrations/tokens', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      teamId: 'team-gamma',
+      githubTokenRef: 'vault://github/team-gamma',
+    }),
+  });
+
+  assert.equal(result.response.status, 401);
+  assert.equal(result.json.code, 'UNAUTHORIZED');
+});
+
+test('internal integration token store rejects invalid payloads', async () => {
+  const result = await request('/internal/integrations/tokens', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-internal-api-key': process.env.INTERNAL_API_KEY,
+    },
+    body: JSON.stringify({
+      teamId: '   ',
+      githubTokenRef: '',
+    }),
+  });
+
+  assert.equal(result.response.status, 400);
+  assert.equal(result.json.code, 'VALIDATION_ERROR');
+  assert.ok(Array.isArray(result.json.errors));
 });
 
 test('pending advisor request status update rejects non-pending requests', async () => {
