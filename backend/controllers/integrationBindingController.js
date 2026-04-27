@@ -1,5 +1,5 @@
 const { body, param, validationResult } = require('express-validator');
-const { IntegrationBinding } = require('../models');
+const { Group, IntegrationBinding } = require('../models');
 
 const ALLOWED_PROVIDERS = ['GITHUB', 'JIRA'];
 
@@ -68,11 +68,26 @@ async function createIntegrationBinding(req, res) {
     const { teamId } = req.params;
     const normalizedTeamId = teamId.trim();
     const initiatedBy = String(req.body.initiatedBy).trim();
+    const group = await Group.findByPk(normalizedTeamId);
+
+    if (!group) {
+      return res.status(404).json({
+        code: 'GROUP_NOT_FOUND',
+        message: 'Group not found',
+      });
+    }
 
     if (String(req.user?.id) !== initiatedBy) {
       return res.status(403).json({
         code: 'FORBIDDEN',
         message: 'initiatedBy must match the authenticated user',
+      });
+    }
+
+    if (String(group.leaderId || '') !== String(req.user?.id)) {
+      return res.status(403).json({
+        code: 'FORBIDDEN',
+        message: 'Only the team leader can bind integrations for this team',
       });
     }
 
