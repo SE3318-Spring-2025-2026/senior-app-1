@@ -133,21 +133,23 @@ export default function CommitteeGradingPage() {
 
     const scoreArray = criteria.map((c) => ({
       criterionId: c.id,
-      value: scores[c.id] ?? 0,
+      value: c.maxPoints > 0 ? Math.min(1, (scores[c.id] ?? 0) / c.maxPoints) : 0,
     }));
 
     try {
       const res = await apiClient.post(`/v1/committee/submissions/${submissionId}/grade`, {
+        gradeType: 'COMMITTEE_FINAL',
         scores: scoreArray,
         comments: comments.trim() || undefined,
       });
 
-      const score = res.data?.finalScore;
-      setFinalScore(score);
+      const score = res.data?.data?.finalScore;
+      const displayScore = score !== undefined ? score * 100 : null;
+      setFinalScore(displayScore);
       setFeedback({
         status: 'success',
         title: 'Review Submitted',
-        result: `Final score: ${score !== undefined ? score.toFixed(1) : '—'} / 100`,
+        result: `Final score: ${displayScore !== null ? displayScore.toFixed(1) : '—'} / 100`,
       });
       setSubmitted(true);
     } catch (err) {
