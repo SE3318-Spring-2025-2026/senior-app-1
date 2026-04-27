@@ -14,6 +14,7 @@ import CoordinatorStudentIdUploadPage from './CoordinatorStudentIdUploadPage';
 import CoordinatorRubricPage from './CoordinatorRubricPage';
 import GroupPage from './GroupPage';
 import HomePage from './HomePage';
+import IntegrationConfigurationPage from './IntegrationConfigurationPage';
 import ProfessorHomePage from './ProfessorHomePage';
 import ProfessorAdvisorRequestsPage from './ProfessorAdvisorRequestsPage';
 import ProfessorLoginPage from './ProfessorLoginPage';
@@ -50,6 +51,7 @@ export default function App() {
               <Route path="/students/login" element={<AuthPage />} />
               <Route path="/students/groups/manage" element={<StudentGroupShellPage />} />
               <Route path="/students/groups/new" element={<StudentGroupShellPage />} />
+              <Route path="/students/groups/:teamId/integrations" element={<AuthGuard allowedRoles={['STUDENT']}><IntegrationConfigurationPage /></AuthGuard>} />
               <Route path="/students/notifications" element={<StudentInvitationsPage />} />
               <Route path="/team-leader/submission" element={<AuthGuard allowedRoles={['STUDENT']}><SubmissionEditorPage /></AuthGuard>} />
               <Route path="/team-leader/advisor-requests/new" element={<SubmitAdvisorRequestPage />} />

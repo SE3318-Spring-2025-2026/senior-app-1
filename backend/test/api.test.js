@@ -437,6 +437,186 @@ test('integration binding creation rejects non-leader students for an existing t
   assert.equal(result.json.code, 'FORBIDDEN');
 });
 
+test('team leader can retrieve integration configuration with token references', async () => {
+  const leader = await createStudent({
+    studentId: '11070009998',
+    email: 'integration-config@example.edu',
+    fullName: 'Integration Config Leader',
+    password: 'StrongPass1!',
+  });
+  const group = await Group.create({
+    id: 'team-config',
+    name: 'Config Team',
+    leaderId: String(leader.id),
+    memberIds: [],
+    maxMembers: 4,
+  });
+
+  await IntegrationBinding.create({
+    bindingId: 'binding-config-1',
+    teamId: group.id,
+    providerSet: ['GITHUB', 'JIRA'],
+    organizationName: 'acme-org',
+    repositoryName: 'senior-app',
+    jiraWorkspaceId: 'workspace-acme',
+    jiraProjectKey: 'SPM',
+    defaultBranch: 'main',
+    initiatedBy: String(leader.id),
+    status: 'ACTIVE',
+  });
+
+  await IntegrationTokenReference.create({
+    teamId: group.id,
+    githubTokenRef: 'vault://github/team-config',
+    jiraTokenRef: 'vault://jira/team-config',
+  });
+
+  const result = await request(`/api/v1/teams/${group.id}/integrations`, {
+    headers: {
+      ...(await authHeaderFor(leader)),
+    },
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.bindingId, 'binding-config-1');
+  assert.equal(result.json.teamId, group.id);
+  assert.deepEqual(result.json.providerSet, ['GITHUB', 'JIRA']);
+  assert.equal(result.json.organizationName, 'acme-org');
+  assert.equal(result.json.repositoryName, 'senior-app');
+  assert.equal(result.json.jiraProjectKey, 'SPM');
+  assert.equal(result.json.status, 'ACTIVE');
+  assert.equal(result.json.githubTokenRef, 'vault://github/team-config');
+  assert.equal(result.json.jiraTokenRef, 'vault://jira/team-config');
+});
+
+test('integration configuration retrieval returns partial status when token references are missing', async () => {
+  const leader = await createStudent({
+    studentId: '11070009989',
+    email: 'integration-partial@example.edu',
+    fullName: 'Integration Partial Leader',
+    password: 'StrongPass1!',
+  });
+  const group = await Group.create({
+    id: 'team-partial',
+    name: 'Partial Team',
+    leaderId: String(leader.id),
+    memberIds: [],
+    maxMembers: 4,
+  });
+
+  await IntegrationBinding.create({
+    teamId: group.id,
+    providerSet: ['GITHUB', 'JIRA'],
+    organizationName: 'acme-org',
+    repositoryName: 'senior-app',
+    jiraWorkspaceId: 'workspace-acme',
+    jiraProjectKey: 'SPM',
+    initiatedBy: String(leader.id),
+    status: 'ACTIVE',
+  });
+
+  await IntegrationTokenReference.create({
+    teamId: group.id,
+    githubTokenRef: 'vault://github/team-partial',
+    jiraTokenRef: null,
+  });
+
+  const result = await request(`/api/v1/teams/${group.id}/integrations`, {
+    headers: {
+      ...(await authHeaderFor(leader)),
+    },
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.status, 'PARTIAL');
+  assert.equal(result.json.githubTokenRef, 'vault://github/team-partial');
+  assert.equal(result.json.jiraTokenRef, null);
+});
+
+test('integration configuration retrieval returns 404 when no integration binding exists', async () => {
+  const leader = await createStudent({
+    studentId: '11070009988',
+    email: 'integration-empty@example.edu',
+    fullName: 'Integration Empty Leader',
+    password: 'StrongPass1!',
+  });
+  const group = await Group.create({
+    id: 'team-empty',
+    name: 'Empty Team',
+    leaderId: String(leader.id),
+    memberIds: [],
+    maxMembers: 4,
+  });
+
+  const result = await request(`/api/v1/teams/${group.id}/integrations`, {
+    headers: {
+      ...(await authHeaderFor(leader)),
+    },
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'INTEGRATION_BINDING_NOT_FOUND');
+});
+
+test('integration configuration retrieval returns 404 when the team does not exist', async () => {
+  const leader = await createStudent({
+    studentId: '11070009987',
+    email: 'integration-config-missing@example.edu',
+    fullName: 'Integration Config Missing',
+    password: 'StrongPass1!',
+  });
+
+  const result = await request('/api/v1/teams/team-does-not-exist/integrations', {
+    headers: {
+      ...(await authHeaderFor(leader)),
+    },
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'GROUP_NOT_FOUND');
+});
+
+test('integration configuration retrieval is limited to the team leader', async () => {
+  const leader = await createStudent({
+    studentId: '11070009986',
+    email: 'integration-owner2@example.edu',
+    fullName: 'Integration Owner Two',
+    password: 'StrongPass1!',
+  });
+  const otherStudent = await createStudent({
+    studentId: '11070009985',
+    email: 'integration-other@example.edu',
+    fullName: 'Integration Other Student',
+    password: 'StrongPass1!',
+  });
+  const group = await Group.create({
+    id: 'team-restricted',
+    name: 'Restricted Team',
+    leaderId: String(leader.id),
+    memberIds: [String(otherStudent.id)],
+    maxMembers: 4,
+  });
+
+  await IntegrationBinding.create({
+    teamId: group.id,
+    providerSet: ['GITHUB'],
+    organizationName: 'acme-org',
+    repositoryName: 'senior-app',
+    jiraProjectKey: 'SPM',
+    initiatedBy: String(leader.id),
+    status: 'ACTIVE',
+  });
+
+  const result = await request(`/api/v1/teams/${group.id}/integrations`, {
+    headers: {
+      ...(await authHeaderFor(otherStudent)),
+    },
+  });
+
+  assert.equal(result.response.status, 403);
+  assert.equal(result.json.code, 'FORBIDDEN');
+});
+
 test('admin can log in with email and password', async () => {
   const password = 'AdminPass2026!';
 
