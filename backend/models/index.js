@@ -17,6 +17,8 @@ const GroupAdvisorAssignment = require('./GroupAdvisorAssignment');
 const Invitation = require('./Invitation');
 const AuditLog = require('./AuditLog');
 const Notification = require('./Notification');
+const IntegrationTokenReference = require('./IntegrationTokenReference');
+const IntegrationBinding = require('./IntegrationBinding');
 const GradingRubric = require('./GradingRubric');
 const Grade = require('./Grade');
 const DeliverableRubric = require('./DeliverableRubric');
@@ -39,6 +41,8 @@ module.exports = {
   Invitation,
   AuditLog,
   Notification,
+  IntegrationTokenReference,
+  IntegrationBinding,
   GradingRubric,
   Grade,
   DeliverableRubric,
