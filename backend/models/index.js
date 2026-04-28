@@ -28,6 +28,7 @@ const SprintWeightConfiguration = require('./SprintWeightConfiguration');
 const DeliverableSubmission = require('./DeliverableSubmission');
 const DeliverableWeightConfiguration = require('./DeliverableWeightConfiguration');
 const GroupDeliverable = require('./GroupDeliverable');
+const StoryMetric = require('./StoryMetric');
 
 module.exports = {
   User,
@@ -52,4 +53,5 @@ module.exports = {
   DeliverableSubmission,
   DeliverableWeightConfiguration,
   GroupDeliverable,
+  StoryMetric,
 };
