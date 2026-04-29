@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import apiClient from './services/apiClient';
 
 const ROLE_CONFIG = {
   ADMIN: {
@@ -66,17 +67,7 @@ export default function GroupCleanupPage({ role = 'COORDINATOR' }) {
     async function fetchGroups() {
       setLoadingGroups(true);
       try {
-        const response = await fetch('/api/v1/groups', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.message || 'Could not load group data.');
-        }
-
+        const { data: payload } = await apiClient.get('/v1/groups');
         const rows = normalizeGroups(payload);
         setGroups(rows);
         setSelectedGroupId((current) => {
@@ -92,7 +83,7 @@ export default function GroupCleanupPage({ role = 'COORDINATOR' }) {
         setFeedback({
           type: 'error',
           title: 'Load failed',
-          message: error.message || 'Could not load group data.',
+          message: error.response?.data?.message || error.message || 'Could not load group data.',
         });
       } finally {
         setLoadingGroups(false);
@@ -163,17 +154,7 @@ export default function GroupCleanupPage({ role = 'COORDINATOR' }) {
     });
 
     try {
-      const response = await fetch(`/api/v1/group-database/groups/${selectedGroup.groupId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.message || 'Group deletion failed.');
-      }
+      await apiClient.delete(`/v1/group-database/groups/${selectedGroup.groupId}`);
 
       const nextGroups = groups.filter((group) => String(group.groupId) !== String(selectedGroup.groupId));
       setGroups(nextGroups);
@@ -190,16 +171,9 @@ export default function GroupCleanupPage({ role = 'COORDINATOR' }) {
         message: `${selectedGroup.groupName} was removed successfully.`,
       });
     } catch (error) {
-      setFeedback({
-        type: 'error',
-        title: 'Delete failed',
-        message: error.message || 'Group deletion failed.',
-      });
-      notify({
-        type: 'error',
-        title: 'Delete failed',
-        message: error.message || 'Group deletion failed.',
-      });
+      const message = error.response?.data?.message || error.message || 'Group deletion failed.';
+      setFeedback({ type: 'error', title: 'Delete failed', message });
+      notify({ type: 'error', title: 'Delete failed', message });
     } finally {
       setSubmitting(false);
     }

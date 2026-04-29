@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireNonEmptyBody } = require('../middleware/requestValidation');
 const NotificationService = require('../services/notificationService');
 const sequelize = require('../db');
 const { syncAdvisorAssignmentsForGroup } = require('../services/mentorMatchingService');
@@ -21,6 +22,7 @@ router.post(
   '/advisor-requests',
   authenticate,
   authorize(['STUDENT']),
+  requireNonEmptyBody,
   createAdvisorRequest,
 );
 
@@ -49,6 +51,7 @@ router.patch(
   '/pending-advisor-requests/:requestId/status',
   authenticate,
   authorize(['PROFESSOR']),
+  requireNonEmptyBody,
   body('status').isString().trim().notEmpty(),
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -66,6 +69,7 @@ router.patch(
   '/advisor-requests/:requestId/decision',
   authenticate,
   authorize(['PROFESSOR']),
+  requireNonEmptyBody,
   body('decision')
     .isString()
     .trim()

@@ -93,12 +93,17 @@ class GradingService {
       where: { deliverableId, gradedBy },
     });
 
+    // Calculate final score (average of criterion values) up front so it persists.
+    const finalScoreRaw = scores.reduce((sum, s) => sum + (s.value || 0), 0) / scores.length;
+    const finalScore = parseFloat(finalScoreRaw.toFixed(2));
+
     let grade;
     if (existing) {
       // Update existing grade
       existing.scores = scores;
       existing.comments = comments || null;
       existing.gradeType = gradeType;
+      existing.finalScore = finalScore;
       await existing.save();
       grade = existing;
     } else {
@@ -109,13 +114,9 @@ class GradingService {
         scores,
         comments: comments || null,
         gradeType,
+        finalScore,
       });
     }
-
-    // Calculate final score (average of criterion values)
-    const finalScore =
-      scores.reduce((sum, s) => sum + (s.value || 0), 0) / scores.length;
-    grade.finalScore = parseFloat(finalScore.toFixed(2));
 
     // Fire-and-forget: Log grading asynchronously without blocking response
     GradingService._logGrading({

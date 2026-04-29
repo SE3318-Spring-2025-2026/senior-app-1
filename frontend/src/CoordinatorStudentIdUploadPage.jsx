@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useNotification } from './contexts/NotificationContext';
+import apiClient from './services/apiClient';
 
 const initialFeedback = {
   type: 'idle',
@@ -84,29 +85,7 @@ export default function CoordinatorStudentIdUploadPage() {
     });
 
     try {
-      const response = await fetch('/api/v1/coordinator/student-id-registry/import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ studentIds }),
-      });
-      const result = await response.json();
-
-      if (!response.ok) {
-        const mapped = mapUploadError(result, response.status);
-        setFeedback({
-          ...initialFeedback,
-          ...mapped,
-        });
-        notify({
-          type: mapped.type === 'warning' ? 'warning' : 'error',
-          title: mapped.title,
-          message: mapped.message,
-        });
-        return;
-      }
+      const { data: result } = await apiClient.post('/v1/coordinator/student-id-registry/import', { studentIds });
 
       setFeedback({
         type: 'success',
@@ -122,7 +101,20 @@ export default function CoordinatorStudentIdUploadPage() {
         title: 'Student ID registry updated',
         message: `${result.insertedCount} inserted, ${result.duplicateCount} duplicate, ${result.invalidFormatCount} invalid.`,
       });
-    } catch {
+    } catch (err) {
+      if (err.response) {
+        const mapped = mapUploadError(err.response.data || {}, err.response.status);
+        setFeedback({
+          ...initialFeedback,
+          ...mapped,
+        });
+        notify({
+          type: mapped.type === 'warning' ? 'warning' : 'error',
+          title: mapped.title,
+          message: mapped.message,
+        });
+        return;
+      }
       setFeedback({
         ...initialFeedback,
         type: 'error',

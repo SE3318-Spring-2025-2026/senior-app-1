@@ -51,7 +51,7 @@ const processDecision = async ({ requestId, decision, note, userId }) => {
       });
     }
 
-    await AuditLog.create({
+    AuditLog.create({
       action: decision === 'APPROVED' ? 'ADVISOR_REQUEST_APPROVED' : 'ADVISOR_REQUEST_REJECTED',
       actorId: userId,
       targetType: 'ADVISOR_REQUEST',
@@ -62,7 +62,7 @@ const processDecision = async ({ requestId, decision, note, userId }) => {
         decision,
         note: note || null,
       },
-    }, { transaction });
+    }).catch((err) => console.error('Audit log failed (ADVISOR_REQUEST_DECISION):', err));
 
     if (advisorRequest.teamLeaderId) {
       const advisorUser = await User.findByPk(userId, {
