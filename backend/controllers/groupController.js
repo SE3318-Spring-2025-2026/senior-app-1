@@ -247,6 +247,40 @@ exports.getGroupMembership = async (req, res) => {
 
     const { groupId } = req.params;
     const groupData = await GroupService.getGroupMembership(groupId);
+    const leaderId = groupData.leaderId ? String(groupData.leaderId) : null;
+    const memberIds = Array.isArray(groupData.memberIds) ? groupData.memberIds.map((id) => String(id)) : [];
+    const participantIds = [...new Set([leaderId, ...memberIds].filter(Boolean))];
+
+    const users = participantIds.length > 0
+      ? await User.findAll({
+        where: { id: { [Op.in]: participantIds } },
+        attributes: ['id', 'fullName', 'studentId', 'email'],
+      })
+      : [];
+
+    const usersById = new Map(users.map((user) => [String(user.id), user]));
+
+    const advisorUser = groupData.advisorId
+      ? await User.findByPk(groupData.advisorId, { attributes: ['id', 'fullName', 'email'] })
+      : null;
+
+    const advisorProfessor = groupData.advisorId
+      ? await Professor.findOne({
+        where: { userId: groupData.advisorId },
+        attributes: ['userId', 'department', 'fullName'],
+      })
+      : null;
+
+    const members = participantIds.map((id) => {
+      const user = usersById.get(String(id));
+      return {
+        id: String(id),
+        fullName: user?.fullName || 'Unknown Student',
+        studentId: user?.studentId || null,
+        email: user?.email || null,
+        isLeader: String(id) === leaderId,
+      };
+    });
 
     res.status(200).json({
       code: 'SUCCESS',
@@ -256,10 +290,20 @@ exports.getGroupMembership = async (req, res) => {
         groupName: groupData.name,
         status: groupData.status,
         advisorId: groupData.advisorId || null,
+        advisor: advisorUser
+          ? {
+            id: advisorUser.id,
+            fullName: advisorProfessor?.fullName || advisorUser.fullName,
+            email: advisorUser.email,
+            department: advisorProfessor?.department || null,
+          }
+          : null,
+        leaderId,
         maxMembers: groupData.maxMembers,
-        members: groupData.memberIds,
-        currentMemberCount: groupData.memberIds.length,
-        availableSlots: groupData.maxMembers - groupData.memberIds.length,
+        memberIds: members.map((member) => member.id),
+        members,
+        currentMemberCount: members.length,
+        availableSlots: Math.max(groupData.maxMembers - members.length, 0),
       },
     });
   } catch (error) {
@@ -391,8 +435,15 @@ exports.renameGroup = async (req, res) => {
 
     if (maxMembers !== undefined) {
       const nextMax = Number(maxMembers);
-      const memberCount = Array.isArray(group.memberIds) ? group.memberIds.length : 0;
-      if (nextMax < memberCount) {
+      const participantIds = new Set();
+      if (group.leaderId) {
+        participantIds.add(String(group.leaderId));
+      }
+      (Array.isArray(group.memberIds) ? group.memberIds : []).forEach((memberId) => {
+        participantIds.add(String(memberId));
+      });
+
+      if (nextMax < participantIds.size) {
         return res.status(400).json({ code: 'INVALID_MAX_MEMBERS', message: 'Max members cannot be lower than current member count.' });
       }
       group.maxMembers = nextMax;
@@ -543,6 +594,14 @@ exports.dispatchInvites = async (req, res) => {
     if (!group) return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Group not found' });
     if (String(group.leaderId || '') !== String(req.user.id)) return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the group leader can send invitations' });
 
+    const participantIds = new Set();
+    if (group.leaderId) {
+      participantIds.add(String(group.leaderId));
+    }
+    (Array.isArray(group.memberIds) ? group.memberIds : []).forEach((memberId) => {
+      participantIds.add(String(memberId));
+    });
+
     const users = await User.findAll({ where: { role: 'STUDENT', studentId: { [Op.in]: requestedStudentIds } } });
 
     const usersByStudentId = new Map(users.map((user) => [user.studentId, user]));
@@ -591,6 +650,43 @@ exports.dispatchInvites = async (req, res) => {
     }
 
     const inviteeIds = users.map((user) => user.id);
+    const existingInvitations = await Invitation.findAll({
+      where: { groupId, inviteeId: inviteeIds },
+      attributes: ['inviteeId', 'status'],
+    });
+    const existingPendingInviteeIds = new Set(
+      existingInvitations
+        .filter((invitation) => invitation.status === 'PENDING')
+        .map((invitation) => invitation.inviteeId),
+    );
+    const pendingInvitationCount = await Invitation.count({
+      where: {
+        groupId,
+        status: 'PENDING',
+      },
+    });
+    const availableSlots = Math.max(
+      Number(group.maxMembers || 0) - participantIds.size - pendingInvitationCount,
+      0,
+    );
+    const additionalPendingInvitesNeeded = inviteeIds.filter(
+      (inviteeId) => !existingPendingInviteeIds.has(inviteeId),
+    ).length;
+
+    if (additionalPendingInvitesNeeded > 0 && availableSlots <= 0) {
+      return res.status(409).json({
+        code: 'GROUP_FULL',
+        message: 'This group is already at full capacity.',
+      });
+    }
+
+    if (additionalPendingInvitesNeeded > availableSlots) {
+      return res.status(409).json({
+        code: 'INVITE_CAPACITY_EXCEEDED',
+        message: `Only ${availableSlots} slot${availableSlots === 1 ? '' : 's'} available for new invitations.`,
+      });
+    }
+
     const { created, skipped } = await GroupService.dispatchInvites(groupId, inviteeIds);
 
     const skippedStudentIds = skipped.map((inviteeId) => users.find((user) => user.id === inviteeId)?.studentId).filter(Boolean);

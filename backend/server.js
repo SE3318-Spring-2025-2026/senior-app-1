@@ -5,6 +5,7 @@ const Group = require('./models/Group');
 const app = require('./app');
 require('./models');
 const { ensureValidStudentRegistry } = require('./services/studentService');
+const { RubricCriterion } = require('./models');
 
 const ensureSqliteColumns = async () => {
   const queryInterface = sequelize.getQueryInterface();
@@ -75,6 +76,17 @@ const ensureSqliteColumns = async () => {
   }
 };
 
+const seedRubricCriteria = async () => {
+  if (!RubricCriterion) {
+    return;
+  }
+  await RubricCriterion.bulkCreate([
+    { deliverableType: 'PROPOSAL', question: 'Technical Feasibility', criterionType: 'SOFT', maxPoints: 10, weight: 0.4 },
+    { deliverableType: 'PROPOSAL', question: 'Project Scope Clarity', criterionType: 'SOFT', maxPoints: 10, weight: 0.4 },
+    { deliverableType: 'PROPOSAL', question: 'Team Qualification', criterionType: 'BINARY', maxPoints: 5, weight: 0.2 },
+  ], { ignoreDuplicates: true });
+};
+
 // Connect to SQLite and sync models
 sequelize.authenticate()
   .then(() => {
@@ -83,6 +95,7 @@ sequelize.authenticate()
   })
   .then(() => ensureSqliteColumns())
   .then(() => ensureValidStudentRegistry())
+  .then(() => seedRubricCriteria())
   .then(() => console.log("Database synced"))
   .catch(err => console.log("Database error:", err));
 

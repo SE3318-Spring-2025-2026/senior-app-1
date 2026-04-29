@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import apiClient from './services/apiClient';
 
 const initialFeedback = {
   type: 'idle',
@@ -50,17 +51,7 @@ export default function CoordinatorGroupMembershipPage() {
     async function fetchGroups() {
       setLoadingGroups(true);
       try {
-        const response = await fetch('/api/v1/coordinator/groups', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.message || 'Could not load groups.');
-        }
-
+        const { data: payload } = await apiClient.get('/v1/coordinator/groups');
         const rows = normalizeGroups(payload);
         setGroups(rows);
         setSelectedGroupId((current) => {
@@ -75,7 +66,7 @@ export default function CoordinatorGroupMembershipPage() {
         setFeedback({
           type: 'error',
           title: 'Load failed',
-          message: error.message || 'Could not load group data.',
+          message: error.response?.data?.message || error.message || 'Could not load group data.',
         });
       } finally {
         setLoadingGroups(false);
@@ -89,6 +80,25 @@ export default function CoordinatorGroupMembershipPage() {
     () => groups.find((group) => String(group.groupId) === String(selectedGroupId)) || null,
     [groups, selectedGroupId],
   );
+
+  const totalMembers = useMemo(() => {
+    if (!selectedGroup) {
+      return 0;
+    }
+
+    const participantIds = new Set();
+    const leaderId = String(selectedGroup.leader?.id || selectedGroup.leaderId || '');
+
+    if (leaderId) {
+      participantIds.add(leaderId);
+    }
+
+    (selectedGroup.members || []).forEach((member) => {
+      participantIds.add(String(member.id));
+    });
+
+    return participantIds.size;
+  }, [selectedGroup]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -110,22 +120,10 @@ export default function CoordinatorGroupMembershipPage() {
     });
 
     try {
-      const response = await fetch(`/api/v1/coordinator/groups/${selectedGroupId}/membership/coordinator`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          action,
-          studentId: studentId.trim(),
-        }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.message || 'Membership update failed.');
-      }
+      const { data: payload } = await apiClient.patch(
+        `/v1/coordinator/groups/${selectedGroupId}/membership/coordinator`,
+        { action, studentId: studentId.trim() },
+      );
 
       setFeedback({
         type: 'success',
@@ -158,7 +156,7 @@ export default function CoordinatorGroupMembershipPage() {
       setFeedback({
         type: 'error',
         title: 'Update failed',
-        message: error.message || 'Membership update failed.',
+        message: error.response?.data?.message || error.message || 'Membership update failed.',
       });
     } finally {
       setSubmitting(false);
@@ -233,7 +231,7 @@ export default function CoordinatorGroupMembershipPage() {
               Leader: {selectedGroup?.leader?.fullName || selectedGroup?.leader?.studentId || 'Unknown'}
             </p>
             <p className="token-copy">
-              Members: {(selectedGroup?.members || []).length}
+              Members: {totalMembers}
             </p>
           </section>
 

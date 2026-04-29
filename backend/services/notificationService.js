@@ -1,6 +1,51 @@
 const { Notification } = require('../models');
 
 class NotificationService {
+  static async notifyAdvisorRequestReceived({
+    advisorId,
+    requestId,
+    groupId,
+    groupName,
+    teamLeaderId = null,
+    teamLeaderName = null,
+    message = null,
+  }) {
+    const fallbackMessage = groupName
+      ? `A team leader submitted an advisor request for ${groupName}.`
+      : 'A team leader submitted an advisor request.';
+    let row;
+
+    try {
+      row = await Notification.create({
+        userId: advisorId,
+        type: 'ADVISOR_REQUEST',
+        payload: JSON.stringify({
+          requestId,
+          groupId,
+          groupName,
+          teamLeaderId,
+          teamLeaderName,
+          message: message || fallbackMessage,
+          requestStatus: 'PENDING',
+        }),
+        status: 'PENDING',
+      });
+    } catch (error) {
+      console.error('[NotificationService] Failed to persist advisor request notification', error);
+      return;
+    }
+
+    await NotificationService.#pushAndMark(row, `user:${advisorId}`, {
+      requestId,
+      groupId,
+      groupName,
+      teamLeaderId,
+      teamLeaderName,
+      message: message || fallbackMessage,
+      requestStatus: 'PENDING',
+    });
+  }
+
   static async notifyTeamLeaderAdvisorDecision({
     leaderId,
     requestId,

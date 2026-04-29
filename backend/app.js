@@ -3,8 +3,14 @@ const fs = require('fs');
 const path = require('path');
 
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('./middleware/asyncRouteErrors');
 
 const { User, Group, AuditLog } = require('./models');
+const {
+  errorResponseNormalizer,
+  globalErrorHandler,
+  notFoundHandler,
+} = require('./middleware/errorResponse');
 
 const adminRoutes = require('./routes/admin');
 const coordinatorRoutes = require('./routes/coordinator');
@@ -20,12 +26,16 @@ const passwordSetupTokenStoreRoutes = require('./routes/passwordSetupTokenStore'
 const userDatabaseRoutes = require('./routes/userDatabase');
 const groupRoutes = require('./routes/groups');
 const groupDatabaseRoutes = require('./routes/groupDatabase');
+const internalIntegrationsRoutes = require('./routes/internalIntegrations');
 const teamsRoutes = require('./routes/teams');
+const submissionsRoutes = require('./routes/submissions');
+const committeeRoutes = require('./routes/committee');
 
 const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 
 app.use(express.json());
+app.use(errorResponseNormalizer);
 
 // Serve frontend if exists
 if (fs.existsSync(frontendDistPath)) {
@@ -51,11 +61,11 @@ app.use('/api/v1/user-database', userDatabaseRoutes);
 app.use('/api/v1/group-database', groupDatabaseRoutes);
 app.use('/api/v1/groups', groupRoutes);
 app.use('/api/v1/teams', teamsRoutes);
+app.use('/internal/integrations', internalIntegrationsRoutes);
+app.use('/api/v1/committee/submissions', submissionsRoutes);
+app.use('/api/v1/committee', committeeRoutes);
 
-// Global error handler
-app.use((err, req, res, _next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Internal Server Error' });
-});
+app.use(notFoundHandler);
+app.use(globalErrorHandler);
 
 module.exports = app;

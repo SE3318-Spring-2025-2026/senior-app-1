@@ -1,8 +1,30 @@
 const express = require('express');
-const { authenticate } = require('../middleware/auth');
 const githubVerificationController = require('../controllers/githubVerificationController');
+const { authenticate, authorize } = require('../middleware/auth');
+const { requireNonEmptyBody } = require('../middleware/requestValidation');
+const {
+  createIntegrationBindingValidation,
+  createIntegrationBinding,
+} = require('../controllers/integrationBindingController');
+const { getIntegrationConfiguration } = require('../controllers/integrationConfigurationController');
 
 const router = express.Router();
+
+router.post(
+  '/:teamId/integrations',
+  authenticate,
+  authorize(['STUDENT']),
+  requireNonEmptyBody,
+  createIntegrationBindingValidation,
+  createIntegrationBinding,
+);
+
+router.get(
+  '/:teamId/integrations',
+  authenticate,
+  authorize(['STUDENT']),
+  getIntegrationConfiguration,
+);
 
 /**
  * POST /api/v1/teams/:teamId/sprints/:sprintId/github-verifications

@@ -1,5 +1,19 @@
+// Service for handling mentor matching operations, including advisor transfers and synchronization
+// - transferAdvisorInGroupDatabase: Transfer advisor in Group DB
+// - syncAdvisorAssignmentsForGroup: Sync advisor assignment to User DB
+// - transferAdvisorByCoordinator: Transfer advisor by coordinator action
+// - removeAdvisorAssignmentFromGroup: Remove advisor assignment from group
+// - listActiveAdvisors: List advisors available for coordinator actions
+
+
 const sequelize = require('../db');
-const { Group, GroupAdvisorAssignment, Professor, User } = require('../models');
+const {
+  Group,
+  GroupAdvisorAssignment,
+  Professor,
+  User,
+  AuditLog,
+} = require('../models');
 const NotificationService = require('./notificationService');
 
 function createServiceError(status, code, message) {
@@ -150,9 +164,10 @@ async function syncAdvisorAssignmentsForGroup({ groupId, advisorId, transaction 
   };
 }
 
-async function transferAdvisorByCoordinator({ groupId, newAdvisorId }) {
+async function transferAdvisorByCoordinator({ groupId, newAdvisorId, actorId = null }) {
   const result = await sequelize.transaction(async (transaction) => {
     const group = await loadGroupForTransfer(groupId, { transaction });
+    const previousAdvisorId = group.advisorId || null;
     const assignment = await transferAdvisorInGroupDatabase({
       groupId,
       newAdvisorId,
@@ -163,6 +178,21 @@ async function transferAdvisorByCoordinator({ groupId, newAdvisorId }) {
       advisorId: newAdvisorId,
       transaction,
     });
+
+    if (actorId) {
+      AuditLog.create({
+        action: 'ADVISOR_TRANSFER',
+        actorId,
+        targetType: 'GROUP',
+        targetId: group.id,
+        metadata: {
+          groupId: group.id,
+          groupName: group.name || null,
+          previousAdvisorId,
+          newAdvisorId: assignment.advisorId,
+        },
+      }).catch((err) => console.error('Audit log failed (ADVISOR_TRANSFER):', err));
+    }
 
     return {
       groupId: assignment.groupId,
@@ -208,7 +238,7 @@ async function transferAdvisorByCoordinator({ groupId, newAdvisorId }) {
   };
 }
 
-async function removeAdvisorAssignmentFromGroup({ groupId }) {
+async function removeAdvisorAssignmentFromGroup({ groupId, actorId = null }) {
   const result = await sequelize.transaction(async (transaction) => {
     const group = await loadGroupForTransfer(groupId, { transaction });
 
@@ -225,6 +255,20 @@ async function removeAdvisorAssignmentFromGroup({ groupId }) {
     group.advisorId = null;
     group.status = 'LOOKING_FOR_ADVISOR';
     await group.save({ transaction });
+
+    if (actorId) {
+      AuditLog.create({
+        action: 'ADVISOR_RELEASE',
+        actorId,
+        targetType: 'GROUP',
+        targetId: group.id,
+        metadata: {
+          groupId: group.id,
+          groupName: group.name || null,
+          previousAdvisorId: previousAdvisorId || null,
+        },
+      }).catch((err) => console.error('Audit log failed (ADVISOR_RELEASE):', err));
+    }
 
     return {
       groupId: group.id,

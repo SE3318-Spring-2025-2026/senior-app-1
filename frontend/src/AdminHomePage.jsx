@@ -34,6 +34,22 @@ const adminTools = [
     cta: 'Open Add Coordinator',
     status: 'Ready',
   },
+  {
+    eyebrow: 'Groups',
+    title: 'Group Cleanup',
+    description: 'Delete orphan groups from the group database when they no longer have an assigned advisor.',
+    href: '/admin/groups/cleanup',
+    cta: 'Open Cleanup Tool',
+    status: 'Ready',
+  },
+  {
+    eyebrow: 'Compliance',
+    title: 'Audit Logs',
+    description: 'Inspect recorded actions and trace actor, target, and metadata from the admin workspace.',
+    href: '/admin/audit-logs',
+    cta: 'Open Audit Logs',
+    status: 'Ready',
+  },
 ];
 
 export default function AdminHomePage() {

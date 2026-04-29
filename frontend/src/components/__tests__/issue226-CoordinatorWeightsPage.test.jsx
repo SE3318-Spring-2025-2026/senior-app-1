@@ -1,0 +1,99 @@
+/**
+ * Issue #226 — Grading weights assignment UI (f3)
+ * @see https://github.com/SE3318-Spring-2025-2026/senior-app-1/issues/226
+ */
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import CoordinatorWeightConfigurationPage from '../../CoordinatorWeightConfigurationPage.jsx';
+
+describe('CoordinatorWeightConfigurationPage (issue #226)', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    window.localStorage.clear();
+  });
+
+  beforeEach(() => {
+    window.localStorage.setItem('authToken', 'fake-coordinator-jwt');
+    window.localStorage.setItem('coordinatorToken', 'fake-coordinator-jwt');
+  });
+
+  test('rejects negative and over-100 percentages before calling API', async () => {
+    global.fetch = jest.fn();
+
+    render(
+      <MemoryRouter>
+        <CoordinatorWeightConfigurationPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      const bySpin = screen.queryAllByRole('spinbutton');
+      const byLabel = screen.queryAllByLabelText(/weight|percentage|%/i);
+      expect(bySpin.length + byLabel.length).toBeGreaterThan(0);
+    });
+    const pctInputs = screen.queryAllByRole('spinbutton').length
+      ? screen.queryAllByRole('spinbutton')
+      : screen.queryAllByLabelText(/weight|percentage|%/i);
+
+    const first = pctInputs[0];
+    await userEvent.clear(first);
+    await userEvent.type(first, '-5');
+    await userEvent.tab();
+
+    await userEvent.clear(first);
+    await userEvent.type(first, '150');
+
+    const save = screen.queryByRole('button', { name: /save|submit|update/i });
+    if (save) await userEvent.click(save);
+
+    const putCalls = global.fetch.mock.calls.filter(
+      ([url, opts]) => String(url).includes('/coordinator/weights') && opts?.method === 'PUT',
+    );
+    expect(putCalls.length).toBe(0);
+  });
+
+  test('PUT payload contains sprint weight structure', async () => {
+    const calls = [];
+    global.fetch = jest.fn(async (url, options = {}) => {
+      const u = String(url);
+      if (u.includes('/coordinator/weights') && options.method === 'PUT') {
+        calls.push(JSON.parse(options.body || '{}'));
+        return { ok: true, json: async () => ({ ok: true }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+
+    render(
+      <MemoryRouter>
+        <CoordinatorWeightConfigurationPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      const bySpin = screen.queryAllByRole('spinbutton');
+      const byLabel = screen.queryAllByLabelText(/weight|percentage|%/i);
+      expect(bySpin.length + byLabel.length).toBeGreaterThan(0);
+    });
+    const sprintInput = screen.getByRole('spinbutton', { name: /sprint #/i });
+    const weightInput = screen.getByRole('spinbutton', { name: /weight/i });
+
+    await userEvent.clear(sprintInput);
+    await userEvent.type(sprintInput, '1');
+    await userEvent.clear(weightInput);
+    await userEvent.type(weightInput, '100');
+
+    const save = await screen.findByRole('button', { name: /save|submit|update/i });
+    await userEvent.click(save);
+
+    await waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(1));
+    const body = calls[0];
+    expect(
+      Array.isArray(body.sprintWeights) ||
+        Array.isArray(body.weights) ||
+        typeof body.deliverableType === 'string',
+    ).toBe(true);
+  });
+});

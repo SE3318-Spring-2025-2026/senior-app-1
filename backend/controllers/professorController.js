@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const professorService = require('../services/professorService');
+const { Professor, User } = require('../models');
 
 const buildErrorResponse = (message, errorCode) => ({
   message,
@@ -134,4 +135,35 @@ const setupProfessorPassword = [
   },
 ];
 
-module.exports = { loginProfessor, setupProfessorPassword };
+async function listProfessors(req, res) {
+  try {
+    const professors = await Professor.findAll({
+      include: [
+        {
+          model: User,
+          attributes: ['id', 'fullName', 'email', 'role'],
+          where: { role: 'PROFESSOR' },
+        },
+      ],
+    });
+
+    return res.status(200).json(
+      professors
+        .map((professor) => ({
+        id: professor.userId,
+        professorProfileId: professor.id,
+        fullName: professor.User?.fullName || '',
+        email: professor.User?.email || '',
+        department: professor.department || '',
+        }))
+        .sort((left, right) => left.fullName.localeCompare(right.fullName)),
+    );
+  } catch (error) {
+    console.error('Error listing professors:', error);
+    return res.status(500).json(
+      buildErrorResponse('Failed to fetch professors', 'INTERNAL_SERVER_ERROR'),
+    );
+  }
+}
+
+module.exports = { loginProfessor, setupProfessorPassword, listProfessors };

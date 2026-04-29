@@ -1,13 +1,16 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireNonEmptyBody } = require('../middleware/requestValidation');
 const NotificationService = require('../services/notificationService');
 const sequelize = require('../db');
 const { syncAdvisorAssignmentsForGroup } = require('../services/mentorMatchingService');
+const { getAdvisorRequestDetails } = require('../controllers/advisorController');
 const {
+  createAdvisorRequest,
   getPendingAdvisorRequest,
   updatePendingAdvisorRequestStatus,
-  listAdvisorRequests, // Senin yazdığın controller metodu eklendi
+  listAdvisorRequests,
 } = require('../controllers/advisorRequestController');
 const { AdvisorRequest, AuditLog, Group, User } = require('../models');
 
@@ -15,15 +18,28 @@ const router = express.Router();
 
 const buildErrorResponse = (message, code) => ({ message, code });
 
-// 1. Senin Dalından Gelen: Çoğul İstekleri Listeleme (Ekibin güvenlik katmanlarıyla güçlendirildi)
+router.post(
+  '/advisor-requests',
+  authenticate,
+  authorize(['STUDENT']),
+  requireNonEmptyBody,
+  createAdvisorRequest,
+);
+
 router.get(
   '/advisor-requests',
   authenticate,
   authorize(['PROFESSOR']),
-  listAdvisorRequests
+  listAdvisorRequests,
 );
 
-// 2. Ana Daldan Gelen: Tekil İstek Getirme
+router.get(
+  '/advisor-requests/:requestId',
+  authenticate,
+  authorize(['STUDENT']),
+  getAdvisorRequestDetails,
+);
+
 router.get(
   '/pending-advisor-requests/:requestId',
   authenticate,
@@ -31,11 +47,11 @@ router.get(
   getPendingAdvisorRequest,
 );
 
-// 3. Ana Daldan Gelen: Durum Güncelleme (Controller'a yönlendirilen versiyon)
 router.patch(
   '/pending-advisor-requests/:requestId/status',
   authenticate,
   authorize(['PROFESSOR']),
+  requireNonEmptyBody,
   body('status').isString().trim().notEmpty(),
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -49,12 +65,11 @@ router.patch(
   },
 );
 
-// 4. Ana Daldan Gelen: Karar Verme 
-// (Not: Bu kadar iş mantığının route içinde olması hatalıdır, takımın yazdığı loglama/bildirimleri bozmamak için şimdilik tutuluyor)
 router.patch(
   '/advisor-requests/:requestId/decision',
   authenticate,
   authorize(['PROFESSOR']),
+  requireNonEmptyBody,
   body('decision')
     .isString()
     .trim()

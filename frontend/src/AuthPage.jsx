@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import { useAuth } from './contexts/AuthContext';
+import apiClient from './services/apiClient';
 
 const LOGIN_ROLES = [
   { value: 'student', label: 'Student' },
@@ -12,13 +14,13 @@ const LOGIN_ROLES = [
 function endpointForLogin(role) {
   switch (role) {
     case 'student':
-      return '/api/v1/students/login';
+      return '/v1/students/login';
     case 'professor':
-      return '/api/v1/professors/login';
+      return '/v1/professors/login';
     case 'coordinator':
-      return '/api/v1/coordinator/login';
+      return '/v1/coordinator/login';
     case 'admin':
-      return '/api/v1/admin/login';
+      return '/v1/admin/login';
     default:
       return '';
   }
@@ -54,6 +56,21 @@ function tokenStorageKeyForRole(role) {
   }
 }
 
+function routeForRole(role) {
+  switch (role) {
+    case 'student':
+      return '/home';
+    case 'professor':
+      return '/professors';
+    case 'coordinator':
+      return '/coordinator';
+    case 'admin':
+      return '/admin';
+    default:
+      return '/home';
+  }
+}
+
 export default function AuthPage() {
   const [mode, setMode] = useState('login');
   const [role, setRole] = useState('student');
@@ -75,6 +92,7 @@ export default function AuthPage() {
 
   const navigate = useNavigate();
   const { notify } = useNotification();
+  const { login } = useAuth();
 
   const isStudent = role === 'student';
 
@@ -109,43 +127,37 @@ export default function AuthPage() {
         ? { studentId: loginForm.studentId.trim(), password: loginForm.password }
         : { email: loginForm.email.trim(), password: loginForm.password };
 
-      const response = await fetch(endpointForLogin(role), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        setFeedback({
-          type: 'error',
-          title: 'Login failed',
-          message: result.message || 'Credentials are invalid or request failed.',
-        });
-        return;
-      }
+      const { data: result } = await apiClient.post(endpointForLogin(role), payload);
 
       const userKey = userStorageKeyForRole(role);
       const tokenKey = tokenStorageKeyForRole(role);
       window.localStorage.setItem(userKey, JSON.stringify(result.user || {}));
       window.localStorage.setItem(tokenKey, result.token || '');
       window.localStorage.setItem('authToken', result.token || '');
+      login(result.token, result.user);
 
       setFeedback({
         type: 'success',
         title: 'Signed in',
-        message: 'Welcome back. Redirecting to home.',
+        message: 'Welcome back. Redirecting to your workspace.',
       });
       notify({ type: 'success', title: 'Signed in', message: `${LOGIN_ROLES.find((r) => r.value === role)?.label || 'User'} login successful.` });
 
-      window.setTimeout(() => navigate('/home'), 400);
-    } catch {
-      setFeedback({
-        type: 'error',
-        title: 'Network error',
-        message: 'Could not reach backend. Check backend server status.',
-      });
+      window.setTimeout(() => navigate(routeForRole(role), { replace: true }), 400);
+    } catch (err) {
+      if (err.response) {
+        setFeedback({
+          type: 'error',
+          title: 'Login failed',
+          message: err.response.data?.message || 'Credentials are invalid or request failed.',
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          title: 'Network error',
+          message: 'Could not reach backend. Check backend server status.',
+        });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -157,28 +169,13 @@ export default function AuthPage() {
     setFeedback({ type: 'loading', title: 'Creating account', message: 'Creating your account.' });
 
     try {
-      const response = await fetch('/api/v1/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: 'STUDENT',
-          studentId: signupForm.studentId.trim(),
-          fullName: signupForm.fullName.trim(),
-          email: signupForm.email.trim(),
-          password: signupForm.password,
-        }),
+      await apiClient.post('/v1/auth/register', {
+        role: 'STUDENT',
+        studentId: signupForm.studentId.trim(),
+        fullName: signupForm.fullName.trim(),
+        email: signupForm.email.trim(),
+        password: signupForm.password,
       });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        setFeedback({
-          type: 'error',
-          title: 'Sign up failed',
-          message: result.message || 'Could not create account.',
-        });
-        return;
-      }
 
       setFeedback({
         type: 'success',
@@ -194,12 +191,20 @@ export default function AuthPage() {
         studentId: signupForm.studentId,
         email: signupForm.email,
       }));
-    } catch {
-      setFeedback({
-        type: 'error',
-        title: 'Network error',
-        message: 'Could not reach backend. Check backend server status.',
-      });
+    } catch (err) {
+      if (err.response) {
+        setFeedback({
+          type: 'error',
+          title: 'Sign up failed',
+          message: err.response.data?.message || 'Could not create account.',
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          title: 'Network error',
+          message: 'Could not reach backend. Check backend server status.',
+        });
+      }
     } finally {
       setSubmitting(false);
     }
