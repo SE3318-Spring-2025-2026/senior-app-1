@@ -6,6 +6,14 @@ const {
   createIntegrationBinding,
 } = require('../controllers/integrationBindingController');
 const { getIntegrationConfiguration } = require('../controllers/integrationConfigurationController');
+const { triggerSprintEvaluationHandler } = require('../controllers/sprintEvaluationController');
+// Trigger sprint evaluation (no metrics in payload)
+router.post(
+  '/:teamId/sprints/:sprintId/evaluations',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  triggerSprintEvaluationHandler
+);
 
 const router = express.Router();
 
