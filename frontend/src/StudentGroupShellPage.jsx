@@ -351,6 +351,13 @@ export default function StudentGroupShellPage() {
           <button type="button" onClick={() => setShowAddGroupModal(true)}>
             Create Group
           </button>
+          {selectedGroup && selectedIsLeader ? (
+            <Link to={`/students/groups/${selectedGroup.groupId}/integrations`}>View Integrations</Link>
+          ) : (
+            <span className="workspace-button workspace-button-secondary workspace-button-disabled">
+              View Integrations
+            </span>
+          )}
           {advisorRequestEligibleGroups.length > 0 ? (
             <Link to="/team-leader/advisor-requests/new">Request Advisor</Link>
           ) : (

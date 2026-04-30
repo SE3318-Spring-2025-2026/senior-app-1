@@ -77,13 +77,13 @@ describe('CoordinatorWeightConfigurationPage (issue #226)', () => {
       const byLabel = screen.queryAllByLabelText(/weight|percentage|%/i);
       expect(bySpin.length + byLabel.length).toBeGreaterThan(0);
     });
-    const pctInputs = screen.queryAllByRole('spinbutton').length
-      ? screen.queryAllByRole('spinbutton')
-      : screen.queryAllByLabelText(/weight|percentage|%/i);
-    for (const input of pctInputs) {
-      await userEvent.clear(input);
-      await userEvent.type(input, '50');
-    }
+    const sprintInput = screen.getByRole('spinbutton', { name: /sprint #/i });
+    const weightInput = screen.getByRole('spinbutton', { name: /weight/i });
+
+    await userEvent.clear(sprintInput);
+    await userEvent.type(sprintInput, '1');
+    await userEvent.clear(weightInput);
+    await userEvent.type(weightInput, '100');
 
     const save = await screen.findByRole('button', { name: /save|submit|update/i });
     await userEvent.click(save);
