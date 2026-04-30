@@ -1,7 +1,7 @@
 'use strict';
 
 const { param, validationResult } = require('express-validator');
-const { calculateTeamScalar, getTeamScalar } = require('../services/finalEvaluationService');
+const { calculateTeamScalar, getTeamScalar, getContributions } = require('../services/finalEvaluationService');
 
 const groupIdValidation = [
   param('groupId').isUUID().withMessage('groupId must be a valid UUID'),
@@ -68,8 +68,34 @@ async function getTeamScalarHandler(req, res) {
   }
 }
 
+async function getContributionsHandler(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const result = await getContributions(req.params.groupId);
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Contributions computed',
+      data: result,
+    });
+  } catch (err) {
+    if (err.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: err.message });
+    }
+    if (err.code === 'NO_SPRINT_SYNC_DATA') {
+      return res.status(422).json({ code: 'NO_SPRINT_SYNC_DATA', message: err.message });
+    }
+    console.error('getContributions error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+}
+
 module.exports = {
   groupIdValidation,
   postTeamScalar,
   getTeamScalarHandler,
+  getContributionsHandler,
 };

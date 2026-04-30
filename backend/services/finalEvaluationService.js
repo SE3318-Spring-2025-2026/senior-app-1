@@ -1,6 +1,6 @@
 'use strict';
 
-const { Group, FinalEvaluationGrade, FinalEvaluationWeight, TeamScalar } = require('../models');
+const { Group, FinalEvaluationGrade, FinalEvaluationWeight, TeamScalar, SprintMemberRecord, User } = require('../models');
 
 function serviceError(code, message) {
   const err = new Error(message);
@@ -72,4 +72,51 @@ async function getTeamScalar(groupId) {
   return ts;
 }
 
-module.exports = { calculateTeamScalar, getTeamScalar };
+async function getContributions(groupId) {
+  const group = await Group.findByPk(groupId);
+  if (!group) throw serviceError('GROUP_NOT_FOUND', 'Group not found');
+
+  const records = await SprintMemberRecord.findAll({ where: { groupId } });
+  if (!records.length) {
+    throw serviceError('NO_SPRINT_SYNC_DATA', 'No sprint sync data found for this group');
+  }
+
+  const memberMap = {};
+  for (const r of records) {
+    if (!memberMap[r.userId]) {
+      memberMap[r.userId] = { userId: r.userId, storyPointsCompleted: 0, totalCommits: 0 };
+    }
+    memberMap[r.userId].storyPointsCompleted += r.storyPointsCompleted;
+    memberMap[r.userId].totalCommits += r.commitCount;
+  }
+
+  const members = Object.values(memberMap);
+
+  const userIds = members.map((m) => m.userId);
+  const users = await User.findAll({ where: { id: userIds } });
+  const userNameMap = Object.fromEntries(users.map((u) => [u.id, u.fullName]));
+  for (const m of members) {
+    m.fullName = userNameMap[m.userId] || 'Unknown';
+  }
+
+  const totalStoryPoints = members.reduce((sum, m) => sum + m.storyPointsCompleted, 0);
+  const totalCommits = members.reduce((sum, m) => sum + m.totalCommits, 0);
+
+  for (const m of members) {
+    if (totalStoryPoints > 0) {
+      m.contributionRatio = m.storyPointsCompleted / totalStoryPoints;
+    } else if (totalCommits > 0) {
+      m.contributionRatio = m.totalCommits / totalCommits;
+    } else {
+      m.contributionRatio = 1 / members.length;
+    }
+  }
+
+  return {
+    groupId,
+    members,
+    computedAt: new Date(),
+  };
+}
+
+module.exports = { calculateTeamScalar, getTeamScalar, getContributions };
