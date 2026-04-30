@@ -6,6 +6,10 @@ const {
   createIntegrationBinding,
 } = require('../controllers/integrationBindingController');
 const { getIntegrationConfiguration } = require('../controllers/integrationConfigurationController');
+const {
+  triggerJiraSyncValidation,
+  triggerJiraSync,
+} = require('../controllers/jiraSyncController');
 
 const router = express.Router();
 
@@ -23,6 +27,15 @@ router.get(
   authenticate,
   authorize(['STUDENT']),
   getIntegrationConfiguration,
+);
+
+router.post(
+  '/:teamId/sprints/:sprintId/jira-sync',
+  authenticate,
+  authorize(['STUDENT']),
+  requireNonEmptyBody,
+  triggerJiraSyncValidation,
+  triggerJiraSync,
 );
 
 module.exports = router;
