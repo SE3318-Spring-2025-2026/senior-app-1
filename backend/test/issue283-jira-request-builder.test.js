@@ -83,7 +83,7 @@ test('normalizes base url and reports mock mode when real Jira config is absent'
   assert.equal(request.options.headers.Authorization, undefined);
 });
 
-test('builds sprint issue requests in a form that can be reused by later Jira sync issues', async () => {
+test('builds sprint issue requests in a configurable form that can be reused by later Jira sync issues', async () => {
   const request = buildJiraSprintIssuesRequest({
     boardId: 'board_42',
     sprintId: 'sprint_2026_03',
@@ -92,6 +92,8 @@ test('builds sprint issue requests in a form that can be reused by later Jira sy
     baseUrl: 'https://acme.atlassian.net',
     email: 'jira-user@example.edu',
     apiToken: 'secret-token',
+    fields: ['summary', 'customfield_story_points', 'customfield_sprint_ref'],
+    maxResults: 25,
   });
 
   const url = new URL(request.url);
@@ -99,17 +101,17 @@ test('builds sprint issue requests in a form that can be reused by later Jira sy
     url.pathname,
     '/rest/agile/1.0/board/board_42/sprint/sprint_2026_03/issue',
   );
-  assert.equal(url.searchParams.get('maxResults'), '100');
+  assert.equal(url.searchParams.get('maxResults'), '25');
   assert.equal(
     url.searchParams.get('fields'),
-    'summary,description,status,assignee,storyPoints,customfield_10016,customfield_10020,sprint',
+    'summary,customfield_story_points,customfield_sprint_ref',
   );
   assert.deepEqual(url.searchParams.getAll('status'), ['To Do', 'In Progress']);
   assert.equal(request.options.method, 'GET');
   assert.equal(request.mock, false);
 });
 
-test('rejects invalid builder input early', async () => {
+test('rejects invalid or unsafe builder input early', async () => {
   assert.throws(
     () => buildJiraRequest({}, {
       baseUrl: 'https://acme.atlassian.net',
@@ -117,6 +119,17 @@ test('rejects invalid builder input early', async () => {
       apiToken: 'secret-token',
     }),
     /Jira request path is required/,
+  );
+
+  assert.throws(
+    () => buildJiraRequest({
+      path: 'https://attacker.tld/rest/api/3/search',
+    }, {
+      baseUrl: 'https://acme.atlassian.net',
+      email: 'jira-user@example.edu',
+      apiToken: 'secret-token',
+    }),
+    /Jira request path must be relative/,
   );
 
   assert.throws(

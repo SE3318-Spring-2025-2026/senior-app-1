@@ -53,14 +53,26 @@ function appendQueryParams(url, query = {}) {
   });
 }
 
+function isAbsoluteUrl(value) {
+  return /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(value);
+}
+
 function buildJiraRequest(request = {}, config = {}) {
   const path = asTrimmedString(request.path);
   if (!path) {
     throw new Error('Jira request path is required.');
   }
 
+  if (isAbsoluteUrl(path)) {
+    throw new Error('Jira request path must be relative.');
+  }
+
   const normalizedPath = path.replace(/^\//, '');
-  const url = new URL(normalizedPath, normalizeJiraBaseUrl(config.baseUrl));
+  const normalizedBaseUrl = normalizeJiraBaseUrl(config.baseUrl);
+  const url = new URL(normalizedPath, normalizedBaseUrl);
+  if (url.origin !== new URL(normalizedBaseUrl).origin) {
+    throw new Error('Jira request URL must stay within the configured Jira origin.');
+  }
   appendQueryParams(url, request.query || {});
 
   const headers = {
@@ -68,7 +80,9 @@ function buildJiraRequest(request = {}, config = {}) {
     ...(request.headers || {}),
   };
 
-  const authHeader = buildJiraAuthHeader(config);
+  const authHeader = hasRealJiraApiConfig(config)
+    ? buildJiraAuthHeader(config)
+    : null;
   if (authHeader) {
     headers.Authorization = authHeader;
   }
@@ -107,21 +121,27 @@ function buildJiraSprintIssuesRequest({ boardId, sprintId, includeStatuses = [] 
   const normalizedStatuses = Array.isArray(includeStatuses)
     ? includeStatuses.map((status) => asTrimmedString(status)).filter(Boolean)
     : [];
+  const fields = Array.isArray(config.fields) && config.fields.length > 0
+    ? config.fields.map((field) => asTrimmedString(field)).filter(Boolean)
+    : [
+      'summary',
+      'description',
+      'status',
+      'assignee',
+      'storyPoints',
+      'customfield_10016',
+      'customfield_10020',
+      'sprint',
+    ];
+  const maxResults = Number.isInteger(config.maxResults) && config.maxResults > 0
+    ? config.maxResults
+    : 100;
 
   return buildJiraRequest({
     path: `/rest/agile/1.0/board/${encodeURIComponent(normalizedBoardId)}/sprint/${encodeURIComponent(normalizedSprintId)}/issue`,
     query: {
-      fields: [
-        'summary',
-        'description',
-        'status',
-        'assignee',
-        'storyPoints',
-        'customfield_10016',
-        'customfield_10020',
-        'sprint',
-      ].join(','),
-      maxResults: 100,
+      fields: fields.join(','),
+      maxResults,
       status: normalizedStatuses,
     },
   }, config);
