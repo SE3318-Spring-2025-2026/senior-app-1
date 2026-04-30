@@ -1,7 +1,7 @@
 const { randomUUID } = require('crypto');
 const { body, validationResult } = require('express-validator');
 const sequelize = require('../db');
-const { StoryMetric } = require('../models');
+const { IntegrationBinding, StoryMetric } = require('../models');
 
 const storeStoryMetricsValidation = [
   body('teamId')
@@ -47,6 +47,10 @@ const storeStoryMetricsValidation = [
     .withMessage('unit is required'),
 ];
 
+function buildMetricKey(metric) {
+  return [metric.issueKey, metric.metricName].join('::');
+}
+
 async function storeStoryMetrics(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -67,8 +71,27 @@ async function storeStoryMetrics(req, res) {
     metricValue: Number(story.metricValue),
     unit: story.unit.trim(),
   }));
+  const uniqueMetricKeys = new Set(metrics.map(buildMetricKey));
+
+  if (uniqueMetricKeys.size !== metrics.length) {
+    return res.status(400).json({
+      code: 'VALIDATION_ERROR',
+      message: 'Duplicate story metrics in request payload',
+    });
+  }
 
   try {
+    const binding = await IntegrationBinding.findOne({
+      where: { teamId },
+    });
+
+    if (!binding) {
+      return res.status(404).json({
+        code: 'INTEGRATION_BINDING_NOT_FOUND',
+        message: 'No integration binding exists for this team',
+      });
+    }
+
     await sequelize.transaction(async (transaction) => {
       for (const metric of metrics) {
         await StoryMetric.upsert(metric, { transaction });
@@ -82,7 +105,7 @@ async function storeStoryMetrics(req, res) {
       recordedAt: new Date().toISOString(),
       teamId,
       sprintId,
-      storedCount: metrics.length,
+      storedCount: uniqueMetricKeys.size,
     });
   } catch (error) {
     console.error('Error in storeStoryMetrics:', error);
