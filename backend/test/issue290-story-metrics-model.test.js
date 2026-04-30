@@ -64,6 +64,18 @@ test('story metric model rejects missing required fields and invalid metric valu
 
   await assert.rejects(
     StoryMetric.create({
+      teamId: '',
+      sprintId: 'sprint_2026_03',
+      issueKey: 'SPM-214',
+      metricName: 'storyCompletionScore',
+      metricValue: 0.85,
+      unit: 'ratio',
+    }),
+    /Validation/,
+  );
+
+  await assert.rejects(
+    StoryMetric.create({
       teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
       sprintId: 'sprint_2026_03',
       issueKey: 'SPM-214',
@@ -107,4 +119,36 @@ test('story metric model keeps one value per team sprint issue metric name', asy
     }),
     /UniqueConstraintError|Validation error/,
   );
+});
+
+test('story metric model requires an existing integration binding and supports eager loading', async () => {
+  await assert.rejects(
+    StoryMetric.create({
+      teamId: 'missing-team',
+      sprintId: 'sprint_2026_03',
+      issueKey: 'SPM-214',
+      metricName: 'storyCompletionScore',
+      metricValue: 0.85,
+      unit: 'ratio',
+    }),
+    /ForeignKeyConstraintError/,
+  );
+
+  await createTeamBinding('team_assoc');
+  await StoryMetric.create({
+    teamId: 'team_assoc',
+    sprintId: 'sprint_2026_03',
+    issueKey: 'SPM-214',
+    metricName: 'storyCompletionScore',
+    metricValue: 0.85,
+    unit: 'ratio',
+  });
+
+  const binding = await IntegrationBinding.findOne({
+    where: { teamId: 'team_assoc' },
+    include: 'storyMetrics',
+  });
+
+  assert.equal(binding.storyMetrics.length, 1);
+  assert.equal(binding.storyMetrics[0].issueKey, 'SPM-214');
 });
