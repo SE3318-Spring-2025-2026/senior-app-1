@@ -7,6 +7,22 @@ function asTrimmedString(value) {
   return trimmed || null;
 }
 
+function asIdentifierString(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return asTrimmedString(value);
+}
+
+function asTextFragment(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  return value.trim() === '' ? null : value;
+}
+
 function asNullableNumber(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -22,35 +38,36 @@ function asNullableNumber(value) {
   return null;
 }
 
-function extractDocumentText(value) {
+function extractDocumentText(value, joinWith = '\n') {
   if (!value) {
     return null;
   }
 
   if (typeof value === 'string') {
-    return asTrimmedString(value);
+    return asTextFragment(value);
   }
 
   if (Array.isArray(value)) {
     const text = value
-      .map(extractDocumentText)
+      .map((entry) => extractDocumentText(entry, joinWith))
       .filter(Boolean)
-      .join('\n');
+      .join(joinWith);
 
     return asTrimmedString(text);
   }
 
   if (typeof value === 'object') {
-    const directText = asTrimmedString(value.text);
+    const directText = asTextFragment(value.text);
     if (directText) {
       return directText;
     }
 
     if (Array.isArray(value.content)) {
+      const childJoiner = value.type === 'paragraph' ? '' : '\n';
       const contentText = value.content
-        .map(extractDocumentText)
+        .map((entry) => extractDocumentText(entry, childJoiner))
         .filter(Boolean)
-        .join('\n');
+        .join(childJoiner);
 
       return asTrimmedString(contentText);
     }
@@ -88,8 +105,8 @@ function extractSprintId(issue, fields, fallbackSprintId) {
     }
 
     if (candidate && typeof candidate === 'object') {
-      const resolved = asTrimmedString(candidate.id)
-        || asTrimmedString(candidate.sprintId)
+      const resolved = asIdentifierString(candidate.id)
+        || asIdentifierString(candidate.sprintId)
         || asTrimmedString(candidate.name);
       if (resolved) {
         return resolved;
@@ -97,7 +114,7 @@ function extractSprintId(issue, fields, fallbackSprintId) {
       continue;
     }
 
-    const resolved = asTrimmedString(candidate);
+    const resolved = asIdentifierString(candidate);
     if (resolved) {
       return resolved;
     }
@@ -113,13 +130,10 @@ function extractAssigneeId(issue, fields) {
     assignee.accountId,
     assignee.id,
     assignee.key,
-    assignee.name,
-    assignee.emailAddress,
-    assignee.displayName,
   ];
 
   for (const candidate of candidates) {
-    const resolved = asTrimmedString(candidate);
+    const resolved = asIdentifierString(candidate);
     if (resolved) {
       return resolved;
     }

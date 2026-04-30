@@ -58,7 +58,10 @@ test('normalization extracts text from Atlassian document descriptions', async (
         content: [
           {
             type: 'paragraph',
-            content: [{ type: 'text', text: 'First line of text.' }],
+            content: [
+              { type: 'text', text: 'First line' },
+              { type: 'text', text: ' of text.' },
+            ],
           },
           {
             type: 'paragraph',
@@ -68,32 +71,43 @@ test('normalization extracts text from Atlassian document descriptions', async (
       },
       status: { name: 'Done' },
       customfield_10016: '8',
-      assignee: { displayName: 'Student User' },
+      assignee: { id: 'jira-user-17' },
       sprint: { id: 'sprint_2026_04' },
     },
   });
 
   assert.equal(normalized.description, 'First line of text.\nSecond line of text.');
   assert.equal(normalized.storyPoints, 8);
-  assert.equal(normalized.assigneeId, 'Student User');
+  assert.equal(normalized.assigneeId, 'jira-user-17');
   assert.equal(normalized.status, 'DONE');
 });
 
-test('normalization resolves sprint id from active sprint arrays or fallback value', async () => {
+test('normalization resolves sprint id from active sprint arrays, numeric ids, or fallback value', async () => {
   const normalizedFromArray = normalizeJiraIssue({
     key: 'SPM-217',
     fields: {
       summary: 'Resolve sprint from Jira sprint array',
       status: { name: 'In Review' },
       customfield_10020: [
-        { id: 'old_sprint', state: 'closed' },
-        { id: 'active_sprint', state: 'active' },
+        { id: 1001, state: 'closed' },
+        { id: 1002, state: 'active' },
       ],
     },
   });
 
-  assert.equal(normalizedFromArray.sprintId, 'active_sprint');
+  assert.equal(normalizedFromArray.sprintId, '1002');
   assert.equal(normalizedFromArray.status, 'IN_REVIEW');
+
+  const normalizedFromNumericSprint = normalizeJiraIssue({
+    key: 'SPM-217A',
+    fields: {
+      summary: 'Resolve numeric sprint identifier',
+      status: { name: 'In Review' },
+      sprint: { id: 202603 },
+    },
+  });
+
+  assert.equal(normalizedFromNumericSprint.sprintId, '202603');
 
   const normalizedWithFallback = normalizeJiraIssue({
     key: 'SPM-218',
@@ -107,6 +121,25 @@ test('normalization resolves sprint id from active sprint arrays or fallback val
 
   assert.equal(normalizedWithFallback.sprintId, 'sprint_2026_05');
   assert.equal(normalizedWithFallback.storyPoints, null);
+});
+
+test('normalization does not fall back to assignee display fields when stable identifiers are missing', async () => {
+  const normalized = normalizeJiraIssue({
+    key: 'SPM-219',
+    fields: {
+      summary: 'Reject unstable assignee identifiers',
+      description: 'Assignee has only display information.',
+      status: { name: 'To Do' },
+      assignee: {
+        displayName: 'Student User',
+        emailAddress: 'student@example.edu',
+      },
+      sprint: { id: 'sprint_2026_06' },
+    },
+  });
+
+  assert.equal(normalized.assigneeId, null);
+  assert.equal(normalized.sprintId, 'sprint_2026_06');
 });
 
 test('normalization keeps required shape even when Jira issue payload is sparse', async () => {
