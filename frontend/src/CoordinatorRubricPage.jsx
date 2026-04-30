@@ -23,7 +23,7 @@ export default function CoordinatorRubricPage() {
   useEffect(() => {
     if (!token) {
       notify({ type: 'warning', title: 'Login required', message: 'Please sign in as coordinator.' });
-      navigate('/coordinator/login', { replace: true });
+      navigate('/login', { replace: true });
     }
   }, [navigate, notify, token]);
 

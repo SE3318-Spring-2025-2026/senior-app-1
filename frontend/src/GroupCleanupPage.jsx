@@ -6,7 +6,7 @@ import apiClient from './services/apiClient';
 const ROLE_CONFIG = {
   ADMIN: {
     tokenKey: 'adminToken',
-    loginPath: '/admin/login',
+    loginPath: '/login',
     homePath: '/admin',
     eyebrow: 'Admin Workspace',
     title: 'Delete Group Records',
@@ -15,7 +15,7 @@ const ROLE_CONFIG = {
   },
   COORDINATOR: {
     tokenKey: 'coordinatorToken',
-    loginPath: '/coordinator/login',
+    loginPath: '/login',
     homePath: '/coordinator',
     eyebrow: 'Coordinator Workspace',
     title: 'Delete Group Records',

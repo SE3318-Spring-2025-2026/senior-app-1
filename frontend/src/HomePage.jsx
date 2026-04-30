@@ -180,7 +180,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!title) {
-      navigate('/auth', { replace: true });
+      navigate('/login', { replace: true });
       return;
     }
 

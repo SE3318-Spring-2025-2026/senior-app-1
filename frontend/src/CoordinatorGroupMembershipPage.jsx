@@ -40,7 +40,7 @@ export default function CoordinatorGroupMembershipPage() {
       title: 'Coordinator login required',
       message: 'Please sign in before opening manual group membership management.',
     });
-    navigate('/coordinator/login', { replace: true });
+    navigate('/login', { replace: true });
   }, [navigate, notify, token]);
 
   useEffect(() => {

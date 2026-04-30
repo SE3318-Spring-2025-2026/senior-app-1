@@ -35,7 +35,7 @@ export default function AdminAuditLogPage() {
       title: 'Admin login required',
       message: 'Please sign in before opening audit logs.',
     });
-    navigate('/admin/login', { replace: true });
+    navigate('/login', { replace: true });
   }, [navigate, notify, token]);
 
   useEffect(() => {
