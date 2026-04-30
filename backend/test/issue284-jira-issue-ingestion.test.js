@@ -104,7 +104,7 @@ test('receives Jira issues, normalizes them, and stores story point metrics', as
   assert.equal(json.teamId, 'team_01HR9W2Q6NQ7G6M3K4J8');
   assert.equal(json.sprintId, 'sprint_2026_03');
   assert.equal(json.receivedCount, 3);
-  assert.equal(json.storedMetricCount, 2);
+  assert.equal(json.upsertedMetricCount, 2);
   assert.ok(json.recordedAt);
 
   const storedMetrics = await StoryMetric.findAll({
@@ -168,6 +168,32 @@ test('rejects Jira issues that cannot be normalized into the required shape', as
   assert.ok(Array.isArray(json.details));
 });
 
+test('rejects Jira issues with unknown normalized status', async () => {
+  await createTeamBinding();
+
+  const { response, json } = await request('/internal/jira/issues', {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: 'sprint_2026_03',
+      receivedAt: '2026-04-23T12:10:00Z',
+      issues: [
+        {
+          issueKey: 'SPM-299',
+          title: 'Missing status issue',
+          sprintId: 'sprint_2026_03',
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(json.code, 'VALIDATION_ERROR');
+  assert.match(json.message, /required shape/i);
+  assert.ok(Array.isArray(json.details));
+});
+
 test('rejects duplicate Jira issues in the same payload', async () => {
   await createTeamBinding();
 
@@ -199,6 +225,80 @@ test('rejects duplicate Jira issues in the same payload', async () => {
   assert.equal(json.code, 'VALIDATION_ERROR');
   assert.equal(json.message, 'Duplicate Jira issues in request payload');
   assert.equal(await StoryMetric.count(), 0);
+});
+
+test('rejects Jira issues whose normalized sprint does not match the request sprint', async () => {
+  await createTeamBinding();
+
+  const { response, json } = await request('/internal/jira/issues', {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: 'sprint_2026_03',
+      receivedAt: '2026-04-23T12:10:00Z',
+      issues: [
+        {
+          issueKey: 'SPM-214',
+          title: 'Wrong sprint issue',
+          status: 'IN_PROGRESS',
+          sprintId: 'sprint_2026_02',
+          storyPoints: 5,
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(json.code, 'VALIDATION_ERROR');
+  assert.match(json.message, /do not belong to the requested sprint/i);
+  assert.equal(await StoryMetric.count(), 0);
+});
+
+test('reports upserted metric count when existing story point metrics are overwritten', async () => {
+  await createTeamBinding();
+
+  await StoryMetric.create({
+    teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+    sprintId: 'sprint_2026_03',
+    issueKey: 'SPM-214',
+    metricName: 'storyPoints',
+    metricValue: 2,
+    unit: 'points',
+  });
+
+  const { response, json } = await request('/internal/jira/issues', {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: 'sprint_2026_03',
+      receivedAt: '2026-04-23T12:10:00Z',
+      issues: [
+        {
+          issueKey: 'SPM-214',
+          title: 'Updated story point issue',
+          status: 'DONE',
+          sprintId: 'sprint_2026_03',
+          storyPoints: 8,
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal(json.upsertedMetricCount, 1);
+
+  const storedMetric = await StoryMetric.findOne({
+    where: {
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: 'sprint_2026_03',
+      issueKey: 'SPM-214',
+      metricName: 'storyPoints',
+    },
+  });
+
+  assert.equal(storedMetric.metricValue, 8);
 });
 
 test('rejects Jira issue ingestion for teams without an integration binding', async () => {

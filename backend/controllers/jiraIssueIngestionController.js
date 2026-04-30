@@ -4,14 +4,6 @@ const sequelize = require('../db');
 const { IntegrationBinding, StoryMetric } = require('../models');
 const { normalizeJiraIssue } = require('../services/jiraIssueNormalizer');
 
-function asTrimmedString(value) {
-  if (typeof value !== 'string') {
-    return '';
-  }
-
-  return value.trim();
-}
-
 function hasJiraProvider(binding) {
   const providers = Array.isArray(binding?.providerSet)
     ? binding.providerSet.map((provider) => String(provider).toUpperCase())
@@ -33,7 +25,7 @@ function findMissingRequiredFields(issue) {
   if (!issue.title) {
     missingFields.push('title');
   }
-  if (!issue.status) {
+  if (!issue.status || issue.status === 'UNKNOWN') {
     missingFields.push('status');
   }
   if (!issue.sprintId) {
@@ -43,17 +35,27 @@ function findMissingRequiredFields(issue) {
   return missingFields;
 }
 
-function buildStoryPointMetrics(teamId, sprintId, issues) {
+function buildStoryPointMetrics(teamId, issues) {
   return issues
     .filter((issue) => issue.storyPoints !== null)
     .map((issue) => ({
       teamId,
-      sprintId,
+      sprintId: issue.sprintId,
       issueKey: issue.issueKey,
       metricName: 'storyPoints',
       metricValue: Number(issue.storyPoints),
       unit: 'points',
     }));
+}
+
+function findSprintMismatchIssues(issues, sprintId) {
+  return issues
+    .map((issue, index) => ({
+      index,
+      issueKey: issue.issueKey,
+      sprintId: issue.sprintId,
+    }))
+    .filter((issue) => issue.sprintId !== sprintId);
 }
 
 const ingestJiraIssuesValidation = [
@@ -138,6 +140,19 @@ async function ingestJiraIssues(req, res) {
       });
     }
 
+    const sprintMismatchIssues = findSprintMismatchIssues(normalizedIssues, sprintId);
+    if (sprintMismatchIssues.length > 0) {
+      return res.status(400).json({
+        code: 'VALIDATION_ERROR',
+        message: 'One or more Jira issues do not belong to the requested sprint',
+        errors: sprintMismatchIssues.map((issue) => ({
+          msg: 'Issue sprintId does not match the request sprintId',
+          path: `issues[${issue.index}]`,
+          value: issue.issueKey ?? issue.sprintId,
+        })),
+      });
+    }
+
     const uniqueIssueKeys = new Set(normalizedIssues.map((issue) => issue.issueKey));
     if (uniqueIssueKeys.size !== normalizedIssues.length) {
       return res.status(400).json({
@@ -146,7 +161,7 @@ async function ingestJiraIssues(req, res) {
       });
     }
 
-    const metrics = buildStoryPointMetrics(teamId, sprintId, normalizedIssues);
+    const metrics = buildStoryPointMetrics(teamId, normalizedIssues);
     const uniqueMetricKeys = new Set(metrics.map(buildMetricKey));
 
     await sequelize.transaction(async (transaction) => {
@@ -163,7 +178,7 @@ async function ingestJiraIssues(req, res) {
       teamId,
       sprintId,
       receivedCount: normalizedIssues.length,
-      storedMetricCount: uniqueMetricKeys.size,
+      upsertedMetricCount: uniqueMetricKeys.size,
     });
   } catch (error) {
     console.error('Error in ingestJiraIssues:', error);
