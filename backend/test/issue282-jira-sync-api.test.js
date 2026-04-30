@@ -16,11 +16,6 @@ const {
 let server;
 let baseUrl;
 const originalFetch = global.fetch;
-const originalJiraEnv = {
-  JIRA_BASE_URL: process.env.JIRA_BASE_URL,
-  JIRA_USER_EMAIL: process.env.JIRA_USER_EMAIL,
-  JIRA_API_TOKEN: process.env.JIRA_API_TOKEN,
-};
 
 async function request(path, options = {}) {
   const response = await fetch(`${baseUrl}${path}`, options);
@@ -72,28 +67,11 @@ async function createJiraReadyTeam({
   if (includeTokenRef) {
     await IntegrationTokenReference.create({
       teamId,
-      jiraTokenRef: 'vault://jira/team-jira-sync',
+      jiraTokenRef: `vault://jira/${teamId}`,
     });
   }
 
   return group;
-}
-
-function setRealJiraEnv() {
-  process.env.JIRA_BASE_URL = 'https://acme.atlassian.net';
-  process.env.JIRA_USER_EMAIL = 'jira-bot@example.edu';
-  process.env.JIRA_API_TOKEN = 'jira-api-token';
-}
-
-function resetJiraEnv() {
-  Object.entries(originalJiraEnv).forEach(([key, value]) => {
-    if (value === undefined) {
-      delete process.env[key];
-      return;
-    }
-
-    process.env[key] = value;
-  });
 }
 
 test.before(async () => {
@@ -105,7 +83,6 @@ test.before(async () => {
 });
 
 test.after(async () => {
-  resetJiraEnv();
   global.fetch = originalFetch;
 
   if (server) {
@@ -119,7 +96,6 @@ test.after(async () => {
 
 test.beforeEach(async () => {
   global.fetch = originalFetch;
-  resetJiraEnv();
 
   await IntegrationTokenReference.destroy({ where: {} });
   await IntegrationBinding.destroy({ where: {} });
@@ -127,50 +103,20 @@ test.beforeEach(async () => {
   await User.destroy({ where: {} });
 });
 
-test('team leader can trigger Jira sprint sync and receive an accepted response', async () => {
+test('team leader can trigger Jira sprint sync and receive an accepted response without making an upstream fetch', async () => {
   const leader = await createStudentUser({
     email: 'jira-sync-leader@example.edu',
     fullName: 'Jira Sync Leader',
     studentId: '11070003001',
   });
   await createJiraReadyTeam({ leader });
-  setRealJiraEnv();
 
-  const fetchCalls = [];
   global.fetch = async (url, options = {}) => {
     if (String(url).startsWith(baseUrl)) {
       return originalFetch(url, options);
     }
 
-    fetchCalls.push({ url, options });
-    return {
-      ok: true,
-      async json() {
-        return {
-          issues: [
-            {
-              key: 'SPM-214',
-              fields: {
-                summary: 'Build Jira sync endpoint',
-                status: { name: 'In Progress' },
-                assignee: { accountId: 'stu_20230017' },
-                sprint: { id: 'sprint_2026_03' },
-                customfield_10016: 5,
-              },
-            },
-            {
-              key: 'SPM-215',
-              fields: {
-                summary: 'Normalize Jira responses',
-                description: 'Use the issue normalizer in the sync flow.',
-                status: { name: 'To Do' },
-                sprint: { id: 'sprint_2026_03' },
-              },
-            },
-          ],
-        };
-      },
-    };
+    throw new Error('External fetch should not run in trigger endpoint');
   };
 
   const { response, json } = await request('/api/v1/teams/team-jira-sync/sprints/sprint_2026_03/jira-sync', {
@@ -192,50 +138,6 @@ test('team leader can trigger Jira sprint sync and receive an accepted response'
   assert.equal(json.message, 'Jira sprint sync request accepted.');
   assert.equal(json.teamId, 'team-jira-sync');
   assert.equal(json.sprintId, 'sprint_2026_03');
-  assert.equal(json.issueCount, 2);
-  assert.equal(json.mock, false);
-  assert.equal(fetchCalls.length, 1);
-  assert.match(fetchCalls[0].url, /board\/board_42\/sprint\/sprint_2026_03\/issue/);
-  assert.match(fetchCalls[0].url, /status=To\+Do/);
-  assert.match(fetchCalls[0].url, /status=In\+Progress/);
-  assert.match(fetchCalls[0].options.headers.Authorization, /^Basic /);
-});
-
-test('team leader can trigger Jira sprint sync in mock mode when real Jira env config is absent', async () => {
-  const leader = await createStudentUser({
-    email: 'jira-sync-mock@example.edu',
-    fullName: 'Jira Sync Mock',
-    studentId: '11070003002',
-  });
-  await createJiraReadyTeam({ leader, teamId: 'team-jira-mock' });
-
-  const fetchCalls = [];
-  global.fetch = async (url, options = {}) => {
-    if (String(url).startsWith(baseUrl)) {
-      return originalFetch(url, options);
-    }
-
-    fetchCalls.push({ url, options });
-    throw new Error('External fetch should not run in mock mode');
-  };
-
-  const { response, json } = await request('/api/v1/teams/team-jira-mock/sprints/sprint_2026_04/jira-sync', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(leader)),
-    },
-    body: JSON.stringify({
-      requestedBy: String(leader.id),
-      boardId: 'board_77',
-    }),
-  });
-
-  assert.equal(response.status, 202);
-  assert.equal(json.status, 'ACCEPTED');
-  assert.equal(json.issueCount, 0);
-  assert.equal(json.mock, true);
-  assert.equal(fetchCalls.length, 0);
 });
 
 test('jira sync rejects invalid request bodies', async () => {
@@ -358,30 +260,19 @@ test('jira sync returns 409 when the team has no Jira token reference', async ()
   assert.equal(json.code, 'JIRA_TOKEN_REFERENCE_NOT_FOUND');
 });
 
-test('jira sync returns 502 when the Jira fetch fails', async () => {
+test('jira sync rejects requests for teams without Jira provider enabled', async () => {
   const leader = await createStudentUser({
-    email: 'jira-sync-fetch-failure@example.edu',
-    fullName: 'Jira Sync Fetch Failure',
+    email: 'jira-sync-no-provider@example.edu',
+    fullName: 'Jira Sync No Provider',
     studentId: '11070003008',
   });
-  await createJiraReadyTeam({ leader, teamId: 'team-jira-fetch-failure' });
-  setRealJiraEnv();
+  await createJiraReadyTeam({
+    leader,
+    teamId: 'team-jira-no-provider',
+    providerSet: ['GITHUB'],
+  });
 
-  global.fetch = async (url, options = {}) => {
-    if (String(url).startsWith(baseUrl)) {
-      return originalFetch(url, options);
-    }
-
-    return {
-      ok: false,
-      status: 503,
-      async json() {
-        return { message: 'Service unavailable' };
-      },
-    };
-  };
-
-  const { response, json } = await request('/api/v1/teams/team-jira-fetch-failure/sprints/sprint_2026_09/jira-sync', {
+  const { response, json } = await request('/api/v1/teams/team-jira-no-provider/sprints/sprint_2026_09/jira-sync', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -393,6 +284,6 @@ test('jira sync returns 502 when the Jira fetch fails', async () => {
     }),
   });
 
-  assert.equal(response.status, 502);
-  assert.equal(json.code, 'JIRA_SYNC_FAILED');
+  assert.equal(response.status, 409);
+  assert.equal(json.code, 'JIRA_PROVIDER_NOT_ENABLED');
 });

@@ -6,7 +6,6 @@ const {
   IntegrationTokenReference,
 } = require('../models');
 const { buildJiraSprintIssuesRequest } = require('../services/jiraRequestBuilder');
-const { normalizeJiraIssue } = require('../services/jiraIssueNormalizer');
 
 function asTrimmedString(value) {
   if (typeof value !== 'string') {
@@ -22,34 +21,6 @@ function hasJiraProvider(binding) {
     : [];
 
   return providers.includes('JIRA');
-}
-
-function extractIssueArray(payload) {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  if (payload && Array.isArray(payload.issues)) {
-    return payload.issues;
-  }
-
-  throw new Error('Jira response did not contain an issues array.');
-}
-
-async function fetchAndNormalizeIssues(requestConfig, sprintId) {
-  if (requestConfig.mock) {
-    return [];
-  }
-
-  const response = await fetch(requestConfig.url, requestConfig.options);
-  if (!response.ok) {
-    throw new Error(`Jira request failed with status ${response.status}`);
-  }
-
-  const payload = await response.json();
-  return extractIssueArray(payload).map((issue) => normalizeJiraIssue(issue, {
-    fallbackSprintId: sprintId,
-  }));
 }
 
 const triggerJiraSyncValidation = [
@@ -155,13 +126,11 @@ async function triggerJiraSync(req, res) {
       });
     }
 
-    const requestConfig = buildJiraSprintIssuesRequest({
+    buildJiraSprintIssuesRequest({
       boardId,
       sprintId,
       includeStatuses,
     });
-
-    const normalizedIssues = await fetchAndNormalizeIssues(requestConfig, sprintId);
 
     return res.status(202).json({
       id: `op_${randomUUID()}`,
@@ -170,14 +139,12 @@ async function triggerJiraSync(req, res) {
       recordedAt: new Date().toISOString(),
       teamId,
       sprintId,
-      issueCount: normalizedIssues.length,
-      mock: requestConfig.mock,
     });
   } catch (error) {
     console.error('Error in triggerJiraSync:', error);
-    return res.status(502).json({
-      code: 'JIRA_SYNC_FAILED',
-      message: 'Failed to fetch Jira sprint issues',
+    return res.status(500).json({
+      code: 'JIRA_SYNC_REQUEST_BUILD_FAILED',
+      message: 'Failed to prepare Jira sprint sync request',
     });
   }
 }
