@@ -14,6 +14,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import CommitteeGradingPage from '../../CommitteeGradingPage.jsx';
+import { NotificationProvider } from '../../contexts/NotificationContext.jsx';
 
 const criteriaFixture = [
   {
@@ -34,11 +35,13 @@ const criteriaFixture = [
 
 function renderAt(submissionId = 'sub-test-1') {
   return render(
-    <MemoryRouter initialEntries={[`/professors/committee-review/${submissionId}`]}>
-      <Routes>
-        <Route path="/professors/committee-review/:submissionId" element={<CommitteeGradingPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <NotificationProvider>
+      <MemoryRouter initialEntries={[`/professors/committee-review/${submissionId}`]}>
+        <Routes>
+          <Route path="/professors/committee-review/:submissionId" element={<CommitteeGradingPage />} />
+        </Routes>
+      </MemoryRouter>
+    </NotificationProvider>,
   );
 }
 
@@ -61,7 +64,7 @@ describe('CommitteeGradingPage (issue #248)', () => {
       if (u.includes('/committee/rubric-criteria')) {
         return {
           ok: true,
-          json: async () => ({ data: criteriaFixture }),
+          json: async () => ({ criteria: criteriaFixture }),
         };
       }
       return { ok: true, json: async () => ({}) };
@@ -70,13 +73,11 @@ describe('CommitteeGradingPage (issue #248)', () => {
     renderAt();
 
     await waitFor(() => {
-      expect(screen.getByText(/binary gate/i)).toBeInTheDocument();
-      expect(screen.getByText(/soft quality/i)).toBeInTheDocument();
+      expect(screen.getByRole('checkbox')).toBeInTheDocument();
+      expect(screen.getByLabelText(/score for soft quality/i)).toBeInTheDocument();
     });
 
-    const spinbuttons = screen.getAllByRole('spinbutton');
-    expect(spinbuttons.length).toBeGreaterThanOrEqual(1);
-    const numberInput = spinbuttons[0];
+    const numberInput = screen.getByLabelText(/score for soft quality/i);
     await userEvent.clear(numberInput);
     await userEvent.type(numberInput, '999');
     expect(Number(numberInput.value)).toBeLessThanOrEqual(40);
@@ -88,13 +89,13 @@ describe('CommitteeGradingPage (issue #248)', () => {
     global.fetch = jest.fn(async (url, options = {}) => {
       const u = String(url);
       if (u.includes('/committee/rubric-criteria')) {
-        return { ok: true, json: async () => ({ data: criteriaFixture }) };
+        return { ok: true, json: async () => ({ criteria: criteriaFixture }) };
       }
       if (u.includes('/committee/submissions/') && (u.endsWith('/review') || u.endsWith('/grade'))) {
         posts.push({ url: u, body: options.body });
         return {
           ok: true,
-          json: async () => ({ finalScore: 72, message: 'ok' }),
+          json: async () => ({ data: { finalScore: 0.72 }, message: 'ok' }),
         };
       }
       return { ok: true, json: async () => ({}) };
@@ -102,8 +103,9 @@ describe('CommitteeGradingPage (issue #248)', () => {
 
     renderAt('sub-payload-1');
 
-    await waitFor(() => expect(screen.getByText(/soft quality/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText(/score for soft quality/i)).toBeInTheDocument());
 
+    await userEvent.type(screen.getByRole('textbox', { name: /general comments/i }), 'Looks good overall.');
     const submit = screen.getByRole('button', { name: /submit review/i });
     await userEvent.click(submit);
 
