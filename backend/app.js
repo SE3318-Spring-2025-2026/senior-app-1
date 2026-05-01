@@ -32,6 +32,7 @@ const internalSprintSyncRoutes = require('./routes/internalSprintSync');
 const teamRoutes = require('./routes/teams');
 const submissionsRoutes = require('./routes/submissions');
 const committeeRoutes = require('./routes/committee');
+const finalEvaluationRoutes = require('./routes/finalEvaluation');
 
 const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
@@ -68,6 +69,7 @@ app.use('/internal/jira', internalJiraRoutes);
 app.use('/internal/sprint-sync', internalSprintSyncRoutes);
 app.use('/api/v1/committee/submissions', submissionsRoutes);
 app.use('/api/v1/committee', committeeRoutes);
+app.use('/api/v1/final-evaluation', finalEvaluationRoutes);
 
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
