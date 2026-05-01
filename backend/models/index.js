@@ -30,6 +30,7 @@ const DeliverableWeightConfiguration = require('./DeliverableWeightConfiguration
 const GroupDeliverable = require('./GroupDeliverable');
 const PrMetric = require('./PrMetric');
 const StoryMetric = require('./StoryMetric');
+const MemberFinalGrade = require('./MemberFinalGrade');
 
 module.exports = {
   User,
@@ -56,4 +57,5 @@ module.exports = {
   GroupDeliverable,
   PrMetric,
   StoryMetric,
+  MemberFinalGrade,
 };
