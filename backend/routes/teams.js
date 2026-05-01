@@ -31,7 +31,6 @@ router.get(
   getIntegrationConfiguration,
 );
 
-<<<<<<< HEAD
 /**
  * POST /api/v1/teams/:teamId/sprints/:sprintId/github-verifications
  * Triggers GitHub PR verification orchestration for a team and sprint.
