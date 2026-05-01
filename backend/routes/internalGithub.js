@@ -1,5 +1,4 @@
 const express = require('express');
-const { authenticateInternalApiKey } = require('../middleware/internalApiKey');
 const {
   receiveGitHubPrDataValidation,
   receiveGitHubPrData,
@@ -7,9 +6,10 @@ const {
 
 const router = express.Router();
 
+// POST /api/v1/internal/github/pr-data - Accept batch GitHub PR data for sprint monitoring.
+// Validates, normalizes, and logs PR metadata (prNumber, branchName, issueKey, diffSummary, etc.)
 router.post(
-  '/pr-data',
-  authenticateInternalApiKey,
+  '/github/pr-data',
   receiveGitHubPrDataValidation,
   receiveGitHubPrData,
 );
