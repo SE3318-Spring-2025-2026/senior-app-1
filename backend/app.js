@@ -27,6 +27,8 @@ const userDatabaseRoutes = require('./routes/userDatabase');
 const groupRoutes = require('./routes/groups');
 const groupDatabaseRoutes = require('./routes/groupDatabase');
 const internalIntegrationsRoutes = require('./routes/internalIntegrations');
+const internalJiraRoutes = require('./routes/internalJira');
+const internalSprintSyncRoutes = require('./routes/internalSprintSync');
 const teamsRoutes = require('./routes/teams');
 const submissionsRoutes = require('./routes/submissions');
 const committeeRoutes = require('./routes/committee');
@@ -62,6 +64,8 @@ app.use('/api/v1/group-database', groupDatabaseRoutes);
 app.use('/api/v1/groups', groupRoutes);
 app.use('/api/v1/teams', teamsRoutes);
 app.use('/internal/integrations', internalIntegrationsRoutes);
+app.use('/internal/jira', internalJiraRoutes);
+app.use('/internal/sprint-sync', internalSprintSyncRoutes);
 app.use('/api/v1/committee/submissions', submissionsRoutes);
 app.use('/api/v1/committee', committeeRoutes);
 

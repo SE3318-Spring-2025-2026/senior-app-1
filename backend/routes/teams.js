@@ -7,6 +7,10 @@ const {
   createIntegrationBinding,
 } = require('../controllers/integrationBindingController');
 const { getIntegrationConfiguration } = require('../controllers/integrationConfigurationController');
+const {
+  triggerJiraSyncValidation,
+  triggerJiraSync,
+} = require('../controllers/jiraSyncController');
 
 const router = express.Router();
 
@@ -26,6 +30,7 @@ router.get(
   getIntegrationConfiguration,
 );
 
+<<<<<<< HEAD
 /**
  * POST /api/v1/teams/:teamId/sprints/:sprintId/github-verifications
  * Triggers GitHub PR verification orchestration for a team and sprint.
@@ -35,6 +40,15 @@ router.post(
   authenticate,
   githubVerificationController.triggerGitHubVerificationValidation,
   githubVerificationController.triggerGitHubVerification,
+);
+
+router.post(
+  '/:teamId/sprints/:sprintId/jira-sync',
+  authenticate,
+  authorize(['STUDENT']),
+  requireNonEmptyBody,
+  triggerJiraSyncValidation,
+  triggerJiraSync,
 );
 
 module.exports = router;
