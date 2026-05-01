@@ -47,7 +47,6 @@ if (fs.existsSync(frontendDistPath)) {
 // Make models globally accessible
 app.locals.models = { User, Group, AuditLog };
 
-// Routes
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/coordinator', coordinatorRoutes);
 app.use('/api/v1/advisors', advisorRoutes);
@@ -63,6 +62,7 @@ app.use('/api/v1/user-database', userDatabaseRoutes);
 app.use('/api/v1/group-database', groupDatabaseRoutes);
 app.use('/api/v1/groups', groupRoutes);
 app.use('/api/v1/teams', teamsRoutes);
+app.use('/api/v1/internal', internalIntegrationsRoutes);
 app.use('/internal/integrations', internalIntegrationsRoutes);
 app.use('/internal/jira', internalJiraRoutes);
 app.use('/internal/sprint-sync', internalSprintSyncRoutes);
