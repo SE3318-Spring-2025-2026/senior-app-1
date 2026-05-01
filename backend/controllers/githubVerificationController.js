@@ -63,7 +63,7 @@ exports.triggerGitHubVerification = async (req, res) => {
     // Fire-and-forget: do not wait for ingestion to complete.
     try {
       const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const url = `${baseUrl}/api/v1/internal/github/pr-data`;
+      const url = `${baseUrl}/internal/github/pr-data`;
       fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
