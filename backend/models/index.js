@@ -37,36 +37,10 @@ const FinalEvaluationWeight = require('./FinalEvaluationWeight');
 const TeamScalar = require('./TeamScalar');
 const SprintMemberRecord = require('./SprintMemberRecord');
 const FinalEvaluationGrade = require('./FinalEvaluationGrade');
+const AdvisorGrade = require('./AdvisorGrade');
 
-module.exports = {
-  User,
-  Professor,
-  ValidStudentId,
-  OAuthState,
-  LinkedGitHubAccount,
-  Group,
-  GroupAdvisorAssignment,
-  AdvisorRequest,
-  Invitation,
-  AuditLog,
-  Notification,
-  IntegrationTokenReference,
-  IntegrationBinding,
-  GradingRubric,
-  Grade,
-  DeliverableRubric,
-  Deliverable,
-  CommitteeReview,
-  SprintWeightConfiguration,
-  DeliverableSubmission,
-  DeliverableWeightConfiguration,
-  GroupDeliverable,
-  PrMetric,
-  SprintPullRequest,
-  SprintStory,
-  StoryMetric,
-  FinalEvaluationGrade,
   FinalEvaluationWeight,
   TeamScalar,
   SprintMemberRecord,
+  AdvisorGrade,
 };
