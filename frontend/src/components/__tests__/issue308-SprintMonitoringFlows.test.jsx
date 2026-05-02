@@ -59,6 +59,7 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
     expect(screen.getByText('acme-org')).toBeInTheDocument();
     expect(screen.getByText('senior-app')).toBeInTheDocument();
     expect(screen.getByText('SPM')).toBeInTheDocument();
+    expect(screen.getByText(/gitHub and jira are both required/i)).toBeInTheDocument();
     expect(screen.queryByDisplayValue('vault://github/team-1')).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue('vault://jira/team-1')).not.toBeInTheDocument();
   });
@@ -82,6 +83,7 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
 
     expect(await screen.findByRole('button', { name: /save configuration/i })).toBeInTheDocument();
     expect(screen.getByDisplayValue('main')).toBeInTheDocument();
+    expect(screen.getByText(/provider selection is fixed on this page/i)).toBeInTheDocument();
   });
 
   test('integration configuration UI shows partial warning state and backend load failure', async () => {

@@ -1,4 +1,5 @@
 const { body, param, validationResult } = require('express-validator');
+const sequelize = require('../db');
 const { Group, IntegrationBinding, IntegrationTokenReference } = require('../models');
 
 const ALLOWED_PROVIDERS = ['GITHUB', 'JIRA'];
@@ -154,10 +155,10 @@ async function saveIntegrationBinding(req, res, { allowUpdate }) {
       });
     }
 
-    let binding = await IntegrationBinding.findOne({
+    const existingBinding = await IntegrationBinding.findOne({
       where: { teamId: normalizedTeamId },
     });
-    const wasExisting = Boolean(binding);
+    const wasExisting = Boolean(existingBinding);
     if (wasExisting && !allowUpdate) {
       return res.status(409).json({
         code: 'INTEGRATION_BINDING_EXISTS',
@@ -184,29 +185,38 @@ async function saveIntegrationBinding(req, res, { allowUpdate }) {
       status: 'ACTIVE',
     };
 
-    if (binding) {
-      await binding.update(bindingPayload);
-    } else {
-      binding = await IntegrationBinding.create(bindingPayload);
-    }
+    let binding = existingBinding;
+    let tokenReference = null;
 
-    const existingTokenReference = await IntegrationTokenReference.findByPk(normalizedTeamId);
-    const nextGithubTokenRef = typeof req.body.githubTokenRef === 'string'
-      ? req.body.githubTokenRef.trim()
-      : existingTokenReference?.githubTokenRef ?? null;
-    const nextJiraTokenRef = typeof req.body.jiraTokenRef === 'string'
-      ? req.body.jiraTokenRef.trim()
-      : existingTokenReference?.jiraTokenRef ?? null;
+    await sequelize.transaction(async (transaction) => {
+      if (binding) {
+        await binding.update(bindingPayload, { transaction });
+      } else {
+        binding = await IntegrationBinding.create(bindingPayload, { transaction });
+      }
 
-    let tokenReference = existingTokenReference;
-    if (nextGithubTokenRef || nextJiraTokenRef) {
-      await IntegrationTokenReference.upsert({
-        teamId: normalizedTeamId,
-        githubTokenRef: nextGithubTokenRef,
-        jiraTokenRef: nextJiraTokenRef,
+      const existingTokenReference = await IntegrationTokenReference.findByPk(normalizedTeamId, {
+        transaction,
       });
-      tokenReference = await IntegrationTokenReference.findByPk(normalizedTeamId);
-    }
+      const nextGithubTokenRef = typeof req.body.githubTokenRef === 'string'
+        ? req.body.githubTokenRef.trim()
+        : existingTokenReference?.githubTokenRef ?? null;
+      const nextJiraTokenRef = typeof req.body.jiraTokenRef === 'string'
+        ? req.body.jiraTokenRef.trim()
+        : existingTokenReference?.jiraTokenRef ?? null;
+
+      if (nextGithubTokenRef || nextJiraTokenRef) {
+        await IntegrationTokenReference.upsert({
+          teamId: normalizedTeamId,
+          githubTokenRef: nextGithubTokenRef,
+          jiraTokenRef: nextJiraTokenRef,
+        }, { transaction });
+      }
+
+      tokenReference = await IntegrationTokenReference.findByPk(normalizedTeamId, {
+        transaction,
+      });
+    });
 
     return res.status(wasExisting ? 200 : 201).json(
       buildIntegrationResponse(binding, tokenReference),

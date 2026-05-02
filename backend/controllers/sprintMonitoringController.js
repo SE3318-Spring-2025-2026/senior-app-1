@@ -5,18 +5,7 @@ const {
   SprintStory,
   SprintPullRequest,
 } = require('../models');
-
-function canAccessMonitoring(group, user) {
-  if (!user) {
-    return false;
-  }
-
-  if (String(group.leaderId || '') === String(user.id)) {
-    return true;
-  }
-
-  return ['ADMIN', 'COORDINATOR'].includes(String(user.role || '').toUpperCase());
-}
+const { canManageIntegrations } = require('./integrationBindingController');
 
 const getSprintMonitoringSnapshotValidation = [
   param('teamId').isString().trim().notEmpty().withMessage('teamId is required'),
@@ -45,7 +34,7 @@ async function getSprintMonitoringSnapshot(req, res) {
       });
     }
 
-    if (!canAccessMonitoring(group, req.user)) {
+    if (!canManageIntegrations(group, req.user)) {
       return res.status(403).json({
         code: 'FORBIDDEN',
         message: 'Only the team leader or authorized staff can view sprint monitoring data',

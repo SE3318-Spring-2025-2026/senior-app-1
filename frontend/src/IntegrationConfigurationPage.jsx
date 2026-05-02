@@ -15,7 +15,7 @@ const EMPTY_FORM = {
 };
 
 function buildProviderRows(configuration) {
-  const configuredProviders = new Set(configuration?.providerSet || []);
+  const configuredProviders = new Set(configuration?.providerSet || EMPTY_FORM.providerSet);
 
   return [
     {
@@ -122,22 +122,6 @@ export default function IntegrationConfigurationPage() {
       ...current,
       [name]: value,
     }));
-  }
-
-  function toggleProvider(provider) {
-    setForm((current) => {
-      const providerSet = new Set(current.providerSet);
-      if (providerSet.has(provider)) {
-        providerSet.delete(provider);
-      } else {
-        providerSet.add(provider);
-      }
-
-      return {
-        ...current,
-        providerSet: Array.from(providerSet),
-      };
-    });
   }
 
   async function handleSubmit(event) {
@@ -280,20 +264,11 @@ export default function IntegrationConfigurationPage() {
         )}
 
         <form className="form" onSubmit={handleSubmit}>
-          <div className="group-directory-members">
-            {['GITHUB', 'JIRA'].map((provider) => (
-              <label key={provider} className="group-member-row">
-                <div>
-                  <strong>{provider}</strong>
-                  <span>Enable {provider} monitoring for this team</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={form.providerSet.includes(provider)}
-                  onChange={() => toggleProvider(provider)}
-                />
-              </label>
-            ))}
+          <div className="group-callout group-callout-warning">
+            <strong>GitHub and JIRA are both required.</strong>
+            <p className="integration-warning-copy">
+              This monitoring flow currently expects both providers to be configured together, so provider selection is fixed on this page.
+            </p>
           </div>
 
           <label className="field">
