@@ -1,7 +1,7 @@
 const { randomUUID } = require('crypto');
 const { body, validationResult } = require('express-validator');
 const sequelize = require('../db');
-const { IntegrationBinding, StoryMetric } = require('../models');
+const { IntegrationBinding, SprintStory } = require('../models');
 const { normalizeJiraIssue } = require('../services/jiraIssueNormalizer');
 
 function hasJiraProvider(binding) {
@@ -10,10 +10,6 @@ function hasJiraProvider(binding) {
     : [];
 
   return providers.includes('JIRA');
-}
-
-function buildMetricKey(metric) {
-  return [metric.issueKey, metric.metricName].join('::');
 }
 
 function findMissingRequiredFields(issue) {
@@ -33,19 +29,6 @@ function findMissingRequiredFields(issue) {
   }
 
   return missingFields;
-}
-
-function buildStoryPointMetrics(teamId, issues) {
-  return issues
-    .filter((issue) => issue.storyPoints !== null)
-    .map((issue) => ({
-      teamId,
-      sprintId: issue.sprintId,
-      issueKey: issue.issueKey,
-      metricName: 'storyPoints',
-      metricValue: Number(issue.storyPoints),
-      unit: 'points',
-    }));
 }
 
 function findSprintMismatchIssues(issues, sprintId) {
@@ -161,12 +144,21 @@ async function ingestJiraIssues(req, res) {
       });
     }
 
-    const metrics = buildStoryPointMetrics(teamId, normalizedIssues);
-    const uniqueMetricKeys = new Set(metrics.map(buildMetricKey));
-
     await sequelize.transaction(async (transaction) => {
-      for (const metric of metrics) {
-        await StoryMetric.upsert(metric, { transaction });
+      for (const issue of normalizedIssues) {
+        await SprintStory.upsert({
+          teamId,
+          sprintId: issue.sprintId,
+          issueKey: issue.issueKey,
+          title: issue.title,
+          description: issue.description,
+          assigneeId: issue.assigneeId,
+          reporterId: issue.reporterId,
+          status: issue.status,
+          storyPoints: issue.storyPoints,
+          sourceCreatedAt: issue.sourceCreatedAt,
+          sourceUpdatedAt: issue.sourceUpdatedAt,
+        }, { transaction });
       }
     });
 
@@ -178,7 +170,7 @@ async function ingestJiraIssues(req, res) {
       teamId,
       sprintId,
       receivedCount: normalizedIssues.length,
-      upsertedMetricCount: uniqueMetricKeys.size,
+      storedStoryCount: normalizedIssues.length,
     });
   } catch (error) {
     console.error('Error in ingestJiraIssues:', error);

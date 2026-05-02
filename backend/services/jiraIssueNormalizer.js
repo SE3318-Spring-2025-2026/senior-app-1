@@ -142,6 +142,25 @@ function extractAssigneeId(issue, fields) {
   return null;
 }
 
+function extractReporterId(issue, fields) {
+  const reporter = issue.reporter || fields.reporter || {};
+  const candidates = [
+    issue.reporterId,
+    reporter.accountId,
+    reporter.id,
+    reporter.key,
+  ];
+
+  for (const candidate of candidates) {
+    const resolved = asIdentifierString(candidate);
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return null;
+}
+
 function extractStoryPoints(issue, fields) {
   const candidates = [
     issue.storyPoints,
@@ -199,7 +218,16 @@ function normalizeJiraIssue(rawIssue, options = {}) {
     status: normalizeStatus(issue, fields),
     storyPoints: extractStoryPoints(issue, fields),
     assigneeId: extractAssigneeId(issue, fields),
+    reporterId: extractReporterId(issue, fields),
     sprintId: extractSprintId(issue, fields, options.fallbackSprintId ?? null),
+    sourceCreatedAt: asTrimmedString(issue.createdAt)
+      || asTrimmedString(issue.created)
+      || asTrimmedString(fields.created)
+      || null,
+    sourceUpdatedAt: asTrimmedString(issue.updatedAt)
+      || asTrimmedString(issue.updated)
+      || asTrimmedString(fields.updated)
+      || null,
   };
 }
 
