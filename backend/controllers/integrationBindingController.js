@@ -182,8 +182,11 @@ async function saveIntegrationBinding(req, res, { allowUpdate }) {
       jiraProjectKey: String(req.body.jiraProjectKey).trim(),
       defaultBranch: req.body.defaultBranch ? String(req.body.defaultBranch).trim() : null,
       initiatedBy,
-      status: 'ACTIVE',
     };
+
+    if (!wasExisting) {
+      bindingPayload.status = 'ACTIVE';
+    }
 
     let binding = existingBinding;
     let tokenReference = null;

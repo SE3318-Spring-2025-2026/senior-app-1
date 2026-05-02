@@ -15,7 +15,7 @@ const EMPTY_FORM = {
 };
 
 function buildProviderRows(configuration) {
-  const configuredProviders = new Set(configuration?.providerSet || EMPTY_FORM.providerSet);
+  const configuredProviders = new Set(configuration?.providerSet || []);
 
   return [
     {

@@ -2,10 +2,14 @@ const { param, validationResult } = require('express-validator');
 const {
   Group,
   IntegrationBinding,
+  IntegrationTokenReference,
   SprintStory,
   SprintPullRequest,
 } = require('../models');
-const { canManageIntegrations } = require('./integrationBindingController');
+const {
+  buildIntegrationResponse,
+  canManageIntegrations,
+} = require('./integrationBindingController');
 
 const getSprintMonitoringSnapshotValidation = [
   param('teamId').isString().trim().notEmpty().withMessage('teamId is required'),
@@ -51,6 +55,8 @@ async function getSprintMonitoringSnapshot(req, res) {
       });
     }
 
+    const tokenReference = await IntegrationTokenReference.findByPk(teamId);
+
     const [stories, pullRequests] = await Promise.all([
       SprintStory.findAll({
         where: { teamId, sprintId },
@@ -83,16 +89,7 @@ async function getSprintMonitoringSnapshot(req, res) {
     return res.status(200).json({
       teamId,
       sprintId,
-      integration: {
-        bindingId: binding.bindingId,
-        providerSet: binding.providerSet,
-        organizationName: binding.organizationName,
-        repositoryName: binding.repositoryName,
-        jiraWorkspaceId: binding.jiraWorkspaceId,
-        jiraProjectKey: binding.jiraProjectKey,
-        defaultBranch: binding.defaultBranch,
-        status: binding.status,
-      },
+      integration: buildIntegrationResponse(binding, tokenReference),
       stories: stories.map((story) => ({
         issueKey: story.issueKey,
         title: story.title,
