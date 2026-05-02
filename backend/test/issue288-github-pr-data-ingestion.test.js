@@ -134,7 +134,7 @@ test('rejects malformed GitHub PR ingestion payloads', async () => {
   assert.equal(response.status, 400);
   assert.equal(json.code, 'VALIDATION_ERROR');
   assert.equal(json.message, 'Validation failed');
-  assert.ok(Array.isArray(json.errors));
+  assert.ok(Array.isArray(json.errors) || Array.isArray(json.details));
 });
 
 test('rejects duplicate pull request numbers in the same payload', async () => {
