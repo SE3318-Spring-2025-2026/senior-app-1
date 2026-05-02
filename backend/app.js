@@ -27,8 +27,10 @@ const userDatabaseRoutes = require('./routes/userDatabase');
 const groupRoutes = require('./routes/groups');
 const groupDatabaseRoutes = require('./routes/groupDatabase');
 const internalIntegrationsRoutes = require('./routes/internalIntegrations');
+const internalJiraRoutes = require('./routes/internalJira');
+const internalGithubRoutes = require('./routes/internalGithub');
 const internalSprintSyncRoutes = require('./routes/internalSprintSync');
-const teamRoutes = require('./routes/teams');
+const teamsRoutes = require('./routes/teams');
 const submissionsRoutes = require('./routes/submissions');
 const committeeRoutes = require('./routes/committee');
 
@@ -46,7 +48,6 @@ if (fs.existsSync(frontendDistPath)) {
 // Make models globally accessible
 app.locals.models = { User, Group, AuditLog };
 
-// Routes
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/coordinator', coordinatorRoutes);
 app.use('/api/v1/advisors', advisorRoutes);
@@ -61,8 +62,11 @@ app.use('/api/v1/password-setup-token-store', passwordSetupTokenStoreRoutes);
 app.use('/api/v1/user-database', userDatabaseRoutes);
 app.use('/api/v1/group-database', groupDatabaseRoutes);
 app.use('/api/v1/groups', groupRoutes);
-app.use('/api/v1/teams', teamRoutes);
+app.use('/api/v1/teams', teamsRoutes);
+app.use('/api/v1/internal', internalIntegrationsRoutes);
 app.use('/internal/integrations', internalIntegrationsRoutes);
+app.use('/internal/jira', internalJiraRoutes);
+app.use('/internal/github', internalGithubRoutes);
 app.use('/internal/sprint-sync', internalSprintSyncRoutes);
 app.use('/api/v1/committee/submissions', submissionsRoutes);
 app.use('/api/v1/committee', committeeRoutes);
