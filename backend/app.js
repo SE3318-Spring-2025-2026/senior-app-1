@@ -30,7 +30,6 @@ const groupDatabaseRoutes = require('./routes/groupDatabase');
 const internalIntegrationsRoutes = require('./routes/internalIntegrations');
 const internalEvaluationsRoutes = require('./routes/internalEvaluations');
 const internalJiraRoutes = require('./routes/internalJira');
-const internalGithubRoutes = require('./routes/internalGithub');
 const internalSprintSyncRoutes = require('./routes/internalSprintSync');
 const teamsRoutes = require('./routes/teams');
 const submissionsRoutes = require('./routes/submissions');
