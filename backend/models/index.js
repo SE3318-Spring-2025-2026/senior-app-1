@@ -22,6 +22,7 @@ const DeliverableRubric = require('./DeliverableRubric');
 const Deliverable = require('./Deliverable');
 const GradingRubric = require('./GradingRubric');
 const CommitteeReview = require('./CommitteeReview');
+const FinalEvaluationGrade = require('./FinalEvaluationGrade');
 
 module.exports = {
   User,
@@ -40,4 +41,5 @@ module.exports = {
   Deliverable,
   GradingRubric,
   CommitteeReview,
+  FinalEvaluationGrade,
 };

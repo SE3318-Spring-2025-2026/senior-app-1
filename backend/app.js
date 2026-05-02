@@ -22,6 +22,7 @@ const groupRoutes = require('./routes/groups');
 const groupDatabaseRoutes = require('./routes/groupDatabase');
 const submissionsRoutes = require('./routes/submissions');
 const committeeRoutes = require('./routes/committee');
+const finalEvaluationRoutes = require('./routes/final-evaluation');
 
 const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
@@ -53,6 +54,7 @@ app.use('/api/v1/group-database', groupDatabaseRoutes);
 app.use('/api/v1/groups', groupRoutes);
 app.use('/api/v1/committee/submissions', submissionsRoutes);
 app.use('/api/v1/committee', committeeRoutes);
+app.use('/', finalEvaluationRoutes);
 
 // Global error handler
 app.use((err, req, res, _next) => {
