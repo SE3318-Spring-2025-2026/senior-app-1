@@ -1,5 +1,8 @@
-const fetch = global.fetch || require('node-fetch');
 const ApiError = require('../errors/apiError');
+
+function getFetchImplementation() {
+  return global.fetch || require('node-fetch');
+}
 
 /**
  * Make an authenticated request to GitHub API
@@ -21,7 +24,7 @@ async function makeGitHubRequest(token, organizationName, repositoryName, endpoi
   };
 
   try {
-    const response = await fetch(url, {
+    const response = await getFetchImplementation()(url, {
       method: options.method || 'GET',
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
@@ -255,7 +258,7 @@ async function verifyToken(token) {
     const baseUrl = 'https://api.github.com';
     const url = `${baseUrl}/user`;
     
-    const response = await fetch(url, {
+    const response = await getFetchImplementation()(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/vnd.github.v3+json',

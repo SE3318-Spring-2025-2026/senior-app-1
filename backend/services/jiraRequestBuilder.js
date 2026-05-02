@@ -147,9 +147,52 @@ function buildJiraSprintIssuesRequest({ boardId, sprintId, includeStatuses = [] 
   }, config);
 }
 
+function buildJiraProjectOpenSprintIssuesRequest({ projectKey, includeStatuses = [] } = {}, config = {}) {
+  const normalizedProjectKey = asTrimmedString(projectKey);
+  if (!normalizedProjectKey) {
+    throw new Error('projectKey is required.');
+  }
+
+  const normalizedStatuses = Array.isArray(includeStatuses)
+    ? includeStatuses.map((status) => asTrimmedString(status)).filter(Boolean)
+    : [];
+  const fields = Array.isArray(config.fields) && config.fields.length > 0
+    ? config.fields.map((field) => asTrimmedString(field)).filter(Boolean)
+    : [
+      'summary',
+      'description',
+      'status',
+      'assignee',
+      'reporter',
+      'storyPoints',
+      'customfield_10016',
+      'customfield_10020',
+      'sprint',
+      'created',
+      'updated',
+    ];
+  const maxResults = Number.isInteger(config.maxResults) && config.maxResults > 0
+    ? config.maxResults
+    : 100;
+  const statusClause = normalizedStatuses.length > 0
+    ? ` AND status IN (${normalizedStatuses.map((status) => `"${status}"`).join(', ')})`
+    : '';
+
+  return buildJiraRequest({
+    path: '/rest/api/3/search',
+    method: 'POST',
+    body: {
+      jql: `project = "${normalizedProjectKey}" AND sprint in openSprints()${statusClause}`,
+      fields,
+      maxResults,
+    },
+  }, config);
+}
+
 module.exports = {
   buildJiraAuthHeader,
   buildJiraRequest,
+  buildJiraProjectOpenSprintIssuesRequest,
   buildJiraSprintIssuesRequest,
   hasRealJiraApiConfig,
   normalizeJiraBaseUrl,

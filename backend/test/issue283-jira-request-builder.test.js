@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 
 const {
   buildJiraAuthHeader,
+  buildJiraProjectOpenSprintIssuesRequest,
   buildJiraRequest,
   buildJiraSprintIssuesRequest,
   hasRealJiraApiConfig,
@@ -109,6 +110,30 @@ test('builds sprint issue requests in a configurable form that can be reused by 
   assert.deepEqual(url.searchParams.getAll('status'), ['To Do', 'In Progress']);
   assert.equal(request.options.method, 'GET');
   assert.equal(request.mock, false);
+});
+
+test('builds open sprint issue search requests from Jira project key for scheduled refresh', async () => {
+  const request = buildJiraProjectOpenSprintIssuesRequest({
+    projectKey: 'SPM',
+    includeStatuses: ['To Do', 'In Progress'],
+  }, {
+    baseUrl: 'https://acme.atlassian.net',
+    email: 'jira-user@example.edu',
+    apiToken: 'secret-token',
+    fields: ['summary', 'status', 'customfield_10020'],
+    maxResults: 25,
+  });
+
+  assert.equal(request.url, 'https://acme.atlassian.net/rest/api/3/search');
+  assert.equal(request.options.method, 'POST');
+  assert.equal(request.mock, false);
+
+  const body = JSON.parse(request.options.body);
+  assert.match(body.jql, /project = "SPM"/);
+  assert.match(body.jql, /sprint in openSprints\(\)/);
+  assert.match(body.jql, /status IN \("To Do", "In Progress"\)/);
+  assert.deepEqual(body.fields, ['summary', 'status', 'customfield_10020']);
+  assert.equal(body.maxResults, 25);
 });
 
 test('rejects invalid or unsafe builder input early', async () => {

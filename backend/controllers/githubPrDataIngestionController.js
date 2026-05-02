@@ -1,10 +1,12 @@
 const { randomUUID } = require('crypto');
 const { body, validationResult } = require('express-validator');
-const sequelize = require('../db');
-const { IntegrationBinding, SprintPullRequest } = require('../models');
-const { normalizePullRequestData } = require('../services/githubPrDataNormalizer');
+const { IntegrationBinding } = require('../models');
+const { ApiError } = require('../middleware/errorResponse');
+const {
+  hasProvider,
+  storeGitHubPullRequests,
+} = require('../services/sprintMonitoringPersistenceService');
 
-// Validation rules for batch GitHub PR ingestion endpoint.
 const receiveGitHubPrDataValidation = [
   body('teamId')
     .isString()
@@ -40,12 +42,8 @@ const receiveGitHubPrDataValidation = [
     .withMessage('number must be a positive integer'),
 ];
 
-// Accept and process batch GitHub PR data.
-// Request body: {teamId, sprintId, receivedAt?, pullRequests: []}
-// Returns 201 with operation metadata and normalized PR data.
 async function receiveGitHubPrData(req, res) {
   try {
-    // Validate request body against validation rules.
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -58,44 +56,6 @@ async function receiveGitHubPrData(req, res) {
     const teamId = req.body.teamId.trim();
     const sprintId = req.body.sprintId.trim();
     const receivedAt = req.body.receivedAt || new Date().toISOString();
-    const normalizedPullRequests = req.body.pullRequests.map(normalizePullRequestData);
-    const invalidPullRequests = normalizedPullRequests
-      .map((pullRequest, index) => ({
-        index,
-        prNumber: pullRequest.prNumber,
-      }))
-      .filter((pullRequest) => !pullRequest.prNumber);
-
-    if (invalidPullRequests.length > 0) {
-      return res.status(400).json({
-        code: 'VALIDATION_ERROR',
-        message: 'One or more pull requests could not be normalized into the required shape',
-        details: invalidPullRequests.map((pullRequest) => ({
-          msg: 'Pull request number is required',
-          path: `pullRequests[${pullRequest.index}]`,
-          value: null,
-        })),
-        success: false,
-      });
-    }
-
-    const seenPullRequestNumbers = new Set();
-    const hasDuplicatePullRequestNumbers = normalizedPullRequests.some((pullRequest) => {
-      if (seenPullRequestNumbers.has(pullRequest.prNumber)) {
-        return true;
-      }
-
-      seenPullRequestNumbers.add(pullRequest.prNumber);
-      return false;
-    });
-
-    if (hasDuplicatePullRequestNumbers) {
-      return res.status(400).json({
-        code: 'VALIDATION_ERROR',
-        message: 'Duplicate pull requests in request payload',
-        success: false,
-      });
-    }
 
     const binding = await IntegrationBinding.findOne({
       where: { teamId },
@@ -108,48 +68,20 @@ async function receiveGitHubPrData(req, res) {
       });
     }
 
-    const providers = Array.isArray(binding.providerSet)
-      ? binding.providerSet.map((provider) => String(provider).toUpperCase())
-      : [];
-    if (!providers.includes('GITHUB')) {
+    if (!hasProvider(binding, 'GITHUB')) {
       return res.status(409).json({
         code: 'GITHUB_PROVIDER_NOT_ENABLED',
         message: 'This team is not bound to GitHub integration',
       });
     }
 
-    await sequelize.transaction(async (transaction) => {
-      for (let index = 0; index < normalizedPullRequests.length; index += 1) {
-        const normalized = normalizedPullRequests[index];
-        const source = req.body.pullRequests[index] && typeof req.body.pullRequests[index] === 'object'
-          ? req.body.pullRequests[index]
-          : {};
-        const pullRequest = source.pull_request && typeof source.pull_request === 'object'
-          ? source.pull_request
-          : source.pullRequest && typeof source.pullRequest === 'object'
-            ? source.pullRequest
-            : source;
-
-        await SprintPullRequest.upsert({
-          teamId,
-          sprintId,
-          prNumber: normalized.prNumber,
-          relatedIssueKey: normalized.issueKey,
-          branchName: normalized.branchName,
-          title: typeof pullRequest.title === 'string' ? pullRequest.title.trim() || null : null,
-          prStatus: normalized.prStatus,
-          mergeStatus: normalized.mergeStatus,
-          changedFiles: normalized.changedFiles,
-          diffSummary: normalized.diffSummary,
-          sourceCreatedAt: pullRequest.created_at || pullRequest.createdAt || null,
-          sourceUpdatedAt: pullRequest.updated_at || pullRequest.updatedAt || null,
-          sourceMergedAt: pullRequest.merged_at || pullRequest.mergedAt || null,
-          url: pullRequest.html_url || pullRequest.url || null,
-        }, { transaction });
-      }
+    const persisted = await storeGitHubPullRequests({
+      teamId,
+      sprintId,
+      pullRequests: req.body.pullRequests,
     });
 
-    const samplePullRequests = normalizedPullRequests.slice(0, 3).map((pullRequest) => ({
+    const samplePullRequests = persisted.normalizedPullRequests.slice(0, 3).map((pullRequest) => ({
       prNumber: pullRequest.prNumber,
       issueKey: pullRequest.issueKey,
       branchName: pullRequest.branchName,
@@ -161,7 +93,7 @@ async function receiveGitHubPrData(req, res) {
       teamId,
       sprintId,
       receivedAt,
-      pullRequestCount: normalizedPullRequests.length,
+      pullRequestCount: persisted.receivedCount,
       samplePullRequests,
     });
 
@@ -172,11 +104,18 @@ async function receiveGitHubPrData(req, res) {
       recordedAt: new Date().toISOString(),
       teamId,
       sprintId,
-      receivedCount: normalizedPullRequests.length,
-      storedPullRequestCount: normalizedPullRequests.length,
+      receivedCount: persisted.receivedCount,
+      storedPullRequestCount: persisted.storedPullRequestCount,
     });
   } catch (error) {
-    // Log unexpected errors for debugging.
+    if (error instanceof ApiError) {
+      return res.status(error.status).json({
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      });
+    }
+
     console.error('GitHub PR ingestion failed unexpectedly', {
       error: error.message,
       stack: error.stack,
