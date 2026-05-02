@@ -75,7 +75,7 @@ export default function CoordinatorHomePage() {
       title: 'Coordinator login required',
       message: 'Please sign in before opening the coordinator workspace.',
     });
-    navigate('/coordinator/login', { replace: true });
+    navigate('/login', { replace: true });
   }, [navigate, notify, token]);
 
   return (

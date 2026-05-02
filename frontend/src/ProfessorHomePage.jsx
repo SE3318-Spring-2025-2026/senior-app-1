@@ -59,7 +59,7 @@ export default function ProfessorHomePage() {
       title: 'Professor login required',
       message: 'Please sign in before opening the professor workspace.',
     });
-    navigate('/professors/login', { replace: true });
+    navigate('/login', { replace: true });
   }, [navigate, notify, token]);
 
   return (
