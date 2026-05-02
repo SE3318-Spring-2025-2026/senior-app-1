@@ -74,7 +74,11 @@ app.use('/internal/github', internalGithubRoutes);
 app.use('/internal/sprint-sync', internalSprintSyncRoutes);
 app.use('/api/v1/committee/submissions', submissionsRoutes);
 app.use('/api/v1/committee', committeeRoutes);
+<<<<<<< HEAD
 app.use('/api/v1/final-evaluation', finalEvaluationRoutes);
+=======
+app.use('/', finalEvaluationRoutes);
+>>>>>>> d244b26 (feat: P61 - Submit and update committee grade for group deliverable #368)
 
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
