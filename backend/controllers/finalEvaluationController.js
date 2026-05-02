@@ -92,7 +92,11 @@ const submitCommitteeGrade = async (req, res, next) => {
     // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ 
+        code: 'VALIDATION_ERROR',
+        message: 'Validation failed',
+        errors: errors.array() 
+      });
     }
 
     const { groupId } = req.params;
@@ -181,7 +185,11 @@ const updateCommitteeGrade = async (req, res, next) => {
     // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ 
+        code: 'VALIDATION_ERROR',
+        message: 'Validation failed',
+        errors: errors.array() 
+      });
     }
 
     const { groupId } = req.params;
@@ -304,7 +312,11 @@ const submitAdvisorGrade = async (req, res, next) => {
     // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ 
+        code: 'VALIDATION_ERROR',
+        message: 'Validation failed',
+        errors: errors.array() 
+      });
     }
 
     const { groupId } = req.params;
@@ -378,7 +390,11 @@ const updateAdvisorGrade = async (req, res, next) => {
     // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ 
+        code: 'VALIDATION_ERROR',
+        message: 'Validation failed',
+        errors: errors.array() 
+      });
     }
 
     const { groupId } = req.params;
