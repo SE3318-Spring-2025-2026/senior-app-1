@@ -84,8 +84,8 @@ test('receives GitHub PR data, logs it, and returns ActionResponse status', asyn
     assert.equal(logCalls[0][0], 'Received GitHub PR ingestion event');
     assert.equal(logCalls[0][1].teamId, 'team_01HR9W2Q6NQ7G6M3K4J8');
     assert.equal(logCalls[0][1].pullRequestCount, 1);
-    assert.equal(logCalls[0][1].pullRequests[0].prNumber, 142);
-    assert.equal(logCalls[0][1].pullRequests[0].changedFiles.length, 2);
+    assert.equal(logCalls[0][1].samplePullRequests[0].prNumber, 142);
+    assert.equal(logCalls[0][1].samplePullRequests[0].issueKey, 'SPM-214');
   } finally {
     console.info = originalInfo;
   }

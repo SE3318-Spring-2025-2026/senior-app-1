@@ -129,3 +129,82 @@ test('team leader can create and update monitoring integration config without ex
   assert.equal(readResult.json.githubTokenRef, undefined);
   assert.equal(readResult.json.jiraTokenRef, undefined);
 });
+
+test('update integration returns 404 when no binding exists yet', async () => {
+  const leader = await User.create({
+    email: 'integration-missing@example.edu',
+    fullName: 'Integration Missing',
+    studentId: '11070003103',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    password: 'StrongPass1!',
+  });
+
+  await Group.create({
+    id: 'team-integrations-missing',
+    name: 'Group team-integrations-missing',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+    maxMembers: 4,
+  });
+
+  const result = await request('/api/v1/teams/team-integrations-missing/integrations', {
+    method: 'PUT',
+    headers: await authHeadersFor(leader),
+    body: JSON.stringify({
+      providerSet: ['GITHUB', 'JIRA'],
+      organizationName: 'acme-org',
+      repositoryName: 'senior-app',
+      jiraWorkspaceId: 'workspace-acme',
+      jiraProjectKey: 'SPM',
+      defaultBranch: 'main',
+      initiatedBy: String(leader.id),
+    }),
+  });
+
+  assert.equal(result.response.status, 404);
+  assert.equal(result.json.code, 'INTEGRATION_BINDING_NOT_FOUND');
+});
+
+test('integration read preserves non-active binding statuses when token refs exist', async () => {
+  const leader = await User.create({
+    email: 'integration-invalid@example.edu',
+    fullName: 'Integration Invalid',
+    studentId: '11070003104',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    password: 'StrongPass1!',
+  });
+
+  await Group.create({
+    id: 'team-integrations-invalid',
+    name: 'Group team-integrations-invalid',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+    maxMembers: 4,
+  });
+
+  await IntegrationBinding.create({
+    teamId: 'team-integrations-invalid',
+    providerSet: ['GITHUB', 'JIRA'],
+    organizationName: 'acme-org',
+    repositoryName: 'senior-app',
+    jiraWorkspaceId: 'workspace-acme',
+    jiraProjectKey: 'SPM',
+    defaultBranch: 'main',
+    initiatedBy: String(leader.id),
+    status: 'INVALID',
+  });
+  await IntegrationTokenReference.create({
+    teamId: 'team-integrations-invalid',
+    githubTokenRef: 'vault://github/team-integrations-invalid',
+    jiraTokenRef: 'vault://jira/team-integrations-invalid',
+  });
+
+  const result = await request('/api/v1/teams/team-integrations-invalid/integrations', {
+    headers: await authHeadersFor(leader),
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.json.status, 'INVALID');
+});

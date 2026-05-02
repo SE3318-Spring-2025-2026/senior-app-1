@@ -82,18 +82,21 @@ function canManageIntegrations(group, user) {
   return ['ADMIN', 'COORDINATOR'].includes(String(user.role || '').toUpperCase());
 }
 
-function computeIntegrationStatus(providerSet, tokenReference) {
-  const providers = Array.isArray(providerSet)
-    ? providerSet.map((provider) => String(provider).toUpperCase())
+function computeIntegrationStatus(binding, tokenReference) {
+  const bindingStatus = String(binding?.status || 'ACTIVE').toUpperCase();
+  const providers = Array.isArray(binding?.providerSet)
+    ? binding.providerSet.map((provider) => String(provider).toUpperCase())
     : [];
   const hasGithubProvider = providers.includes('GITHUB');
   const hasJiraProvider = providers.includes('JIRA');
   const hasGithubTokenRef = Boolean(tokenReference?.githubTokenRef);
   const hasJiraTokenRef = Boolean(tokenReference?.jiraTokenRef);
 
-  return (hasGithubProvider && !hasGithubTokenRef) || (hasJiraProvider && !hasJiraTokenRef)
-    ? 'PARTIAL'
-    : 'ACTIVE';
+  if ((hasGithubProvider && !hasGithubTokenRef) || (hasJiraProvider && !hasJiraTokenRef)) {
+    return 'PARTIAL';
+  }
+
+  return bindingStatus;
 }
 
 function buildIntegrationResponse(binding, tokenReference) {
@@ -106,7 +109,7 @@ function buildIntegrationResponse(binding, tokenReference) {
     jiraProjectKey: binding.jiraProjectKey,
     jiraWorkspaceId: binding.jiraWorkspaceId,
     defaultBranch: binding.defaultBranch,
-    status: computeIntegrationStatus(binding.providerSet, tokenReference),
+    status: computeIntegrationStatus(binding, tokenReference),
     hasGithubTokenRef: Boolean(tokenReference?.githubTokenRef),
     hasJiraTokenRef: Boolean(tokenReference?.jiraTokenRef),
     createdAt: binding.createdAt,
@@ -159,6 +162,12 @@ async function saveIntegrationBinding(req, res, { allowUpdate }) {
       return res.status(409).json({
         code: 'INTEGRATION_BINDING_EXISTS',
         message: 'An integration binding already exists for this team',
+      });
+    }
+    if (!wasExisting && allowUpdate) {
+      return res.status(404).json({
+        code: 'INTEGRATION_BINDING_NOT_FOUND',
+        message: 'No integration binding exists for this team',
       });
     }
 

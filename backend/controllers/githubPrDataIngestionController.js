@@ -130,12 +130,20 @@ async function receiveGitHubPrData(req, res) {
       }
     });
 
+    const samplePullRequests = normalizedPullRequests.slice(0, 3).map((pullRequest) => ({
+      prNumber: pullRequest.prNumber,
+      issueKey: pullRequest.issueKey,
+      branchName: pullRequest.branchName,
+      prStatus: pullRequest.prStatus,
+      mergeStatus: pullRequest.mergeStatus,
+    }));
+
     console.info('Received GitHub PR ingestion event', {
       teamId,
       sprintId,
       receivedAt,
       pullRequestCount: normalizedPullRequests.length,
-      pullRequests: normalizedPullRequests,
+      samplePullRequests,
     });
 
     return res.status(201).json({

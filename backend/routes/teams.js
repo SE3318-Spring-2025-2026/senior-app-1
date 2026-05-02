@@ -23,7 +23,7 @@ const router = express.Router();
 router.post(
   '/:teamId/integrations',
   authenticate,
-  authorize(['STUDENT']),
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
   requireNonEmptyBody,
   createIntegrationBindingValidation,
   createIntegrationBinding
