@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import IntegrationConfigurationPage from '../../IntegrationConfigurationPage.jsx';
 import apiClient from '../../services/apiClient';
 
@@ -17,6 +17,26 @@ function renderIntegrationPage(teamId = 'team-1') {
       <Routes>
         <Route path="/students/groups/:teamId/integrations" element={<IntegrationConfigurationPage />} />
       </Routes>
+    </MemoryRouter>,
+  );
+}
+
+function renderIntegrationPageSwitcher(initialTeamId = 'team-1') {
+  function Harness() {
+    return (
+      <>
+        <Link to="/students/groups/team-1/integrations">Team 1</Link>
+        <Link to="/students/groups/team-2/integrations">Team 2</Link>
+        <Routes>
+          <Route path="/students/groups/:teamId/integrations" element={<IntegrationConfigurationPage />} />
+        </Routes>
+      </>
+    );
+  }
+
+  return render(
+    <MemoryRouter initialEntries={[`/students/groups/${initialTeamId}/integrations`]}>
+      <Harness />
     </MemoryRouter>,
   );
 }
@@ -111,6 +131,34 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
 
     expect(await screen.findByText(/api unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/api unavailable/i)).toBeInTheDocument();
+  });
+
+  test('integration configuration UI clears stale team data when a new team load fails', async () => {
+    const user = userEvent.setup();
+    apiClient.get
+      .mockResolvedValueOnce({
+        data: {
+          teamId: 'team-1',
+          providerSet: ['GITHUB', 'JIRA'],
+          organizationName: 'acme-org',
+          repositoryName: 'senior-app',
+          jiraProjectKey: 'SPM',
+          defaultBranch: 'main',
+          status: 'ACTIVE',
+          hasGithubTokenRef: true,
+          hasJiraTokenRef: true,
+        },
+      })
+      .mockRejectedValueOnce(new Error('API unavailable'));
+
+    renderIntegrationPageSwitcher('team-1');
+
+    expect(await screen.findByText('acme-org')).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: /team 2/i }));
+
+    expect(await screen.findByText(/api unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText('Not Connected')).toBeInTheDocument();
+    expect(screen.queryByText('acme-org')).not.toBeInTheDocument();
   });
 
   test('integration configuration form saves monitoring settings from the same page', async () => {

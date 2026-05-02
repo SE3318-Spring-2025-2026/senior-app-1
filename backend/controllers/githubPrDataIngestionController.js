@@ -70,11 +70,30 @@ async function receiveGitHubPrData(req, res) {
       return res.status(400).json({
         code: 'VALIDATION_ERROR',
         message: 'One or more pull requests could not be normalized into the required shape',
-        errors: invalidPullRequests.map((pullRequest) => ({
+        details: invalidPullRequests.map((pullRequest) => ({
           msg: 'Pull request number is required',
           path: `pullRequests[${pullRequest.index}]`,
           value: null,
         })),
+        success: false,
+      });
+    }
+
+    const seenPullRequestNumbers = new Set();
+    const hasDuplicatePullRequestNumbers = normalizedPullRequests.some((pullRequest) => {
+      if (seenPullRequestNumbers.has(pullRequest.prNumber)) {
+        return true;
+      }
+
+      seenPullRequestNumbers.add(pullRequest.prNumber);
+      return false;
+    });
+
+    if (hasDuplicatePullRequestNumbers) {
+      return res.status(400).json({
+        code: 'VALIDATION_ERROR',
+        message: 'Duplicate pull requests in request payload',
+        success: false,
       });
     }
 

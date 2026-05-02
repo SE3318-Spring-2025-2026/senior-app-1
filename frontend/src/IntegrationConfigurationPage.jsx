@@ -82,6 +82,8 @@ export default function IntegrationConfigurationPage() {
         setLoading(true);
         setError('');
         setSuccess('');
+        setConfiguration(null);
+        setForm({ ...EMPTY_FORM });
 
         const { data } = await apiClient.get(`/v1/teams/${teamId}/integrations`);
         if (!isMounted) {
@@ -102,6 +104,8 @@ export default function IntegrationConfigurationPage() {
           return;
         }
 
+        setConfiguration(null);
+        setForm({ ...EMPTY_FORM });
         setError(loadError.response?.data?.message || loadError.message || 'Failed to load integration configuration.');
       } finally {
         if (isMounted) {
