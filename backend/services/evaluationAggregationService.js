@@ -1,9 +1,26 @@
 // evaluationAggregationService.js
 // Aggregates story data, PR data, and sprint history for evaluation input
 
-const storyDataService = require('./storyDataService');
-const prDataService = require('./prDataService');
-const sprintHistoryService = require('./sprintHistoryService');
+function loadOptionalService(path, fallback) {
+  try {
+    return require(path);
+  } catch (error) {
+    if (error && error.code === 'MODULE_NOT_FOUND') {
+      return fallback;
+    }
+    throw error;
+  }
+}
+
+const storyDataService = loadOptionalService('./storyDataService', {
+  getStories: async () => [],
+});
+const prDataService = loadOptionalService('./prDataService', {
+  getPullRequests: async () => [],
+});
+const sprintHistoryService = loadOptionalService('./sprintHistoryService', {
+  getHistory: async () => null,
+});
 
 // Helper: Extract Jira Issue Key from branch name
 function extractIssueKeyFromBranch(branchName) {

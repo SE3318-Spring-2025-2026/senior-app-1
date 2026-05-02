@@ -3,9 +3,37 @@
 // For now, it simulates async evaluation and returns an IN_PROGRESS status immediately.
 
 const { v4: uuidv4 } = require('uuid');
-const SprintEvaluation = require('../models/SprintEvaluation');
+
+let SprintEvaluation = null;
+try {
+  SprintEvaluation = require('../models/SprintEvaluation');
+} catch (error) {
+  if (!error || error.code !== 'MODULE_NOT_FOUND') {
+    throw error;
+  }
+}
+
+const fallbackEvaluations = new Map();
 
 async function triggerSprintEvaluation({ teamId, sprintId, createdBy }) {
+  if (!SprintEvaluation) {
+    const key = `${teamId}:${sprintId}`;
+    const existing = fallbackEvaluations.get(key);
+    const evaluation = {
+      evaluationId: existing?.evaluationId || uuidv4(),
+      teamId,
+      sprintId,
+      status: 'IN_PROGRESS',
+      createdBy,
+      createdAt: new Date(),
+      aggregatedScore: null,
+      completionRate: null,
+      gradingSummary: null,
+    };
+    fallbackEvaluations.set(key, evaluation);
+    return evaluation;
+  }
+
   // Check if an evaluation already exists for this team/sprint
   let evaluation = await SprintEvaluation.findOne({ teamId, sprintId });
   if (!evaluation) {
