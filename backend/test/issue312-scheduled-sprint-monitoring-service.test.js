@@ -176,3 +176,73 @@ test('scheduled refresher exposes config and can be disabled cleanly', async () 
   refresher.start();
   refresher.stop();
 });
+
+test('scheduled refresh bulk-loads token references for active bindings', async () => {
+  await IntegrationBinding.bulkCreate([
+    {
+      teamId: 'team-token-bulk-1',
+      providerSet: ['GITHUB', 'JIRA'],
+      organizationName: 'acme-org',
+      repositoryName: 'senior-app-1',
+      jiraWorkspaceId: 'workspace-acme',
+      jiraProjectKey: 'SPM',
+      defaultBranch: 'main',
+      initiatedBy: 'student-1',
+      status: 'ACTIVE',
+    },
+    {
+      teamId: 'team-token-bulk-2',
+      providerSet: ['GITHUB', 'JIRA'],
+      organizationName: 'acme-org',
+      repositoryName: 'senior-app-1',
+      jiraWorkspaceId: 'workspace-acme',
+      jiraProjectKey: 'SPM',
+      defaultBranch: 'main',
+      initiatedBy: 'student-2',
+      status: 'ACTIVE',
+    },
+  ]);
+
+  await IntegrationTokenReference.bulkCreate([
+    {
+      teamId: 'team-token-bulk-1',
+      jiraTokenRef: 'vault://jira/team-token-bulk-1',
+      githubTokenRef: 'vault://github/team-token-bulk-1',
+    },
+    {
+      teamId: 'team-token-bulk-2',
+      jiraTokenRef: 'vault://jira/team-token-bulk-2',
+      githubTokenRef: 'vault://github/team-token-bulk-2',
+    },
+  ]);
+
+  const originalFindAll = IntegrationTokenReference.findAll;
+  const originalFindByPk = IntegrationTokenReference.findByPk;
+  let findAllCount = 0;
+  let findByPkCount = 0;
+
+  IntegrationTokenReference.findAll = async (...args) => {
+    findAllCount += 1;
+    return originalFindAll.apply(IntegrationTokenReference, args);
+  };
+  IntegrationTokenReference.findByPk = async (...args) => {
+    findByPkCount += 1;
+    return originalFindByPk.apply(IntegrationTokenReference, args);
+  };
+
+  try {
+    const result = await refreshAllTeamSprintMonitoring();
+
+    assert.equal(result.teamCount, 2);
+    assert.equal(findAllCount, 1);
+    assert.equal(findByPkCount, 0);
+    assert.equal(result.results.every((entry) => entry.failed === true), true);
+    assert.equal(
+      result.results.every((entry) => entry.reason === 'JIRA_TOKEN_SECRET_NOT_RESOLVED'),
+      true,
+    );
+  } finally {
+    IntegrationTokenReference.findAll = originalFindAll;
+    IntegrationTokenReference.findByPk = originalFindByPk;
+  }
+});

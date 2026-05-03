@@ -222,3 +222,27 @@ test('team leader can trigger GitHub sync, fetch repo pull requests, and persist
   assert.equal(storedPullRequest.prStatus, 'OPEN');
   assert.equal(storedPullRequest.mergeStatus, 'MERGEABLE');
 });
+
+test('github sync rejects requests without branch or issue filters', async () => {
+  const leader = await createStudentUser({
+    email: 'github-sync-empty-filters@example.edu',
+    fullName: 'GitHub Sync Empty Filters',
+    studentId: '11070003112',
+  });
+  await createGithubReadyTeam({ leader, teamId: 'team-github-sync-empty-filters' });
+
+  const { response, json } = await request('/api/v1/teams/team-github-sync-empty-filters/sprints/sprint_2026_03/github-verifications', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      requestedBy: String(leader.id),
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(json.code, 'VALIDATION_ERROR');
+  assert.match(json.message, /Validation failed/);
+});

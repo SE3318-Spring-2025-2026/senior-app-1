@@ -75,9 +75,13 @@ function resolveTokenReference(tokenRef, { provider }) {
     return resolvedSecret;
   }
 
+  console.warn(`${normalizedProvider} token reference could not be resolved`, {
+    tokenRef: normalizedRef,
+  });
+
   throw ApiError.conflict(
     `${normalizedProvider}_TOKEN_SECRET_NOT_RESOLVED`,
-    `No ${normalizedProvider} secret is configured for token reference ${normalizedRef}`,
+    `No ${normalizedProvider} secret is configured for this team`,
   );
 }
 

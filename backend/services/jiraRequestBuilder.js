@@ -6,6 +6,18 @@ function asTrimmedString(value) {
   return value.trim();
 }
 
+function validateProjectKey(projectKey) {
+  if (!/^[A-Z][A-Z0-9_-]*$/.test(projectKey)) {
+    throw new Error('projectKey must contain only uppercase letters, numbers, underscores, or hyphens.');
+  }
+}
+
+function escapeJqlString(value) {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"');
+}
+
 function normalizeJiraBaseUrl(baseUrl = process.env.JIRA_BASE_URL) {
   const normalized = asTrimmedString(baseUrl);
   if (!normalized) {
@@ -153,6 +165,8 @@ function buildJiraProjectOpenSprintIssuesRequest({ projectKey, includeStatuses =
     throw new Error('projectKey is required.');
   }
 
+  validateProjectKey(normalizedProjectKey);
+
   const normalizedStatuses = Array.isArray(includeStatuses)
     ? includeStatuses.map((status) => asTrimmedString(status)).filter(Boolean)
     : [];
@@ -175,14 +189,16 @@ function buildJiraProjectOpenSprintIssuesRequest({ projectKey, includeStatuses =
     ? config.maxResults
     : 100;
   const statusClause = normalizedStatuses.length > 0
-    ? ` AND status IN (${normalizedStatuses.map((status) => `"${status}"`).join(', ')})`
+    ? ` AND status IN (${normalizedStatuses
+      .map((status) => `"${escapeJqlString(status)}"`)
+      .join(', ')})`
     : '';
 
   return buildJiraRequest({
     path: '/rest/api/3/search',
     method: 'POST',
     body: {
-      jql: `project = "${normalizedProjectKey}" AND sprint in openSprints()${statusClause}`,
+      jql: `project = "${escapeJqlString(normalizedProjectKey)}" AND sprint in openSprints()${statusClause}`,
       fields,
       maxResults,
     },

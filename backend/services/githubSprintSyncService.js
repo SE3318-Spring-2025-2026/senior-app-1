@@ -22,6 +22,17 @@ function normalizeStringArray(values) {
     .filter(Boolean);
 }
 
+function assertHasFilters({ branchNames, issueKeys }) {
+  if (branchNames.length > 0 || issueKeys.length > 0) {
+    return;
+  }
+
+  throw ApiError.badRequest(
+    'GITHUB_SYNC_FILTER_REQUIRED',
+    'At least one branch name or related issue key is required to synchronize GitHub pull requests',
+  );
+}
+
 function matchesFilters(pr, { branchNames, issueKeys }) {
   if (branchNames.length === 0 && issueKeys.length === 0) {
     return true;
@@ -53,6 +64,13 @@ async function fetchRepositoryPullRequests({ binding, tokenReference, branchName
     );
   }
 
+  const normalizedBranchNames = normalizeStringArray(branchNames);
+  const normalizedIssueKeys = normalizeStringArray(issueKeys);
+  assertHasFilters({
+    branchNames: normalizedBranchNames,
+    issueKeys: normalizedIssueKeys,
+  });
+
   const githubToken = resolveTokenReference(tokenReference?.githubTokenRef, { provider: 'GITHUB' });
   const pulls = await makeGitHubRequest(
     githubToken,
@@ -63,32 +81,39 @@ async function fetchRepositoryPullRequests({ binding, tokenReference, branchName
 
   const filteredPulls = Array.isArray(pulls)
     ? pulls.filter((pullRequest) => matchesFilters(pullRequest, {
-      branchNames: normalizeStringArray(branchNames),
-      issueKeys: normalizeStringArray(issueKeys),
+      branchNames: normalizedBranchNames,
+      issueKeys: normalizedIssueKeys,
     }))
     : [];
 
+  const detailConcurrency = 5;
   const detailedPulls = [];
-  for (const pullRequest of filteredPulls) {
-    const detailedPullRequest = await makeGitHubRequest(
-      githubToken,
-      organizationName,
-      repositoryName,
-      `/repos/${organizationName}/${repositoryName}/pulls/${pullRequest.number}`,
-    );
-    const files = await makeGitHubRequest(
-      githubToken,
-      organizationName,
-      repositoryName,
-      `/repos/${organizationName}/${repositoryName}/pulls/${pullRequest.number}/files?per_page=100`,
-    );
+  for (let index = 0; index < filteredPulls.length; index += detailConcurrency) {
+    const batch = filteredPulls.slice(index, index + detailConcurrency);
+    const batchResults = await Promise.all(batch.map(async (pullRequest) => {
+      const [detailedPullRequest, files] = await Promise.all([
+        makeGitHubRequest(
+          githubToken,
+          organizationName,
+          repositoryName,
+          `/repos/${organizationName}/${repositoryName}/pulls/${pullRequest.number}`,
+        ),
+        makeGitHubRequest(
+          githubToken,
+          organizationName,
+          repositoryName,
+          `/repos/${organizationName}/${repositoryName}/pulls/${pullRequest.number}/files?per_page=100`,
+        ),
+      ]);
 
-    detailedPulls.push({
-      pull_request: {
-        ...detailedPullRequest,
-        files: Array.isArray(files) ? files : [],
-      },
-    });
+      return {
+        pull_request: {
+          ...detailedPullRequest,
+          files: Array.isArray(files) ? files : [],
+        },
+      };
+    }));
+    detailedPulls.push(...batchResults);
   }
 
   return detailedPulls;

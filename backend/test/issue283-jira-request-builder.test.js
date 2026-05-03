@@ -172,4 +172,22 @@ test('rejects invalid or unsafe builder input early', async () => {
     }),
     /sprintId is required/,
   );
+
+  assert.throws(
+    () => buildJiraProjectOpenSprintIssuesRequest({
+      projectKey: 'spm"',
+      includeStatuses: ['Done'],
+    }),
+    /projectKey must contain only uppercase letters, numbers, underscores, or hyphens/,
+  );
+});
+
+test('escapes status values when building open sprint JQL', async () => {
+  const request = buildJiraProjectOpenSprintIssuesRequest({
+    projectKey: 'SPM',
+    includeStatuses: ['Needs "Review"', 'Done\\QA'],
+  });
+
+  const body = JSON.parse(request.options.body);
+  assert.match(body.jql, /status IN \("Needs \\"Review\\"", "Done\\\\QA"\)/);
 });

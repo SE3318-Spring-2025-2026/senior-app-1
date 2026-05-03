@@ -101,10 +101,18 @@ async function refreshAllTeamSprintMonitoring(options = {}) {
     where: { status: 'ACTIVE' },
     order: [['teamId', 'ASC']],
   });
+  const tokenReferences = await IntegrationTokenReference.findAll({
+    where: {
+      teamId: bindings.map((binding) => binding.teamId),
+    },
+  });
+  const tokenReferenceByTeamId = new Map(
+    tokenReferences.map((tokenReference) => [tokenReference.teamId, tokenReference]),
+  );
 
   const results = [];
   for (const binding of bindings) {
-    const tokenReference = await IntegrationTokenReference.findByPk(binding.teamId);
+    const tokenReference = tokenReferenceByTeamId.get(binding.teamId) || null;
 
     try {
       const result = await refreshBindingSprintMonitoring(binding, tokenReference, options);

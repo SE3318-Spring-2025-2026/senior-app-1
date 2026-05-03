@@ -17,6 +17,15 @@ exports.triggerGitHubVerificationValidation = [
   body('requestedBy').isString().trim().notEmpty().withMessage('requestedBy is required'),
   body('branchNames').optional().isArray(),
   body('relatedIssueKeys').optional().isArray(),
+  body().custom((value = {}) => {
+    const branchNames = Array.isArray(value.branchNames) ? value.branchNames : [];
+    const relatedIssueKeys = Array.isArray(value.relatedIssueKeys) ? value.relatedIssueKeys : [];
+    if (branchNames.length > 0 || relatedIssueKeys.length > 0) {
+      return true;
+    }
+
+    throw new Error('At least one branch name or related issue key is required');
+  }),
 ];
 
 exports.triggerGitHubVerification = async (req, res) => {
