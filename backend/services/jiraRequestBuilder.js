@@ -6,6 +6,10 @@ function asTrimmedString(value) {
   return value.trim();
 }
 
+function normalizeProjectKey(projectKey) {
+  return asTrimmedString(projectKey).toUpperCase();
+}
+
 function validateProjectKey(projectKey) {
   if (!/^[A-Z][A-Z0-9_-]*$/.test(projectKey)) {
     throw new Error('projectKey must contain only uppercase letters, numbers, underscores, or hyphens.');
@@ -160,7 +164,7 @@ function buildJiraSprintIssuesRequest({ boardId, sprintId, includeStatuses = [] 
 }
 
 function buildJiraProjectOpenSprintIssuesRequest({ projectKey, includeStatuses = [] } = {}, config = {}) {
-  const normalizedProjectKey = asTrimmedString(projectKey);
+  const normalizedProjectKey = normalizeProjectKey(projectKey);
   if (!normalizedProjectKey) {
     throw new Error('projectKey is required.');
   }

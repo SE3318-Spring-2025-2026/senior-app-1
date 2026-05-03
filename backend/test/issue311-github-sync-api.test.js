@@ -125,7 +125,7 @@ test('team leader can trigger GitHub sync, fetch repo pull requests, and persist
 
     assert.match(String(options?.headers?.Authorization || ''), /^token /);
 
-    if (String(url).endsWith('/pulls?state=all&per_page=100')) {
+    if (String(url).endsWith('/pulls?state=all&per_page=100&page=1')) {
       return {
         ok: true,
         status: 200,
@@ -144,6 +144,15 @@ test('team leader can trigger GitHub sync, fetch repo pull requests, and persist
             head: { ref: 'OPS-10-maintenance' },
           },
         ]),
+      };
+    }
+
+    if (String(url).endsWith('/pulls?state=all&per_page=100&page=2')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ([]),
       };
     }
 

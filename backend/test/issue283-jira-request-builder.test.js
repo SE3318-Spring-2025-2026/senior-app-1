@@ -114,7 +114,7 @@ test('builds sprint issue requests in a configurable form that can be reused by 
 
 test('builds open sprint issue search requests from Jira project key for scheduled refresh', async () => {
   const request = buildJiraProjectOpenSprintIssuesRequest({
-    projectKey: 'SPM',
+    projectKey: 'spm',
     includeStatuses: ['To Do', 'In Progress'],
   }, {
     baseUrl: 'https://acme.atlassian.net',
