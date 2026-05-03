@@ -35,6 +35,8 @@ const teamsRoutes = require('./routes/teams');
 const submissionsRoutes = require('./routes/submissions');
 const committeeRoutes = require('./routes/committee');
 
+const sprintEvaluationRoutes = require('./routes/sprintEvaluation');
+
 const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 
@@ -73,6 +75,9 @@ app.use('/internal/github', internalGithubRoutes);
 app.use('/internal/sprint-sync', internalSprintSyncRoutes);
 app.use('/api/v1/committee/submissions', submissionsRoutes);
 app.use('/api/v1/committee', committeeRoutes);
+
+// Sprint Evaluation endpoints
+app.use('/api/v1', sprintEvaluationRoutes);
 
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
