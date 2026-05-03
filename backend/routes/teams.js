@@ -11,6 +11,8 @@ const { getIntegrationConfiguration } = require('../controllers/integrationConfi
 const {
   getSprintMonitoringSnapshotValidation,
   getSprintMonitoringSnapshot,
+  getCurrentSprintMonitoringSnapshotValidation,
+  getCurrentSprintMonitoringSnapshot,
 } = require('../controllers/sprintMonitoringController');
 const { triggerSprintEvaluationHandler } = require('../controllers/sprintEvaluationController');
 const {
@@ -51,6 +53,14 @@ router.get(
   authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
   getSprintMonitoringSnapshotValidation,
   getSprintMonitoringSnapshot
+);
+
+router.get(
+  '/:teamId/monitoring/current',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  getCurrentSprintMonitoringSnapshotValidation,
+  getCurrentSprintMonitoringSnapshot
 );
 
 // Trigger sprint evaluation (no metrics in payload)
