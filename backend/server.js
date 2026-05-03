@@ -5,6 +5,7 @@ const Group = require('./models/Group');
 const app = require('./app');
 require('./models');
 const { ensureValidStudentRegistry } = require('./services/studentService');
+const { createScheduledSprintMonitoringRefresher } = require('./services/scheduledSprintMonitoringService');
 const { RubricCriterion } = require('./models');
 
 const ensureSqliteColumns = async () => {
@@ -88,6 +89,8 @@ const seedRubricCriteria = async () => {
 };
 
 // Connect to SQLite and sync models
+const sprintMonitoringRefresher = createScheduledSprintMonitoringRefresher();
+
 sequelize.authenticate()
   .then(() => {
     console.log("SQLite connected");
@@ -96,7 +99,13 @@ sequelize.authenticate()
   .then(() => ensureSqliteColumns())
   .then(() => ensureValidStudentRegistry())
   .then(() => seedRubricCriteria())
-  .then(() => console.log("Database synced"))
+  .then(() => {
+    console.log("Database synced");
+    sprintMonitoringRefresher.start();
+    if (sprintMonitoringRefresher.enabled) {
+      console.log(`Scheduled sprint monitoring refresh enabled every ${sprintMonitoringRefresher.intervalMs}ms`);
+    }
+  })
   .catch(err => console.log("Database error:", err));
 
 const BASE_PORT = Number(process.env.PORT || 3001);

@@ -1,8 +1,15 @@
 const { param, body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
-const fetch = global.fetch || require('node-fetch');
-const { Group, AuditLog } = require('../models');
-const githubLinkService = require('../services/githubLinkService');
+const {
+  Group,
+  AuditLog,
+  IntegrationBinding,
+  IntegrationTokenReference,
+} = require('../models');
+const { ApiError } = require('../middleware/errorResponse');
+const { canManageIntegrations } = require('./integrationBindingController');
+const { hasProvider } = require('../services/sprintMonitoringPersistenceService');
+const { syncGitHubPullRequests } = require('../services/githubSprintSyncService');
 
 exports.triggerGitHubVerificationValidation = [
   param('teamId').isString().trim().notEmpty().withMessage('Team ID is required'),
@@ -10,43 +17,87 @@ exports.triggerGitHubVerificationValidation = [
   body('requestedBy').isString().trim().notEmpty().withMessage('requestedBy is required'),
   body('branchNames').optional().isArray(),
   body('relatedIssueKeys').optional().isArray(),
+  body().custom((value = {}) => {
+    const branchNames = Array.isArray(value.branchNames) ? value.branchNames : [];
+    const relatedIssueKeys = Array.isArray(value.relatedIssueKeys) ? value.relatedIssueKeys : [];
+    if (branchNames.length > 0 || relatedIssueKeys.length > 0) {
+      return true;
+    }
+
+    throw new Error('At least one branch name or related issue key is required');
+  }),
 ];
 
-/**
- * POST /api/v1/teams/:teamId/sprints/:sprintId/github-verifications
- * Triggers an asynchronous GitHub PR verification workflow for a team/sprint.
- * Auth: Required
- */
 exports.triggerGitHubVerification = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Validation failed', errors: errors.array() });
+      return res.status(400).json({
+        code: 'VALIDATION_ERROR',
+        message: 'Validation failed',
+        errors: errors.array(),
+      });
     }
 
-    const { teamId, sprintId } = req.params;
+    const teamId = String(req.params.teamId).trim();
+    const sprintId = String(req.params.sprintId).trim();
     const { branchNames = [], relatedIssueKeys = [], requestedBy } = req.body;
 
-    // Validate team existence (maps to Group)
-    const group = await Group.findByPk(String(teamId).trim());
+    const group = await Group.findByPk(teamId);
     if (!group) {
-      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: 'Team not found' });
+      return res.status(404).json({
+        code: 'GROUP_NOT_FOUND',
+        message: 'Team not found',
+      });
     }
 
-    // Validate integration configuration is present (no hardcoded tokens)
-    if (!githubLinkService.hasRealGitHubOAuthConfig()) {
-      return res.status(400).json({ code: 'GITHUB_INTEGRATION_MISSING', message: 'GitHub integration not configured' });
+    if (String(req.user?.id) !== String(requestedBy).trim()) {
+      return res.status(403).json({
+        code: 'FORBIDDEN',
+        message: 'requestedBy must match the authenticated user',
+      });
+    }
+
+    if (!canManageIntegrations(group, req.user)) {
+      return res.status(403).json({
+        code: 'FORBIDDEN',
+        message: 'Only the team leader or authorized staff can trigger GitHub sync for this team',
+      });
+    }
+
+    const binding = await IntegrationBinding.findOne({
+      where: { teamId },
+    });
+    if (!binding) {
+      return res.status(404).json({
+        code: 'INTEGRATION_BINDING_NOT_FOUND',
+        message: 'No integration binding exists for this team',
+      });
+    }
+
+    if (!hasProvider(binding, 'GITHUB')) {
+      return res.status(409).json({
+        code: 'GITHUB_PROVIDER_NOT_ENABLED',
+        message: 'This team is not bound to GitHub integration',
+      });
+    }
+
+    const tokenReference = await IntegrationTokenReference.findByPk(teamId);
+    if (!String(tokenReference?.githubTokenRef || '').trim()) {
+      return res.status(409).json({
+        code: 'GITHUB_TOKEN_REFERENCE_NOT_FOUND',
+        message: 'No GitHub token reference exists for this team',
+      });
     }
 
     const operationId = uuidv4();
 
-    // Log initiation for traceability
     try {
       await AuditLog.create({
         action: 'GITHUB_VERIFICATION_TRIGGERED',
         actorId: req.user ? req.user.id : null,
         targetType: 'GROUP',
-        targetId: String(teamId),
+        targetId: teamId,
         metadata: {
           sprintId,
           branchNames,
@@ -59,38 +110,40 @@ exports.triggerGitHubVerification = async (req, res) => {
       console.error('Failed to write audit log for GitHub verification trigger', logErr);
     }
 
-    // Asynchronously notify internal ingestion/orchestration endpoint
-    // Fire-and-forget: do not wait for ingestion to complete.
-    try {
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const url = `${baseUrl}/internal/github/pr-data`;
-      fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          operationId,
-          teamId,
-          sprintId,
-          branchNames,
-          relatedIssueKeys,
-          requestedBy,
-          initiatedBy: req.user ? req.user.id : null,
-        }),
-      }).catch((err) => console.error('Failed to trigger internal GitHub ingestion', err));
-    } catch (err) {
-      console.error('Error initiating internal GitHub ingestion request', err);
-    }
+    const syncResult = await syncGitHubPullRequests({
+      binding,
+      tokenReference,
+      teamId,
+      sprintId,
+      branchNames,
+      issueKeys: relatedIssueKeys,
+    });
 
-    return res.status(202).json({
-      code: 'ACCEPTED',
-      message: 'GitHub verification triggered',
+    return res.status(200).json({
+      code: 'SYNCED',
+      message: 'GitHub sprint pull requests synchronized successfully',
       data: {
         operationId,
-        status: 'queued',
+        status: 'synced',
+        teamId,
+        sprintId,
+        upstreamPullRequestCount: syncResult.upstreamPullRequestCount,
+        storedPullRequestCount: syncResult.storedPullRequestCount,
       },
     });
   } catch (error) {
+    if (error instanceof ApiError) {
+      return res.status(error.status).json({
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      });
+    }
+
     console.error('Error in triggerGitHubVerification:', error);
-    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+    return res.status(500).json({
+      code: 'INTERNAL_ERROR',
+      message: 'Internal server error',
+    });
   }
 };

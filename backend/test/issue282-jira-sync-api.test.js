@@ -10,6 +10,7 @@ const {
   Group,
   IntegrationBinding,
   IntegrationTokenReference,
+  SprintStory,
   User,
 } = require('../models');
 
@@ -65,6 +66,10 @@ async function createJiraReadyTeam({
   });
 
   if (includeTokenRef) {
+    process.env[`JIRA_TOKEN_REF_${String(`vault://jira/${teamId}`)
+      .replace(/[^a-zA-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .toUpperCase()}`] = `jira-secret-for-${teamId}`;
     await IntegrationTokenReference.create({
       teamId,
       jiraTokenRef: `vault://jira/${teamId}`,
@@ -96,14 +101,16 @@ test.after(async () => {
 
 test.beforeEach(async () => {
   global.fetch = originalFetch;
+  process.env.JIRA_USER_EMAIL = 'jira-sync@example.edu';
 
+  await SprintStory.destroy({ where: {} });
   await IntegrationTokenReference.destroy({ where: {} });
   await IntegrationBinding.destroy({ where: {} });
   await Group.destroy({ where: {} });
   await User.destroy({ where: {} });
 });
 
-test('team leader can trigger Jira sprint sync and receive an accepted response without making an upstream fetch', async () => {
+test('team leader can trigger Jira sprint sync, fetch upstream issues, and persist sprint stories', async () => {
   const leader = await createStudentUser({
     email: 'jira-sync-leader@example.edu',
     fullName: 'Jira Sync Leader',
@@ -116,7 +123,30 @@ test('team leader can trigger Jira sprint sync and receive an accepted response 
       return originalFetch(url, options);
     }
 
-    throw new Error('External fetch should not run in trigger endpoint');
+    assert.match(String(url), /board\/board_42\/sprint\/sprint_2026_03\/issue/);
+    assert.match(String(options?.headers?.Authorization || ''), /^Basic /);
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({
+        issues: [
+          {
+            key: 'SPM-214',
+            fields: {
+              summary: 'Implement login validation',
+              description: 'Sync from Jira',
+              status: { name: 'In Progress' },
+              assignee: { accountId: 'student-11' },
+              reporter: { accountId: 'advisor-2' },
+              customfield_10016: 5,
+              created: '2026-05-02T10:00:00Z',
+              updated: '2026-05-02T10:30:00Z',
+            },
+          },
+        ],
+      }),
+    };
   };
 
   const { response, json } = await request('/api/v1/teams/team-jira-sync/sprints/sprint_2026_03/jira-sync', {
@@ -132,12 +162,102 @@ test('team leader can trigger Jira sprint sync and receive an accepted response 
     }),
   });
 
-  assert.equal(response.status, 202);
+  assert.equal(response.status, 200);
   assert.match(json.id, /^op_/);
-  assert.equal(json.status, 'ACCEPTED');
-  assert.equal(json.message, 'Jira sprint sync request accepted.');
+  assert.equal(json.status, 'SYNCED');
+  assert.equal(json.message, 'Jira sprint sync completed successfully.');
   assert.equal(json.teamId, 'team-jira-sync');
   assert.equal(json.sprintId, 'sprint_2026_03');
+  assert.equal(json.upstreamIssueCount, 1);
+  assert.equal(json.storedStoryCount, 1);
+
+  const storedStory = await SprintStory.findOne({
+    where: {
+      teamId: 'team-jira-sync',
+      sprintId: 'sprint_2026_03',
+      issueKey: 'SPM-214',
+    },
+  });
+  assert.equal(storedStory.title, 'Implement login validation');
+  assert.equal(storedStory.assigneeId, 'student-11');
+  assert.equal(storedStory.reporterId, 'advisor-2');
+  assert.equal(storedStory.storyPoints, 5);
+});
+
+test('jira sync paginates upstream issues until all pages are fetched', async () => {
+  const leader = await createStudentUser({
+    email: 'jira-sync-pagination@example.edu',
+    fullName: 'Jira Sync Pagination',
+    studentId: '11070003002',
+  });
+  await createJiraReadyTeam({ leader, teamId: 'team-jira-pagination' });
+
+  const seenStartAts = [];
+  global.fetch = async (url, options = {}) => {
+    if (String(url).startsWith(baseUrl)) {
+      return originalFetch(url, options);
+    }
+
+    const requestUrl = new URL(String(url));
+    seenStartAts.push(requestUrl.searchParams.get('startAt') || '0');
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({
+        startAt: Number.parseInt(requestUrl.searchParams.get('startAt') || '0', 10),
+        maxResults: 1,
+        total: 2,
+        issues: requestUrl.searchParams.get('startAt') === '1'
+          ? [{
+            key: 'SPM-215',
+            fields: {
+              summary: 'Implement pagination follow-up',
+              status: { name: 'Done' },
+              assignee: { accountId: 'student-12' },
+              reporter: { accountId: 'advisor-3' },
+              customfield_10016: 3,
+              created: '2026-05-02T11:00:00Z',
+              updated: '2026-05-02T11:30:00Z',
+            },
+          }]
+          : [{
+            key: 'SPM-214',
+            fields: {
+              summary: 'Implement pagination support',
+              status: { name: 'In Progress' },
+              assignee: { accountId: 'student-11' },
+              reporter: { accountId: 'advisor-2' },
+              customfield_10016: 5,
+              created: '2026-05-02T10:00:00Z',
+              updated: '2026-05-02T10:30:00Z',
+            },
+          }],
+      }),
+    };
+  };
+
+  const { response, json } = await request('/api/v1/teams/team-jira-pagination/sprints/sprint_2026_03/jira-sync', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      requestedBy: String(leader.id),
+      boardId: 'board_42',
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(json.upstreamIssueCount, 2);
+  assert.deepEqual(seenStartAts, ['0', '1']);
+  assert.equal(await SprintStory.count({
+    where: {
+      teamId: 'team-jira-pagination',
+      sprintId: 'sprint_2026_03',
+    },
+  }), 2);
 });
 
 test('jira sync rejects invalid request bodies', async () => {

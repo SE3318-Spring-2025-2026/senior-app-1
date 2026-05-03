@@ -6,6 +6,22 @@ function asTrimmedString(value) {
   return value.trim();
 }
 
+function normalizeProjectKey(projectKey) {
+  return asTrimmedString(projectKey).toUpperCase();
+}
+
+function validateProjectKey(projectKey) {
+  if (!/^[A-Z][A-Z0-9_-]*$/.test(projectKey)) {
+    throw new Error('projectKey must contain only uppercase letters, numbers, underscores, or hyphens.');
+  }
+}
+
+function escapeJqlString(value) {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"');
+}
+
 function normalizeJiraBaseUrl(baseUrl = process.env.JIRA_BASE_URL) {
   const normalized = asTrimmedString(baseUrl);
   if (!normalized) {
@@ -147,9 +163,56 @@ function buildJiraSprintIssuesRequest({ boardId, sprintId, includeStatuses = [] 
   }, config);
 }
 
+function buildJiraProjectOpenSprintIssuesRequest({ projectKey, includeStatuses = [] } = {}, config = {}) {
+  const normalizedProjectKey = normalizeProjectKey(projectKey);
+  if (!normalizedProjectKey) {
+    throw new Error('projectKey is required.');
+  }
+
+  validateProjectKey(normalizedProjectKey);
+
+  const normalizedStatuses = Array.isArray(includeStatuses)
+    ? includeStatuses.map((status) => asTrimmedString(status)).filter(Boolean)
+    : [];
+  const fields = Array.isArray(config.fields) && config.fields.length > 0
+    ? config.fields.map((field) => asTrimmedString(field)).filter(Boolean)
+    : [
+      'summary',
+      'description',
+      'status',
+      'assignee',
+      'reporter',
+      'storyPoints',
+      'customfield_10016',
+      'customfield_10020',
+      'sprint',
+      'created',
+      'updated',
+    ];
+  const maxResults = Number.isInteger(config.maxResults) && config.maxResults > 0
+    ? config.maxResults
+    : 100;
+  const statusClause = normalizedStatuses.length > 0
+    ? ` AND status IN (${normalizedStatuses
+      .map((status) => `"${escapeJqlString(status)}"`)
+      .join(', ')})`
+    : '';
+
+  return buildJiraRequest({
+    path: '/rest/api/3/search',
+    method: 'POST',
+    body: {
+      jql: `project = "${escapeJqlString(normalizedProjectKey)}" AND sprint in openSprints()${statusClause}`,
+      fields,
+      maxResults,
+    },
+  }, config);
+}
+
 module.exports = {
   buildJiraAuthHeader,
   buildJiraRequest,
+  buildJiraProjectOpenSprintIssuesRequest,
   buildJiraSprintIssuesRequest,
   hasRealJiraApiConfig,
   normalizeJiraBaseUrl,
