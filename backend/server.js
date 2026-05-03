@@ -126,7 +126,7 @@ const sprintMonitoringRefresher = createScheduledSprintMonitoringRefresher();
 sequelize.authenticate()
   .then(() => {
     console.log("SQLite connected");
-    return sequelize.sync();
+    return sequelize.sync({ alter: true });
   })
   .then(() => ensureSqliteColumns())
   .then(() => ensureValidStudentRegistry())
