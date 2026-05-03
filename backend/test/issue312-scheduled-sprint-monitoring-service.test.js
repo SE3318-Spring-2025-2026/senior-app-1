@@ -14,6 +14,10 @@ const {
   createScheduledSprintMonitoringRefresher,
   refreshAllTeamSprintMonitoring,
 } = require('../services/scheduledSprintMonitoringService');
+const {
+  storeGitHubPullRequests,
+  storeJiraIssues,
+} = require('../services/sprintMonitoringPersistenceService');
 
 const originalFetch = global.fetch;
 
@@ -184,6 +188,131 @@ test('scheduled refresher exposes config and can be disabled cleanly', async () 
   assert.equal(refresher.intervalMs, 5000);
   refresher.start();
   refresher.stop();
+});
+
+test('jira stories that disappear from upstream become inactive and reactivate when they return', async () => {
+  await IntegrationBinding.create({
+    teamId: 'team-story-lifecycle',
+    providerSet: ['JIRA'],
+    organizationName: 'acme-org',
+    repositoryName: 'senior-app-1',
+    jiraWorkspaceId: 'workspace-acme',
+    jiraProjectKey: 'SPM',
+    initiatedBy: 'student-1',
+    status: 'ACTIVE',
+  });
+
+  await storeJiraIssues({
+    teamId: 'team-story-lifecycle',
+    sprintId: 'sprint-1',
+    issues: [
+      {
+        issueKey: 'PROJ-1',
+        title: 'First issue',
+        status: 'IN_PROGRESS',
+        sprintId: 'sprint-1',
+      },
+      {
+        issueKey: 'PROJ-2',
+        title: 'Second issue',
+        status: 'DONE',
+        sprintId: 'sprint-1',
+      },
+    ],
+  });
+
+  await storeJiraIssues({
+    teamId: 'team-story-lifecycle',
+    sprintId: 'sprint-1',
+    issues: [
+      {
+        issueKey: 'PROJ-1',
+        title: 'First issue updated',
+        status: 'DONE',
+        sprintId: 'sprint-1',
+      },
+    ],
+  });
+
+  const staleStory = await SprintStory.findOne({
+    where: { teamId: 'team-story-lifecycle', sprintId: 'sprint-1', issueKey: 'PROJ-2' },
+  });
+  assert.equal(staleStory.isActive, false);
+  assert.ok(staleStory.staleAt);
+
+  await storeJiraIssues({
+    teamId: 'team-story-lifecycle',
+    sprintId: 'sprint-1',
+    issues: [
+      {
+        issueKey: 'PROJ-1',
+        title: 'First issue updated',
+        status: 'DONE',
+        sprintId: 'sprint-1',
+      },
+      {
+        issueKey: 'PROJ-2',
+        title: 'Second issue returns',
+        status: 'IN_PROGRESS',
+        sprintId: 'sprint-1',
+      },
+    ],
+  });
+
+  await staleStory.reload();
+  assert.equal(staleStory.isActive, true);
+  assert.ok(staleStory.lastSeenAt);
+  assert.equal(staleStory.staleAt, null);
+});
+
+test('github pull requests that disappear from upstream become inactive and reactivate when they return', async () => {
+  await IntegrationBinding.create({
+    teamId: 'team-pr-lifecycle',
+    providerSet: ['GITHUB'],
+    organizationName: 'acme-org',
+    repositoryName: 'senior-app-1',
+    jiraWorkspaceId: 'workspace-acme',
+    jiraProjectKey: 'SPM',
+    initiatedBy: 'student-1',
+    status: 'ACTIVE',
+  });
+
+  await storeGitHubPullRequests({
+    teamId: 'team-pr-lifecycle',
+    sprintId: 'sprint-1',
+    pullRequests: [
+      { prNumber: 12, title: 'PROJ-1 first', branchName: 'PROJ-1-first', prStatus: 'OPEN', mergeStatus: 'UNKNOWN' },
+      { prNumber: 15, title: 'PROJ-2 second', branchName: 'PROJ-2-second', prStatus: 'OPEN', mergeStatus: 'UNKNOWN' },
+    ],
+  });
+
+  await storeGitHubPullRequests({
+    teamId: 'team-pr-lifecycle',
+    sprintId: 'sprint-1',
+    pullRequests: [
+      { prNumber: 12, title: 'PROJ-1 first', branchName: 'PROJ-1-first', prStatus: 'MERGED', mergeStatus: 'MERGED' },
+    ],
+  });
+
+  const stalePullRequest = await SprintPullRequest.findOne({
+    where: { teamId: 'team-pr-lifecycle', sprintId: 'sprint-1', prNumber: 15 },
+  });
+  assert.equal(stalePullRequest.isActive, false);
+  assert.ok(stalePullRequest.staleAt);
+
+  await storeGitHubPullRequests({
+    teamId: 'team-pr-lifecycle',
+    sprintId: 'sprint-1',
+    pullRequests: [
+      { prNumber: 12, title: 'PROJ-1 first', branchName: 'PROJ-1-first', prStatus: 'MERGED', mergeStatus: 'MERGED' },
+      { prNumber: 15, title: 'PROJ-2 second returns', branchName: 'PROJ-2-second', prStatus: 'OPEN', mergeStatus: 'UNKNOWN' },
+    ],
+  });
+
+  await stalePullRequest.reload();
+  assert.equal(stalePullRequest.isActive, true);
+  assert.ok(stalePullRequest.lastSeenAt);
+  assert.equal(stalePullRequest.staleAt, null);
 });
 
 test('scheduled refresh bulk-loads token references for active bindings', async () => {

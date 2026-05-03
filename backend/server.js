@@ -2,6 +2,8 @@ const sequelize = require('./db');
 const User = require('./models/User');
 const Professor = require('./models/Professor');
 const Group = require('./models/Group');
+const SprintPullRequest = require('./models/SprintPullRequest');
+const SprintStory = require('./models/SprintStory');
 const app = require('./app');
 require('./models');
 const { ensureValidStudentRegistry } = require('./services/studentService');
@@ -16,6 +18,10 @@ const ensureSqliteColumns = async () => {
   const professorAttributes = Professor.getAttributes();
   const groupTable = await queryInterface.describeTable('Groups');
   const groupAttributes = Group.getAttributes();
+  const sprintStoryTable = await queryInterface.describeTable('SprintStories');
+  const sprintStoryAttributes = SprintStory.getAttributes();
+  const sprintPullRequestTable = await queryInterface.describeTable('SprintPullRequests');
+  const sprintPullRequestAttributes = SprintPullRequest.getAttributes();
   const columnsToEnsure = [
     'studentId',
     'password',
@@ -74,6 +80,32 @@ const ensureSqliteColumns = async () => {
       defaultValue: attribute.defaultValue,
       unique: Boolean(attribute.unique),
     });
+  }
+
+  const sprintLifecycleColumnsToEnsure = [
+    'isActive',
+    'lastSeenAt',
+    'staleAt',
+  ];
+
+  for (const columnName of sprintLifecycleColumnsToEnsure) {
+    if (!sprintStoryTable[columnName]) {
+      const attribute = sprintStoryAttributes[columnName];
+      await queryInterface.addColumn('SprintStories', columnName, {
+        type: attribute.type,
+        allowNull: attribute.allowNull,
+        defaultValue: attribute.defaultValue,
+      });
+    }
+
+    if (!sprintPullRequestTable[columnName]) {
+      const attribute = sprintPullRequestAttributes[columnName];
+      await queryInterface.addColumn('SprintPullRequests', columnName, {
+        type: attribute.type,
+        allowNull: attribute.allowNull,
+        defaultValue: attribute.defaultValue,
+      });
+    }
   }
 };
 

@@ -1,4 +1,4 @@
-const { param, validationResult } = require('express-validator');
+const { param, query, validationResult } = require('express-validator');
 const {
   Group,
   IntegrationBinding,
@@ -14,6 +14,10 @@ const {
 const getSprintMonitoringSnapshotValidation = [
   param('teamId').isString().trim().notEmpty().withMessage('teamId is required'),
   param('sprintId').isString().trim().notEmpty().withMessage('sprintId is required'),
+  query('includeStale')
+    .optional()
+    .isBoolean()
+    .withMessage('includeStale must be a boolean'),
 ];
 
 async function getSprintMonitoringSnapshot(req, res) {
@@ -29,6 +33,7 @@ async function getSprintMonitoringSnapshot(req, res) {
   try {
     const teamId = req.params.teamId.trim();
     const sprintId = req.params.sprintId.trim();
+    const includeStale = String(req.query.includeStale || '').toLowerCase() === 'true';
 
     const group = await Group.findByPk(teamId);
     if (!group) {
@@ -59,11 +64,19 @@ async function getSprintMonitoringSnapshot(req, res) {
 
     const [stories, pullRequests] = await Promise.all([
       SprintStory.findAll({
-        where: { teamId, sprintId },
+        where: {
+          teamId,
+          sprintId,
+          ...(includeStale ? {} : { isActive: true }),
+        },
         order: [['issueKey', 'ASC']],
       }),
       SprintPullRequest.findAll({
-        where: { teamId, sprintId },
+        where: {
+          teamId,
+          sprintId,
+          ...(includeStale ? {} : { isActive: true }),
+        },
         order: [['prNumber', 'ASC']],
       }),
     ]);
@@ -81,6 +94,9 @@ async function getSprintMonitoringSnapshot(req, res) {
         title: pullRequest.title,
         prStatus: pullRequest.prStatus,
         mergeStatus: pullRequest.mergeStatus,
+        isActive: pullRequest.isActive,
+        lastSeenAt: pullRequest.lastSeenAt,
+        staleAt: pullRequest.staleAt,
         url: pullRequest.url,
       });
       prsByIssueKey.set(issueKey, existing);
@@ -98,6 +114,9 @@ async function getSprintMonitoringSnapshot(req, res) {
         reporterId: story.reporterId,
         status: story.status,
         storyPoints: story.storyPoints,
+        isActive: story.isActive,
+        lastSeenAt: story.lastSeenAt,
+        staleAt: story.staleAt,
         sourceCreatedAt: story.sourceCreatedAt,
         sourceUpdatedAt: story.sourceUpdatedAt,
         linkedPullRequests: prsByIssueKey.get(story.issueKey) || [],
@@ -110,6 +129,9 @@ async function getSprintMonitoringSnapshot(req, res) {
           title: pullRequest.title,
           prStatus: pullRequest.prStatus,
           mergeStatus: pullRequest.mergeStatus,
+          isActive: pullRequest.isActive,
+          lastSeenAt: pullRequest.lastSeenAt,
+          staleAt: pullRequest.staleAt,
           changedFiles: pullRequest.changedFiles,
           diffSummary: pullRequest.diffSummary,
           sourceCreatedAt: pullRequest.sourceCreatedAt,
