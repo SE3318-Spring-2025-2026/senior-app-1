@@ -73,7 +73,8 @@ test('scheduled refresh synchronizes active sprint Jira issues and matching GitH
   global.fetch = async (url, options = {}) => {
     const normalizedUrl = String(url);
 
-    if (normalizedUrl.includes('/rest/api/3/search')) {
+    if (normalizedUrl.includes('/rest/api/3/search/jql')) {
+      assert.equal(new URL(normalizedUrl).pathname, '/rest/api/3/search/jql');
       assert.match(String(options?.headers?.Authorization || ''), /^Basic /);
       return {
         ok: true,
@@ -174,6 +175,169 @@ test('scheduled refresh synchronizes active sprint Jira issues and matching GitH
   assert.equal(result.results[0].sprintCount, 1);
   assert.equal(result.results[0].sprintSummaries[0].sprintId, 'sprint-open-1');
   assert.equal(await SprintStory.count(), 1);
+  assert.equal(await SprintPullRequest.count(), 1);
+});
+
+test('scheduled refresh follows Jira search/jql cursor pagination using nextPageToken', async () => {
+  await IntegrationBinding.create({
+    teamId: 'team-scheduler-cursor',
+    providerSet: ['GITHUB', 'JIRA'],
+    organizationName: 'acme-org',
+    repositoryName: 'senior-app-1',
+    jiraWorkspaceId: 'workspace-acme',
+    jiraProjectKey: 'SPM',
+    defaultBranch: 'main',
+    initiatedBy: 'student-1',
+    status: 'ACTIVE',
+  });
+
+  await IntegrationTokenReference.create({
+    teamId: 'team-scheduler-cursor',
+    jiraTokenRef: 'vault://jira/team-scheduler-cursor',
+    githubTokenRef: 'vault://github/team-scheduler-cursor',
+  });
+
+  setTokenEnv('JIRA_TOKEN_REF', 'vault://jira/team-scheduler-cursor', 'jira-secret');
+  setTokenEnv('GITHUB_TOKEN_REF', 'vault://github/team-scheduler-cursor', 'github-secret');
+
+  const seenPageTokens = [];
+
+  global.fetch = async (url, options = {}) => {
+    const normalizedUrl = String(url);
+
+    if (normalizedUrl.includes('/rest/api/3/search/jql')) {
+      assert.equal(new URL(normalizedUrl).pathname, '/rest/api/3/search/jql');
+      assert.match(String(options?.headers?.Authorization || ''), /^Basic /);
+      const requestBody = JSON.parse(String(options?.body || '{}'));
+      assert.equal('startAt' in requestBody, false);
+      seenPageTokens.push(requestBody.nextPageToken || null);
+
+      if (requestBody.nextPageToken === 'cursor-page-2') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({
+            issues: [
+              {
+                key: 'SPM-215',
+                fields: {
+                  summary: 'Cursor pagination second page',
+                  status: { name: 'Done' },
+                  assignee: { accountId: 'student-12' },
+                  reporter: { accountId: 'advisor-3' },
+                  customfield_10016: 3,
+                  customfield_10020: [{ id: 'sprint-open-2', state: 'active' }],
+                },
+              },
+            ],
+            isLast: true,
+          }),
+        };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          issues: [
+            {
+              key: 'SPM-214',
+              fields: {
+                summary: 'Cursor pagination first page',
+                status: { name: 'In Progress' },
+                assignee: { accountId: 'student-11' },
+                reporter: { accountId: 'advisor-2' },
+                customfield_10016: 5,
+                customfield_10020: [{ id: 'sprint-open-2', state: 'active' }],
+              },
+            },
+          ],
+          nextPageToken: 'cursor-page-2',
+          isLast: false,
+        }),
+      };
+    }
+
+    if (normalizedUrl.endsWith('/pulls?state=all&per_page=100&page=1')) {
+      assert.match(String(options?.headers?.Authorization || ''), /^token /);
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ([
+          {
+            number: 43,
+            title: 'SPM-214 Cursor pagination PR',
+            body: 'Implements monitoring flow',
+            head: { ref: 'SPM-214-cursor-pagination' },
+          },
+        ]),
+      };
+    }
+
+    if (normalizedUrl.endsWith('/pulls?state=all&per_page=100&page=2')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ([]),
+      };
+    }
+
+    if (normalizedUrl.endsWith('/pulls/43')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          number: 43,
+          title: 'SPM-214 Cursor pagination PR',
+          body: 'Implements monitoring flow',
+          state: 'open',
+          merged: false,
+          mergeable_state: 'clean',
+          head: { ref: 'SPM-214-cursor-pagination' },
+          html_url: 'https://github.com/acme-org/senior-app-1/pull/43',
+          created_at: '2026-05-02T10:00:00Z',
+          updated_at: '2026-05-02T10:30:00Z',
+          merged_at: null,
+          additions: 8,
+          deletions: 1,
+          changed_files: 1,
+        }),
+      };
+    }
+
+    if (normalizedUrl.endsWith('/pulls/43/files?per_page=100')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ([
+          {
+            filename: 'backend/services/jiraSprintSyncService.js',
+            status: 'modified',
+            additions: 8,
+            deletions: 1,
+            changes: 9,
+          },
+        ]),
+      };
+    }
+
+    throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+  };
+
+  const result = await refreshAllTeamSprintMonitoring();
+
+  assert.equal(result.teamCount, 1);
+  assert.equal(result.results[0].teamId, 'team-scheduler-cursor');
+  assert.equal(result.results[0].sprintCount, 1);
+  assert.equal(result.results[0].sprintSummaries[0].sprintId, 'sprint-open-2');
+  assert.deepEqual(seenPageTokens, [null, 'cursor-page-2']);
+  assert.equal(await SprintStory.count(), 2);
   assert.equal(await SprintPullRequest.count(), 1);
 });
 

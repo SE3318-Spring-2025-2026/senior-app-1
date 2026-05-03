@@ -199,7 +199,7 @@ function buildJiraProjectOpenSprintIssuesRequest({ projectKey, includeStatuses =
     : '';
 
   return buildJiraRequest({
-    path: '/rest/api/3/search',
+    path: '/rest/api/3/search/jql',
     method: 'POST',
     body: {
       jql: `project = "${escapeJqlString(normalizedProjectKey)}" AND sprint in openSprints()${statusClause}`,

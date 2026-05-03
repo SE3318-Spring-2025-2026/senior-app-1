@@ -26,7 +26,7 @@ test('builds Jira basic auth headers from explicit credentials', async () => {
 
 test('builds configurable Jira requests with query params and JSON body', async () => {
   const request = buildJiraRequest({
-    path: '/rest/api/3/search',
+    path: '/rest/api/3/search/jql',
     method: 'post',
     query: {
       expand: 'names',
@@ -48,7 +48,7 @@ test('builds configurable Jira requests with query params and JSON body', async 
 
   const url = new URL(request.url);
   assert.equal(url.origin, 'https://acme.atlassian.net');
-  assert.equal(url.pathname, '/rest/api/3/search');
+  assert.equal(url.pathname, '/rest/api/3/search/jql');
   assert.deepEqual(url.searchParams.getAll('fields'), ['summary', 'status']);
   assert.equal(url.searchParams.get('expand'), 'names');
   assert.equal(url.searchParams.get('maxResults'), '50');
@@ -124,7 +124,7 @@ test('builds open sprint issue search requests from Jira project key for schedul
     maxResults: 25,
   });
 
-  assert.equal(request.url, 'https://acme.atlassian.net/rest/api/3/search');
+  assert.equal(request.url, 'https://acme.atlassian.net/rest/api/3/search/jql');
   assert.equal(request.options.method, 'POST');
   assert.equal(request.mock, false);
 
