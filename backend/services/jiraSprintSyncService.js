@@ -165,8 +165,15 @@ async function fetchJiraSprintIssues({
         ? payload.nextPageToken
         : null;
       const isLast = payload?.isLast === true;
-      if (pageIssues.length === 0 || isLast || !resolvedNextPageToken) {
+      if (pageIssues.length === 0 || isLast) {
         break;
+      }
+      if (!resolvedNextPageToken) {
+        throw new ApiError(
+          502,
+          'JIRA_UPSTREAM_INVALID_PAGINATION',
+          'Jira cursor pagination response omitted nextPageToken before the last page',
+        );
       }
 
       nextPageToken = resolvedNextPageToken;
