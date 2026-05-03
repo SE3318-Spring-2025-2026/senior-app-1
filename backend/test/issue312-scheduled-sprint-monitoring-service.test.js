@@ -209,6 +209,7 @@ test('scheduled refresh follows Jira search/jql cursor pagination using nextPage
       assert.equal(new URL(normalizedUrl).pathname, '/rest/api/3/search/jql');
       assert.match(String(options?.headers?.Authorization || ''), /^Basic /);
       const requestBody = JSON.parse(String(options?.body || '{}'));
+      assert.equal('startAt' in requestBody, false);
       seenPageTokens.push(requestBody.nextPageToken || null);
 
       if (requestBody.nextPageToken === 'cursor-page-2') {
