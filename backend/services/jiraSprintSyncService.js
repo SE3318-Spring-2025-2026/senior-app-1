@@ -58,7 +58,8 @@ async function parseErrorResponse(response) {
   }
 }
 
-function buildPaginatedJiraRequest(request, startAt) {
+function buildPaginatedJiraRequest(request, pagination = {}) {
+  const { startAt = 0, nextPageToken = null } = pagination;
   const paginatedOptions = {
     ...request.options,
     headers: {
@@ -68,12 +69,25 @@ function buildPaginatedJiraRequest(request, startAt) {
 
   if (paginatedOptions.body !== undefined) {
     const body = JSON.parse(paginatedOptions.body);
-    body.startAt = startAt;
+    const usesCursorPagination = String(request.url).includes('/rest/api/3/search/jql');
+
+    if (usesCursorPagination) {
+      if (nextPageToken) {
+        body.nextPageToken = nextPageToken;
+      } else {
+        delete body.nextPageToken;
+      }
+      delete body.startAt;
+    } else {
+      body.startAt = startAt;
+    }
+
     paginatedOptions.body = JSON.stringify(body);
     return {
       url: request.url,
       options: paginatedOptions,
       maxResults: Number.isInteger(body.maxResults) && body.maxResults > 0 ? body.maxResults : 100,
+      usesCursorPagination,
     };
   }
 
@@ -85,6 +99,7 @@ function buildPaginatedJiraRequest(request, startAt) {
     url: url.toString(),
     options: paginatedOptions,
     maxResults: Number.isInteger(maxResults) && maxResults > 0 ? maxResults : 100,
+    usesCursorPagination: false,
   };
 }
 
@@ -126,9 +141,10 @@ async function fetchJiraSprintIssues({
 
   const issues = [];
   let startAt = 0;
+  let nextPageToken = null;
 
   while (issues.length < MAX_JIRA_ISSUES_PER_SYNC) {
-    const paginatedRequest = buildPaginatedJiraRequest(request, startAt);
+    const paginatedRequest = buildPaginatedJiraRequest(request, { startAt, nextPageToken });
     const response = await getFetchImplementation()(paginatedRequest.url, paginatedRequest.options);
     if (!response.ok) {
       const errorPayload = await parseErrorResponse(response);
@@ -143,6 +159,19 @@ async function fetchJiraSprintIssues({
     const payload = await response.json();
     const pageIssues = Array.isArray(payload?.issues) ? payload.issues : [];
     issues.push(...pageIssues);
+
+    if (paginatedRequest.usesCursorPagination) {
+      const resolvedNextPageToken = typeof payload?.nextPageToken === 'string' && payload.nextPageToken
+        ? payload.nextPageToken
+        : null;
+      const isLast = payload?.isLast === true;
+      if (pageIssues.length === 0 || isLast || !resolvedNextPageToken) {
+        break;
+      }
+
+      nextPageToken = resolvedNextPageToken;
+      continue;
+    }
 
     const total = Number.isInteger(payload?.total) && payload.total >= 0
       ? payload.total
