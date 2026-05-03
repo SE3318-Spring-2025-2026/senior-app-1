@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import apiClient from './services/apiClient';
-import { getSprintMonitoringSnapshot } from './services/sprintMonitoring';
+import { getCurrentSprintMonitoringSnapshot } from './services/sprintMonitoring';
 
 const EMPTY_FORM = {
   providerSet: ['GITHUB', 'JIRA'],
   organizationName: '',
   repositoryName: '',
   jiraWorkspaceId: '',
+  jiraUserEmail: '',
   jiraProjectKey: '',
   defaultBranch: 'main',
   githubTokenRef: '',
@@ -46,6 +47,7 @@ function buildFormState(configuration) {
     organizationName: configuration.organizationName || '',
     repositoryName: configuration.repositoryName || '',
     jiraWorkspaceId: configuration.jiraWorkspaceId || '',
+    jiraUserEmail: configuration.jiraUserEmail || '',
     jiraProjectKey: configuration.jiraProjectKey || '',
     defaultBranch: configuration.defaultBranch || 'main',
     githubTokenRef: '',
@@ -171,7 +173,6 @@ function formatDateTime(value) {
 
 export default function IntegrationConfigurationPage() {
   const { teamId } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -182,8 +183,6 @@ export default function IntegrationConfigurationPage() {
   const [monitoringLoading, setMonitoringLoading] = useState(false);
   const [monitoringSnapshot, setMonitoringSnapshot] = useState(null);
   const [monitoringError, setMonitoringError] = useState('');
-
-  const selectedSprintId = searchParams.get('sprintId') || '';
 
   useEffect(() => {
     let isMounted = true;
@@ -236,7 +235,11 @@ export default function IntegrationConfigurationPage() {
     let isMounted = true;
 
     async function loadMonitoringSummary() {
-      if (!selectedSprintId) {
+      if (loading) {
+        return;
+      }
+
+      if (!configuration) {
         setMonitoringSnapshot(null);
         setMonitoringError('');
         setMonitoringLoading(false);
@@ -246,7 +249,7 @@ export default function IntegrationConfigurationPage() {
       try {
         setMonitoringLoading(true);
         setMonitoringError('');
-        const { data } = await getSprintMonitoringSnapshot(teamId, selectedSprintId, { includeStale: true });
+        const { data } = await getCurrentSprintMonitoringSnapshot(teamId, { includeStale: true });
         if (!isMounted) {
           return;
         }
@@ -271,19 +274,13 @@ export default function IntegrationConfigurationPage() {
     return () => {
       isMounted = false;
     };
-  }, [teamId, selectedSprintId]);
+  }, [teamId, loading, configuration]);
 
   async function refreshMonitoringSummary() {
-    if (!selectedSprintId) {
-      setMonitoringSnapshot(null);
-      setMonitoringError('');
-      return;
-    }
-
     try {
       setMonitoringLoading(true);
       setMonitoringError('');
-      const { data } = await getSprintMonitoringSnapshot(teamId, selectedSprintId, { includeStale: true });
+      const { data } = await getCurrentSprintMonitoringSnapshot(teamId, { includeStale: true });
       setMonitoringSnapshot(data);
     } catch (loadError) {
       setMonitoringSnapshot(null);
@@ -298,19 +295,6 @@ export default function IntegrationConfigurationPage() {
       ...current,
       [name]: value,
     }));
-  }
-
-  function handleSprintIdChange(value) {
-    const nextValue = value.trim();
-    const nextParams = new URLSearchParams(searchParams);
-
-    if (nextValue) {
-      nextParams.set('sprintId', nextValue);
-    } else {
-      nextParams.delete('sprintId');
-    }
-
-    setSearchParams(nextParams, { replace: true });
   }
 
   async function handleSubmit(event) {
@@ -331,6 +315,7 @@ export default function IntegrationConfigurationPage() {
         organizationName: form.organizationName,
         repositoryName: form.repositoryName,
         jiraWorkspaceId: form.jiraWorkspaceId || undefined,
+        jiraUserEmail: form.jiraUserEmail || undefined,
         jiraProjectKey: form.jiraProjectKey,
         defaultBranch: form.defaultBranch || undefined,
         githubTokenRef: form.githubTokenRef || undefined,
@@ -345,10 +330,7 @@ export default function IntegrationConfigurationPage() {
       setConfiguration(data);
       setForm(buildFormState(data));
       setSuccess('Integration settings saved successfully.');
-
-      if (selectedSprintId) {
-        await refreshMonitoringSummary();
-      }
+      await refreshMonitoringSummary();
     } catch (saveError) {
       setError(saveError.response?.data?.message || saveError.message || 'Failed to save integration settings.');
     } finally {
@@ -375,6 +357,7 @@ export default function IntegrationConfigurationPage() {
   const hasMonitoringData = monitoringSummary
     ? (monitoringSummary.activeStoryCount + monitoringSummary.activePullRequestCount + monitoringSummary.staleRecordCount) > 0
     : false;
+  const resolvedSprintId = monitoringSnapshot?.resolvedSprint?.sprintId || monitoringSnapshot?.sprintId || '';
 
   return (
     <main className="page page-group-view">
@@ -407,6 +390,10 @@ export default function IntegrationConfigurationPage() {
             <div className="group-summary-item">
               <span>JIRA Project</span>
               <strong>{configuration?.jiraProjectKey || 'Not configured'}</strong>
+            </div>
+            <div className="group-summary-item">
+              <span>JIRA Email</span>
+              <strong>{configuration?.jiraUserEmail || 'Not configured'}</strong>
             </div>
             <div className="group-summary-item">
               <span>Default Branch</span>
@@ -442,14 +429,6 @@ export default function IntegrationConfigurationPage() {
 
         <div className="group-details-summary">
           <h3>Monitoring Status / Sync Summary</h3>
-          <label className="field">
-            <span>Sprint ID</span>
-            <input
-              value={selectedSprintId}
-              onChange={(event) => handleSprintIdChange(event.target.value)}
-              placeholder="sprint_2026_03"
-            />
-          </label>
 
           {monitoringWarnings.length > 0 && (
             <div className="feedback feedback-error">
@@ -474,22 +453,19 @@ export default function IntegrationConfigurationPage() {
             </div>
           )}
 
-          {!monitoringLoading && !monitoringError && !selectedSprintId && (
-            <div className="feedback">
-              <div className="feedback-label">summary</div>
-              <p>Enter a sprint ID to load monitoring visibility for this team.</p>
-            </div>
-          )}
-
-          {!monitoringLoading && !monitoringError && selectedSprintId && !hasMonitoringData && (
+          {!monitoringLoading && !monitoringError && !hasMonitoringData && (
             <div className="feedback">
               <div className="feedback-label">empty</div>
-              <p>No monitoring data exists for this sprint yet.</p>
+              <p>No monitoring data exists for the active sprint yet.</p>
             </div>
           )}
 
-          {!monitoringLoading && !monitoringError && selectedSprintId && hasMonitoringData && monitoringSummary && (
+          {!monitoringLoading && !monitoringError && hasMonitoringData && monitoringSummary && (
             <div className="group-summary-grid">
+              <div className="group-summary-item">
+                <span>Active Sprint</span>
+                <strong>{resolvedSprintId || 'Not resolved'}</strong>
+              </div>
               <div className="group-summary-item">
                 <span>Last Sync Time</span>
                 <strong>{formatDateTime(monitoringSummary.lastSyncTime)}</strong>
@@ -573,6 +549,15 @@ export default function IntegrationConfigurationPage() {
               value={form.jiraWorkspaceId}
               onChange={(event) => updateField('jiraWorkspaceId', event.target.value)}
               placeholder="workspace-acme"
+            />
+          </label>
+
+          <label className="field">
+            <span>JIRA user email</span>
+            <input
+              value={form.jiraUserEmail}
+              onChange={(event) => updateField('jiraUserEmail', event.target.value)}
+              placeholder="student@example.edu"
             />
           </label>
 

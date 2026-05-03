@@ -17,6 +17,7 @@ const {
 
 let server;
 let baseUrl;
+const originalFetch = global.fetch;
 
 function internalHeaders() {
   return {
@@ -48,6 +49,8 @@ test.before(async () => {
 });
 
 test.after(async () => {
+  global.fetch = originalFetch;
+
   if (server) {
     await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
@@ -58,6 +61,9 @@ test.after(async () => {
 });
 
 test.beforeEach(async () => {
+  global.fetch = originalFetch;
+  process.env.JIRA_USER_EMAIL = 'jira-monitoring@example.edu';
+
   await SprintPullRequest.destroy({ where: {} });
   await SprintStory.destroy({ where: {} });
   await IntegrationTokenReference.destroy({ where: {} });
@@ -260,4 +266,99 @@ test('snapshot hides stale records by default and exposes them when includeStale
   assert.deepEqual(staleSnapshot.json.unlinkedPullRequests.map((pullRequest) => pullRequest.prNumber), [300, 301]);
   assert.equal(staleSnapshot.json.stories[1].isActive, false);
   assert.ok(staleSnapshot.json.stories[1].staleAt);
+});
+
+test('current monitoring snapshot resolves the active Jira sprint for the team automatically', async () => {
+  const leader = await User.create({
+    email: 'monitoring-current@example.edu',
+    fullName: 'Monitoring Current Owner',
+    studentId: '11070003103',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    password: 'StrongPass1!',
+  });
+
+  await Group.create({
+    id: 'team-monitoring-current',
+    name: 'Group team-monitoring-current',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+    maxMembers: 4,
+  });
+
+  await IntegrationBinding.create({
+    teamId: 'team-monitoring-current',
+    providerSet: ['GITHUB', 'JIRA'],
+    organizationName: 'acme-org',
+    repositoryName: 'senior-app',
+    jiraWorkspaceId: 'workspace-acme',
+    jiraProjectKey: 'SPM',
+    defaultBranch: 'main',
+    initiatedBy: String(leader.id),
+    status: 'ACTIVE',
+  });
+
+  process.env.JIRA_TOKEN_REF_VAULT_JIRA_TEAM_MONITORING_CURRENT = 'jira-secret-for-current';
+  await IntegrationTokenReference.create({
+    teamId: 'team-monitoring-current',
+    jiraTokenRef: 'vault://jira/team-monitoring-current',
+    githubTokenRef: 'vault://github/team-monitoring-current',
+  });
+
+  await SprintStory.create({
+    teamId: 'team-monitoring-current',
+    sprintId: 'sprint-current',
+    issueKey: 'SPM-500',
+    title: 'Current story',
+    status: 'IN_PROGRESS',
+    isActive: true,
+    lastSeenAt: new Date('2026-05-02T10:00:00Z'),
+  });
+
+  await SprintPullRequest.create({
+    teamId: 'team-monitoring-current',
+    sprintId: 'sprint-current',
+    prNumber: 500,
+    relatedIssueKey: 'SPM-500',
+    prStatus: 'OPEN',
+    mergeStatus: 'MERGED',
+    isActive: true,
+    lastSeenAt: new Date('2026-05-02T10:10:00Z'),
+  });
+
+  global.fetch = async (url, options = {}) => {
+    if (String(url).startsWith(baseUrl)) {
+      return originalFetch(url, options);
+    }
+
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({
+        issues: [
+          {
+            key: 'SPM-500',
+            fields: {
+              summary: 'Current story',
+              sprint: { id: 'sprint-current', name: 'Sprint Current', state: 'active' },
+              updated: '2026-05-02T10:00:00Z',
+            },
+          },
+        ],
+      }),
+    };
+  };
+
+  const currentSnapshot = await request('/api/v1/teams/team-monitoring-current/monitoring/current', {
+    headers: await authHeadersFor(leader),
+  });
+
+  assert.equal(currentSnapshot.response.status, 200);
+  assert.equal(currentSnapshot.json.sprintId, 'sprint-current');
+  assert.equal(currentSnapshot.json.resolvedSprint.sprintId, 'sprint-current');
+  assert.equal(currentSnapshot.json.stories.length, 1);
+  assert.equal(currentSnapshot.json.stories[0].issueKey, 'SPM-500');
+  assert.equal(currentSnapshot.json.stories[0].linkedPullRequests.length, 1);
+  assert.equal(currentSnapshot.json.stories[0].linkedPullRequests[0].prNumber, 500);
 });

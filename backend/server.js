@@ -2,6 +2,7 @@ const sequelize = require('./db');
 const User = require('./models/User');
 const Professor = require('./models/Professor');
 const Group = require('./models/Group');
+const IntegrationBinding = require('./models/IntegrationBinding');
 const SprintPullRequest = require('./models/SprintPullRequest');
 const SprintStory = require('./models/SprintStory');
 const app = require('./app');
@@ -68,6 +69,12 @@ const ensureSqliteColumns = async () => {
     'memberIds',
   ];
 
+  const integrationBindingTable = await queryInterface.describeTable('IntegrationBindings');
+  const integrationBindingAttributes = IntegrationBinding.getAttributes();
+  const integrationBindingColumnsToEnsure = [
+    'jiraUserEmail',
+  ];
+
   for (const columnName of groupColumnsToEnsure) {
     if (groupTable[columnName]) {
       continue;
@@ -75,6 +82,20 @@ const ensureSqliteColumns = async () => {
 
     const attribute = groupAttributes[columnName];
     await queryInterface.addColumn('Groups', columnName, {
+      type: attribute.type,
+      allowNull: attribute.allowNull,
+      defaultValue: attribute.defaultValue,
+      unique: Boolean(attribute.unique),
+    });
+  }
+
+  for (const columnName of integrationBindingColumnsToEnsure) {
+    if (integrationBindingTable[columnName]) {
+      continue;
+    }
+
+    const attribute = integrationBindingAttributes[columnName];
+    await queryInterface.addColumn('IntegrationBindings', columnName, {
       type: attribute.type,
       allowNull: attribute.allowNull,
       defaultValue: attribute.defaultValue,
@@ -126,7 +147,7 @@ const sprintMonitoringRefresher = createScheduledSprintMonitoringRefresher();
 sequelize.authenticate()
   .then(() => {
     console.log("SQLite connected");
-    return sequelize.sync({ alter: true });
+    return sequelize.sync();
   })
   .then(() => ensureSqliteColumns())
   .then(() => ensureValidStudentRegistry())

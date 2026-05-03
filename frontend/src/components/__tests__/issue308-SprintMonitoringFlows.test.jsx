@@ -64,6 +64,7 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
         providerSet: ['GITHUB', 'JIRA'],
         organizationName: 'acme-org',
         repositoryName: 'senior-app',
+        jiraUserEmail: 'jira-owner@example.edu',
         jiraProjectKey: 'SPM',
         defaultBranch: 'main',
         status: 'ACTIVE',
@@ -84,7 +85,7 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
     expect(screen.queryByDisplayValue('vault://jira/team-1')).not.toBeInTheDocument();
   });
 
-  test('integration configuration UI shows monitoring sync summary for a selected sprint', async () => {
+  test('integration configuration UI shows monitoring sync summary for the resolved active sprint', async () => {
     apiClient.get
       .mockResolvedValueOnce({
         data: {
@@ -93,6 +94,7 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
           providerSet: ['GITHUB', 'JIRA'],
           organizationName: 'acme-org',
           repositoryName: 'senior-app',
+          jiraUserEmail: 'jira-owner@example.edu',
           jiraProjectKey: 'SPM',
           defaultBranch: 'main',
           status: 'ACTIVE',
@@ -104,6 +106,9 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
         data: {
           teamId: 'team-1',
           sprintId: 'sprint-42',
+          resolvedSprint: {
+            sprintId: 'sprint-42',
+          },
           integration: {
             status: 'ACTIVE',
           },
@@ -156,11 +161,11 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
         },
       });
 
-    renderIntegrationPage('team-1', '?sprintId=sprint-42');
+    renderIntegrationPage('team-1');
 
     expect(await screen.findByRole('heading', { name: /integration configuration/i })).toBeInTheDocument();
     expect(await screen.findByText(/monitoring status \/ sync summary/i)).toBeInTheDocument();
-    expect(screen.getByDisplayValue('sprint-42')).toBeInTheDocument();
+    expect(screen.getByText(/active sprint/i).closest('.group-summary-item')).toHaveTextContent('sprint-42');
     expect(screen.getByText(/synced jira stories/i).closest('.group-summary-item')).toHaveTextContent('2');
     expect(screen.getByText(/synced github prs/i).closest('.group-summary-item')).toHaveTextContent('3');
     expect(screen.getByText(/matched prs/i).closest('.group-summary-item')).toHaveTextContent('2');
@@ -168,7 +173,7 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
     expect(screen.getByText(/stale records/i).closest('.group-summary-item')).toHaveTextContent('2');
     expect(screen.getByText(/stale records/i)).toBeInTheDocument();
     expect(screen.getByText(/last sync time/i).closest('.group-summary-item')).toHaveTextContent(/Apr 2026/i);
-    expect(apiClient.get).toHaveBeenNthCalledWith(2, '/v1/teams/team-1/sprints/sprint-42/monitoring?includeStale=true');
+    expect(apiClient.get).toHaveBeenNthCalledWith(2, '/v1/teams/team-1/monitoring/current?includeStale=true');
   });
 
   test('integration configuration UI shows loading and empty configuration states', async () => {
@@ -201,13 +206,16 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
           providerSet: ['GITHUB', 'JIRA'],
           organizationName: 'acme-org',
           repositoryName: 'senior-app',
+          jiraUserEmail: 'jira-owner@example.edu',
           jiraProjectKey: 'SPM',
           status: 'PARTIAL',
           hasGithubTokenRef: true,
           hasJiraTokenRef: false,
         },
       })
-      .mockRejectedValueOnce(new Error('API unavailable'));
+      .mockRejectedValueOnce(new Error('Monitoring unavailable'))
+      .mockRejectedValueOnce(new Error('API unavailable'))
+      .mockRejectedValueOnce(new Error('Monitoring unavailable'));
 
     const { unmount } = renderIntegrationPage('team-3');
 
@@ -221,72 +229,106 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
   });
 
   test('integration configuration UI shows monitoring empty and error states', async () => {
-    apiClient.get
-      .mockResolvedValueOnce({
-        data: {
-          teamId: 'team-5',
-          providerSet: ['GITHUB', 'JIRA'],
-          organizationName: 'acme-org',
-          repositoryName: 'senior-app',
-          jiraProjectKey: 'SPM',
-          status: 'PARTIAL',
-          hasGithubTokenRef: true,
-          hasJiraTokenRef: false,
-        },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          teamId: 'team-5',
-          sprintId: 'sprint-empty',
-          stories: [],
-          unlinkedPullRequests: [],
-        },
-      });
+    apiClient.get.mockImplementation((url) => {
+      if (url === '/v1/teams/team-5/integrations') {
+        return Promise.resolve({
+          data: {
+            teamId: 'team-5',
+            providerSet: ['GITHUB', 'JIRA'],
+            organizationName: 'acme-org',
+            repositoryName: 'senior-app',
+            jiraUserEmail: 'jira-owner@example.edu',
+            jiraProjectKey: 'SPM',
+            status: 'PARTIAL',
+            hasGithubTokenRef: true,
+            hasJiraTokenRef: false,
+          },
+        });
+      }
 
-    const { unmount } = renderIntegrationPage('team-5', '?sprintId=sprint-empty');
+      if (url === '/v1/teams/team-5/monitoring/current?includeStale=true') {
+        return Promise.resolve({
+          data: {
+            teamId: 'team-5',
+            sprintId: 'sprint-empty',
+            resolvedSprint: {
+              sprintId: 'sprint-empty',
+            },
+            stories: [],
+            unlinkedPullRequests: [],
+          },
+        });
+      }
 
-    expect(await screen.findByText(/jira token missing/i)).toBeInTheDocument();
-    expect(await screen.findByText(/no monitoring data exists for this sprint yet/i)).toBeInTheDocument();
+      return Promise.reject(new Error(`Unexpected request: ${url}`));
+    });
+
+    const { unmount } = renderIntegrationPage('team-5');
+
+    expect(await screen.findByText(/no monitoring data exists for the active sprint yet/i)).toBeInTheDocument();
 
     unmount();
 
-    apiClient.get
-      .mockResolvedValueOnce({
-        data: {
-          teamId: 'team-6',
-          providerSet: ['GITHUB', 'JIRA'],
-          organizationName: 'acme-org',
-          repositoryName: 'senior-app',
-          jiraProjectKey: 'SPM',
-          status: 'ACTIVE',
-          hasGithubTokenRef: true,
-          hasJiraTokenRef: true,
-        },
-      })
-      .mockRejectedValueOnce(new Error('Monitoring unavailable'));
+    apiClient.get.mockReset();
+    apiClient.get.mockImplementation((url) => {
+      if (url === '/v1/teams/team-6/integrations') {
+        return Promise.resolve({
+          data: {
+            teamId: 'team-6',
+            providerSet: ['GITHUB', 'JIRA'],
+            organizationName: 'acme-org',
+            repositoryName: 'senior-app',
+            jiraUserEmail: 'jira-owner@example.edu',
+            jiraProjectKey: 'SPM',
+            status: 'ACTIVE',
+            hasGithubTokenRef: true,
+            hasJiraTokenRef: true,
+          },
+        });
+      }
 
-    renderIntegrationPage('team-6', '?sprintId=sprint-err');
+      if (url === '/v1/teams/team-6/monitoring/current?includeStale=true') {
+        return Promise.reject(new Error('Monitoring unavailable'));
+      }
+
+      return Promise.reject(new Error(`Unexpected request: ${url}`));
+    });
+
+    renderIntegrationPage('team-6');
 
     expect(await screen.findByText(/monitoring unavailable/i)).toBeInTheDocument();
   });
 
   test('integration configuration UI clears stale team data when a new team load fails', async () => {
     const user = userEvent.setup();
-    apiClient.get
-      .mockResolvedValueOnce({
-        data: {
-          teamId: 'team-1',
-          providerSet: ['GITHUB', 'JIRA'],
-          organizationName: 'acme-org',
-          repositoryName: 'senior-app',
-          jiraProjectKey: 'SPM',
-          defaultBranch: 'main',
-          status: 'ACTIVE',
-          hasGithubTokenRef: true,
-          hasJiraTokenRef: true,
-        },
-      })
-      .mockRejectedValueOnce(new Error('API unavailable'));
+    apiClient.get.mockImplementation((url) => {
+      if (url === '/v1/teams/team-1/integrations') {
+        return Promise.resolve({
+          data: {
+            teamId: 'team-1',
+            providerSet: ['GITHUB', 'JIRA'],
+            organizationName: 'acme-org',
+            repositoryName: 'senior-app',
+            jiraUserEmail: 'jira-owner@example.edu',
+            jiraProjectKey: 'SPM',
+            defaultBranch: 'main',
+            status: 'ACTIVE',
+            hasGithubTokenRef: true,
+            hasJiraTokenRef: true,
+          },
+        });
+      }
+
+      if (url === '/v1/teams/team-1/monitoring/current?includeStale=true') {
+        return Promise.reject(new Error('Monitoring unavailable'));
+      }
+
+      if (url === '/v1/teams/team-2/integrations') {
+        return Promise.reject(new Error('API unavailable'));
+      }
+
+      return Promise.reject(new Error(`Unexpected request: ${url}`));
+    });
 
     renderIntegrationPageSwitcher('team-1');
 
@@ -294,19 +336,32 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
     await user.click(screen.getByRole('link', { name: /team 2/i }));
 
     expect(await screen.findByText(/api unavailable/i)).toBeInTheDocument();
-    expect(screen.getByText('Not Connected')).toBeInTheDocument();
-    expect(screen.queryByText('acme-org')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText('acme-org')).not.toBeInTheDocument();
+    });
   });
 
   test('integration configuration form saves monitoring settings from the same page', async () => {
     const user = userEvent.setup();
-    apiClient.get.mockRejectedValueOnce({
-      response: {
-        data: {
-          code: 'INTEGRATION_BINDING_NOT_FOUND',
+    apiClient.get
+      .mockRejectedValueOnce({
+        response: {
+          data: {
+            code: 'INTEGRATION_BINDING_NOT_FOUND',
+          },
         },
-      },
-    });
+      })
+      .mockResolvedValueOnce({
+        data: {
+          teamId: 'team-9',
+          sprintId: 'sprint-42',
+          resolvedSprint: {
+            sprintId: 'sprint-42',
+          },
+          stories: [],
+          unlinkedPullRequests: [],
+        },
+      });
     apiClient.post.mockResolvedValueOnce({
       data: {
         bindingId: 'binding-2',
@@ -315,6 +370,7 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
         organizationName: 'acme-org',
         repositoryName: 'senior-app',
         jiraWorkspaceId: 'workspace-acme',
+        jiraUserEmail: 'jira-owner@example.edu',
         jiraProjectKey: 'SPM',
         defaultBranch: 'main',
         status: 'ACTIVE',
@@ -332,6 +388,8 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
     await user.type(screen.getByLabelText(/^repository$/i), 'senior-app');
     await user.clear(screen.getByLabelText(/jira workspace/i));
     await user.type(screen.getByLabelText(/jira workspace/i), 'workspace-acme');
+    await user.clear(screen.getByLabelText(/jira user email/i));
+    await user.type(screen.getByLabelText(/jira user email/i), 'jira-owner@example.edu');
     await user.clear(screen.getByLabelText(/jira project key/i));
     await user.type(screen.getByLabelText(/jira project key/i), 'SPM');
     await user.clear(screen.getByLabelText(/gitHub token reference/i));
@@ -346,6 +404,7 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
         organizationName: 'acme-org',
         repositoryName: 'senior-app',
         jiraWorkspaceId: 'workspace-acme',
+        jiraUserEmail: 'jira-owner@example.edu',
         jiraProjectKey: 'SPM',
         defaultBranch: 'main',
         githubTokenRef: 'vault://github/team-9',

@@ -96,11 +96,11 @@ async function fetchJiraSprintIssues({
   projectKey,
   includeStatuses = [],
 }) {
-  const jiraEmail = asTrimmedString(process.env.JIRA_USER_EMAIL);
+  const jiraEmail = asTrimmedString(binding?.jiraUserEmail) || asTrimmedString(process.env.JIRA_USER_EMAIL);
   if (!jiraEmail) {
     throw ApiError.conflict(
       'JIRA_USER_EMAIL_NOT_CONFIGURED',
-      'JIRA_USER_EMAIL must be configured to fetch Jira sprint data',
+      'A Jira user email must be configured to fetch Jira sprint data',
     );
   }
 

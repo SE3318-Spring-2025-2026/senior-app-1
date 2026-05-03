@@ -38,6 +38,14 @@ const createIntegrationBindingValidation = [
     .optional({ values: 'undefined' })
     .isString()
     .withMessage('jiraWorkspaceId must be a string'),
+  body('jiraUserEmail')
+    .optional({ values: 'undefined' })
+    .isString()
+    .withMessage('jiraUserEmail must be a string')
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage('jiraUserEmail cannot be empty'),
   body('defaultBranch')
     .optional({ values: 'undefined' })
     .isString()
@@ -109,6 +117,7 @@ function buildIntegrationResponse(binding, tokenReference) {
     repositoryName: binding.repositoryName,
     jiraProjectKey: binding.jiraProjectKey,
     jiraWorkspaceId: binding.jiraWorkspaceId,
+    jiraUserEmail: binding.jiraUserEmail,
     defaultBranch: binding.defaultBranch,
     status: computeIntegrationStatus(binding, tokenReference),
     hasGithubTokenRef: Boolean(tokenReference?.githubTokenRef),
@@ -179,6 +188,7 @@ async function saveIntegrationBinding(req, res, { allowUpdate }) {
       organizationName: String(req.body.organizationName).trim(),
       repositoryName: String(req.body.repositoryName).trim(),
       jiraWorkspaceId: req.body.jiraWorkspaceId ? String(req.body.jiraWorkspaceId).trim() : null,
+      jiraUserEmail: req.body.jiraUserEmail ? String(req.body.jiraUserEmail).trim() : null,
       jiraProjectKey: String(req.body.jiraProjectKey).trim(),
       defaultBranch: req.body.defaultBranch ? String(req.body.defaultBranch).trim() : null,
       initiatedBy,
