@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import apiClient from './services/apiClient';
+import { getSprintMonitoringSnapshot } from './services/sprintMonitoring';
 
 const EMPTY_FORM = {
   providerSet: ['GITHUB', 'JIRA'],
@@ -57,6 +58,14 @@ function getDisplayStatus(configuration) {
     return 'Not Connected';
   }
 
+  if (configuration.status === 'INVALID') {
+    return 'Invalid';
+  }
+
+  if (configuration.status === 'PENDING_REAUTH') {
+    return 'Re-auth Required';
+  }
+
   if (configuration.status === 'PARTIAL') {
     return 'Partial';
   }
@@ -64,8 +73,105 @@ function getDisplayStatus(configuration) {
   return 'Connected';
 }
 
+function getMonitoringWarnings(configuration) {
+  if (!configuration) {
+    return [];
+  }
+
+  if (configuration.status === 'PENDING_REAUTH') {
+    return ['Integration requires re-authentication.'];
+  }
+
+  if (configuration.status === 'INVALID') {
+    return ['Integration configuration looks invalid. Verify the repository, workspace, and project settings.'];
+  }
+
+  if (configuration.status !== 'PARTIAL') {
+    return [];
+  }
+
+  const warnings = [];
+
+  if (configuration.providerSet?.includes('JIRA') && !configuration.hasJiraTokenRef) {
+    warnings.push('JIRA token missing.');
+  }
+
+  if (configuration.providerSet?.includes('GITHUB') && !configuration.hasGithubTokenRef) {
+    warnings.push('GitHub token missing.');
+  }
+
+  if (!warnings.length) {
+    warnings.push('Integration is partially configured.');
+  }
+
+  return warnings;
+}
+
+function flattenLinkedPullRequests(stories = []) {
+  return stories.flatMap((story) => story.linkedPullRequests || []);
+}
+
+function buildMonitoringSummary(snapshot) {
+  if (!snapshot) {
+    return null;
+  }
+
+  const stories = Array.isArray(snapshot.stories) ? snapshot.stories : [];
+  const linkedPullRequests = flattenLinkedPullRequests(stories);
+  const unlinkedPullRequests = Array.isArray(snapshot.unlinkedPullRequests) ? snapshot.unlinkedPullRequests : [];
+  const allPullRequests = [...linkedPullRequests, ...unlinkedPullRequests];
+
+  const activeStories = stories.filter((story) => story.isActive !== false);
+  const activePullRequests = allPullRequests.filter((pullRequest) => pullRequest.isActive !== false);
+  const activeLinkedPullRequests = linkedPullRequests.filter((pullRequest) => pullRequest.isActive !== false);
+
+  const lastSeenValues = [
+    ...stories.map((story) => story.lastSeenAt).filter(Boolean),
+    ...allPullRequests.map((pullRequest) => pullRequest.lastSeenAt).filter(Boolean),
+  ];
+
+  const latestSeenAt = lastSeenValues.reduce((currentLatest, candidate) => {
+    if (!candidate) {
+      return currentLatest;
+    }
+
+    if (!currentLatest) {
+      return candidate;
+    }
+
+    return new Date(candidate).getTime() > new Date(currentLatest).getTime() ? candidate : currentLatest;
+  }, '');
+
+  return {
+    lastSyncTime: latestSeenAt || '',
+    activeStoryCount: activeStories.length,
+    activePullRequestCount: activePullRequests.length,
+    matchedPullRequestCount: activeLinkedPullRequests.length,
+    mergedPullRequestCount: activeLinkedPullRequests.filter((pullRequest) => String(pullRequest.mergeStatus || '').toLowerCase() === 'merged').length,
+    staleRecordCount: stories.filter((story) => story.isActive === false).length
+      + allPullRequests.filter((pullRequest) => pullRequest.isActive === false).length,
+  };
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return 'Not synced yet';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return 'Not synced yet';
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
 export default function IntegrationConfigurationPage() {
   const { teamId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -73,6 +179,11 @@ export default function IntegrationConfigurationPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [monitoringLoading, setMonitoringLoading] = useState(false);
+  const [monitoringSnapshot, setMonitoringSnapshot] = useState(null);
+  const [monitoringError, setMonitoringError] = useState('');
+
+  const selectedSprintId = searchParams.get('sprintId') || '';
 
   useEffect(() => {
     let isMounted = true;
@@ -121,11 +232,85 @@ export default function IntegrationConfigurationPage() {
     };
   }, [teamId]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadMonitoringSummary() {
+      if (!selectedSprintId) {
+        setMonitoringSnapshot(null);
+        setMonitoringError('');
+        setMonitoringLoading(false);
+        return;
+      }
+
+      try {
+        setMonitoringLoading(true);
+        setMonitoringError('');
+        const { data } = await getSprintMonitoringSnapshot(teamId, selectedSprintId, { includeStale: true });
+        if (!isMounted) {
+          return;
+        }
+
+        setMonitoringSnapshot(data);
+      } catch (loadError) {
+        if (!isMounted) {
+          return;
+        }
+
+        setMonitoringSnapshot(null);
+        setMonitoringError(loadError.response?.data?.message || loadError.message || 'Failed to load monitoring summary.');
+      } finally {
+        if (isMounted) {
+          setMonitoringLoading(false);
+        }
+      }
+    }
+
+    loadMonitoringSummary();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [teamId, selectedSprintId]);
+
+  async function refreshMonitoringSummary() {
+    if (!selectedSprintId) {
+      setMonitoringSnapshot(null);
+      setMonitoringError('');
+      return;
+    }
+
+    try {
+      setMonitoringLoading(true);
+      setMonitoringError('');
+      const { data } = await getSprintMonitoringSnapshot(teamId, selectedSprintId, { includeStale: true });
+      setMonitoringSnapshot(data);
+    } catch (loadError) {
+      setMonitoringSnapshot(null);
+      setMonitoringError(loadError.response?.data?.message || loadError.message || 'Failed to load monitoring summary.');
+    } finally {
+      setMonitoringLoading(false);
+    }
+  }
+
   function updateField(name, value) {
     setForm((current) => ({
       ...current,
       [name]: value,
     }));
+  }
+
+  function handleSprintIdChange(value) {
+    const nextValue = value.trim();
+    const nextParams = new URLSearchParams(searchParams);
+
+    if (nextValue) {
+      nextParams.set('sprintId', nextValue);
+    } else {
+      nextParams.delete('sprintId');
+    }
+
+    setSearchParams(nextParams, { replace: true });
   }
 
   async function handleSubmit(event) {
@@ -160,6 +345,10 @@ export default function IntegrationConfigurationPage() {
       setConfiguration(data);
       setForm(buildFormState(data));
       setSuccess('Integration settings saved successfully.');
+
+      if (selectedSprintId) {
+        await refreshMonitoringSummary();
+      }
     } catch (saveError) {
       setError(saveError.response?.data?.message || saveError.message || 'Failed to save integration settings.');
     } finally {
@@ -181,6 +370,11 @@ export default function IntegrationConfigurationPage() {
 
   const providerRows = buildProviderRows(configuration);
   const displayStatus = getDisplayStatus(configuration);
+  const monitoringWarnings = getMonitoringWarnings(configuration);
+  const monitoringSummary = buildMonitoringSummary(monitoringSnapshot);
+  const hasMonitoringData = monitoringSummary
+    ? (monitoringSummary.activeStoryCount + monitoringSummary.activePullRequestCount + monitoringSummary.staleRecordCount) > 0
+    : false;
 
   return (
     <main className="page page-group-view">
@@ -244,6 +438,86 @@ export default function IntegrationConfigurationPage() {
               </article>
             ))}
           </div>
+        </div>
+
+        <div className="group-details-summary">
+          <h3>Monitoring Status / Sync Summary</h3>
+          <label className="field">
+            <span>Sprint ID</span>
+            <input
+              value={selectedSprintId}
+              onChange={(event) => handleSprintIdChange(event.target.value)}
+              placeholder="sprint_2026_03"
+            />
+          </label>
+
+          {monitoringWarnings.length > 0 && (
+            <div className="feedback feedback-error">
+              <div className="feedback-label">warning</div>
+              {monitoringWarnings.map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+          )}
+
+          {monitoringLoading && (
+            <div className="feedback feedback-loading">
+              <div className="feedback-label">loading</div>
+              <p>Fetching monitoring summary for this sprint.</p>
+            </div>
+          )}
+
+          {!monitoringLoading && monitoringError && (
+            <div className="feedback feedback-error">
+              <div className="feedback-label">error</div>
+              <p>{monitoringError}</p>
+            </div>
+          )}
+
+          {!monitoringLoading && !monitoringError && !selectedSprintId && (
+            <div className="feedback">
+              <div className="feedback-label">summary</div>
+              <p>Enter a sprint ID to load monitoring visibility for this team.</p>
+            </div>
+          )}
+
+          {!monitoringLoading && !monitoringError && selectedSprintId && !hasMonitoringData && (
+            <div className="feedback">
+              <div className="feedback-label">empty</div>
+              <p>No monitoring data exists for this sprint yet.</p>
+            </div>
+          )}
+
+          {!monitoringLoading && !monitoringError && selectedSprintId && hasMonitoringData && monitoringSummary && (
+            <div className="group-summary-grid">
+              <div className="group-summary-item">
+                <span>Last Sync Time</span>
+                <strong>{formatDateTime(monitoringSummary.lastSyncTime)}</strong>
+              </div>
+              <div className="group-summary-item">
+                <span>Synced JIRA Stories</span>
+                <strong>{monitoringSummary.activeStoryCount}</strong>
+              </div>
+              <div className="group-summary-item">
+                <span>Synced GitHub PRs</span>
+                <strong>{monitoringSummary.activePullRequestCount}</strong>
+              </div>
+              <div className="group-summary-item">
+                <span>Matched PRs</span>
+                <strong>{monitoringSummary.matchedPullRequestCount}</strong>
+              </div>
+              <div className="group-summary-item">
+                <span>Merged PRs</span>
+                <strong>{monitoringSummary.mergedPullRequestCount}</strong>
+              </div>
+              {monitoringSummary.staleRecordCount > 0 && (
+                <div className="group-summary-item">
+                  <span>Stale Records</span>
+                  <strong>{monitoringSummary.staleRecordCount}</strong>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
