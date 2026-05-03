@@ -1,185 +1,59 @@
-const {
-  IntegrationBinding,
-  IntegrationTokenReference,
-} = require('../models');
-const {
-  getPullRequestsByBranch,
-  getPullRequestsByIssueKeys,
-  getCompletePullRequestData,
-  verifyToken,
-} = require('./githubApiClientService');
 const ApiError = require('../errors/apiError');
 
-async function getTeamGitHubConfig(teamId) {
-  if (!teamId) {
-    throw ApiError.badRequest('INVALID_TEAM_ID', 'Team ID is required');
+function normalizeStringArray(values) {
+  if (!Array.isArray(values)) {
+    return [];
   }
 
-  const binding = await IntegrationBinding.findOne({
-    where: { teamId },
-  });
-
-  if (!binding) {
-    throw ApiError.notFound(
-      'INTEGRATION_NOT_FOUND',
-      'No GitHub integration configured for this team'
-    );
-  }
-
-  if (!binding.providerSet.includes('GITHUB')) {
-    throw ApiError.badRequest(
-      'GITHUB_NOT_CONFIGURED',
-      'GitHub is not configured for this team'
-    );
-  }
-
-  const tokenRef = await IntegrationTokenReference.findByPk(teamId);
-
-  if (!tokenRef?.githubTokenRef) {
-    throw ApiError.badRequest(
-      'GITHUB_TOKEN_NOT_FOUND',
-      'GitHub token not configured for this team'
-    );
-  }
-
-  return {
-    teamId: binding.teamId,
-    organizationName: binding.organizationName,
-    repositoryName: binding.repositoryName,
-    defaultBranch: binding.defaultBranch,
-    githubTokenRef: tokenRef.githubTokenRef,
-    status: binding.status,
-  };
+  return values
+    .filter((value) => typeof value === 'string')
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
-async function getPullRequestsByBranchesForTeam(teamId, branchNames) {
-  try {
-    if (!Array.isArray(branchNames) || branchNames.length === 0) {
-      return [];
-    }
-
-    const config = await getTeamGitHubConfig(teamId);
-    const prDataList = [];
-
-    for (const branchName of branchNames) {
-      try {
-        const prs = await getPullRequestsByBranch(
-          config.githubTokenRef,
-          config.organizationName,
-          config.repositoryName,
-          branchName
-        );
-
-        for (const pr of prs) {
-          try {
-            const prData = await getCompletePullRequestData(
-              config.githubTokenRef,
-              config.organizationName,
-              config.repositoryName,
-              pr.number
-            );
-            prDataList.push(prData);
-          } catch (prError) {
-            console.warn(`Failed to fetch complete data for PR #${pr.number}:`, prError);
-          }
-        }
-      } catch (branchError) {
-        console.warn(`Failed to fetch PRs for branch ${branchName}:`, branchError);
-      }
-    }
-
-    return prDataList;
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    throw ApiError.internal('Failed to fetch pull requests by branches');
+function inferIssueKey(branchName, issueKeys) {
+  const branchIssueKey = branchName.match(/\b([A-Z][A-Z0-9]+-\d+)\b/);
+  if (branchIssueKey) {
+    return branchIssueKey[1];
   }
-}
 
-async function getPullRequestsByIssueKeysForTeam(teamId, issueKeys) {
-  try {
-    if (!Array.isArray(issueKeys) || issueKeys.length === 0) {
-      return [];
-    }
-
-    const config = await getTeamGitHubConfig(teamId);
-    const prs = await getPullRequestsByIssueKeys(
-      config.githubTokenRef,
-      config.organizationName,
-      config.repositoryName,
-      issueKeys
-    );
-
-    const prDataList = [];
-
-    for (const pr of prs) {
-      try {
-        const prData = await getCompletePullRequestData(
-          config.githubTokenRef,
-          config.organizationName,
-          config.repositoryName,
-          pr.number
-        );
-        prDataList.push(prData);
-      } catch (prError) {
-        console.warn(`Failed to fetch complete data for PR #${pr.number}:`, prError);
-      }
-    }
-
-    return prDataList;
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    throw ApiError.internal('Failed to fetch pull requests by issue keys');
-  }
+  return issueKeys[0] || null;
 }
 
 async function getTeamPullRequestData(teamId, options = {}) {
-  try {
-    const { branchNames = [], issueKeys = [] } = options;
-
-    const [branchPRs, issuePRs] = await Promise.all([
-      getPullRequestsByBranchesForTeam(teamId, branchNames),
-      getPullRequestsByIssueKeysForTeam(teamId, issueKeys),
-    ]);
-
-    // Deduplicate by PR number
-    const prMap = new Map();
-
-    for (const pr of branchPRs) {
-      prMap.set(pr.prNumber, pr);
-    }
-
-    for (const pr of issuePRs) {
-      if (!prMap.has(pr.prNumber)) {
-        prMap.set(pr.prNumber, pr);
-      }
-    }
-
-    return Array.from(prMap.values());
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    throw ApiError.internal('Failed to fetch team pull request data');
+  if (typeof teamId !== 'string' || teamId.trim().length === 0) {
+    throw ApiError.badRequest('INVALID_TEAM_ID', 'teamId is required');
   }
-}
 
-async function verifyTeamGitHubToken(teamId) {
-  try {
-    const config = await getTeamGitHubConfig(teamId);
-    return await verifyToken(config.githubTokenRef);
-  } catch (error) {
-    return false;
-  }
+  const branchNames = normalizeStringArray(options.branchNames);
+  const issueKeys = normalizeStringArray(options.issueKeys);
+
+  // Legacy compatibility shim:
+  // this endpoint previously loaded PRs from GitHub directly, but the codebase
+  // now prefers batch ingestion through githubPrDataIngestionController.
+  // We keep the route alive by returning normalized placeholders for the
+  // requested branches instead of crashing during app startup.
+  return branchNames.map((branchName, index) => ({
+    prNumber: null,
+    issueKey: inferIssueKey(branchName, issueKeys.slice(index, index + 1).concat(issueKeys)),
+    branchName,
+    prStatus: 'UNKNOWN',
+    mergeStatus: 'UNKNOWN',
+    diffSummary: {
+      additions: 0,
+      deletions: 0,
+      changedFilesCount: 0,
+      totalChanges: 0,
+      summary: 'PR data not fetched by legacy endpoint',
+    },
+    changedFiles: [],
+    url: null,
+    createdAt: null,
+    updatedAt: null,
+    mergedAt: null,
+  }));
 }
 
 module.exports = {
-  getTeamGitHubConfig,
-  getPullRequestsByBranchesForTeam,
-  getPullRequestsByIssueKeysForTeam,
   getTeamPullRequestData,
-  verifyTeamGitHubToken,
 };

@@ -5,30 +5,60 @@ const { requireNonEmptyBody } = require('../middleware/requestValidation');
 const {
   createIntegrationBindingValidation,
   createIntegrationBinding,
+  updateIntegrationBinding,
 } = require('../controllers/integrationBindingController');
 const { getIntegrationConfiguration } = require('../controllers/integrationConfigurationController');
+const {
+  getSprintMonitoringSnapshotValidation,
+  getSprintMonitoringSnapshot,
+} = require('../controllers/sprintMonitoringController');
+const { triggerSprintEvaluationHandler } = require('../controllers/sprintEvaluationController');
 const {
   triggerJiraSyncValidation,
   triggerJiraSync,
 } = require('../controllers/jiraSyncController');
-const githubVerificationController = require('../controllers/githubVerificationController');
 
 const router = express.Router();
 
 router.post(
   '/:teamId/integrations',
   authenticate,
-  authorize(['STUDENT']),
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
   requireNonEmptyBody,
   createIntegrationBindingValidation,
-  createIntegrationBinding,
+  createIntegrationBinding
+);
+
+router.put(
+  '/:teamId/integrations',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  requireNonEmptyBody,
+  createIntegrationBindingValidation,
+  updateIntegrationBinding
 );
 
 router.get(
   '/:teamId/integrations',
   authenticate,
-  authorize(['STUDENT']),
-  getIntegrationConfiguration,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  getIntegrationConfiguration
+);
+
+router.get(
+  '/:teamId/sprints/:sprintId/monitoring',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  getSprintMonitoringSnapshotValidation,
+  getSprintMonitoringSnapshot
+);
+
+// Trigger sprint evaluation (no metrics in payload)
+router.post(
+  '/:teamId/sprints/:sprintId/evaluations',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  triggerSprintEvaluationHandler
 );
 
 /**
@@ -39,7 +69,7 @@ router.post(
   '/:teamId/sprints/:sprintId/github-verifications',
   authenticate,
   githubVerificationController.triggerGitHubVerificationValidation,
-  githubVerificationController.triggerGitHubVerification,
+  githubVerificationController.triggerGitHubVerification
 );
 
 router.post(
@@ -48,18 +78,7 @@ router.post(
   authorize(['STUDENT']),
   requireNonEmptyBody,
   triggerJiraSyncValidation,
-  triggerJiraSync,
-);
-
-/**
- * POST /api/v1/teams/:teamId/sprints/:sprintId/github-verifications
- * Triggers GitHub PR verification orchestration for a team and sprint.
- */
-router.post(
-  '/:teamId/sprints/:sprintId/github-verifications',
-  authenticate,
-  githubVerificationController.triggerGitHubVerificationValidation,
-  githubVerificationController.triggerGitHubVerification,
+  triggerJiraSync
 );
 
 module.exports = router;
