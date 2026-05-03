@@ -88,22 +88,35 @@ async function storeJiraIssues({ teamId, sprintId, issues }) {
     );
   }
 
+  const storyRows = normalizedIssues.map((issue) => ({
+    teamId,
+    sprintId: issue.sprintId,
+    issueKey: issue.issueKey,
+    title: issue.title,
+    description: issue.description,
+    assigneeId: issue.assigneeId,
+    reporterId: issue.reporterId,
+    status: issue.status,
+    storyPoints: issue.storyPoints,
+    sourceCreatedAt: issue.sourceCreatedAt,
+    sourceUpdatedAt: issue.sourceUpdatedAt,
+  }));
+
   await sequelize.transaction(async (transaction) => {
-    for (const issue of normalizedIssues) {
-      await SprintStory.upsert({
-        teamId,
-        sprintId: issue.sprintId,
-        issueKey: issue.issueKey,
-        title: issue.title,
-        description: issue.description,
-        assigneeId: issue.assigneeId,
-        reporterId: issue.reporterId,
-        status: issue.status,
-        storyPoints: issue.storyPoints,
-        sourceCreatedAt: issue.sourceCreatedAt,
-        sourceUpdatedAt: issue.sourceUpdatedAt,
-      }, { transaction });
-    }
+    await SprintStory.bulkCreate(storyRows, {
+      transaction,
+      updateOnDuplicate: [
+        'title',
+        'description',
+        'assigneeId',
+        'reporterId',
+        'status',
+        'storyPoints',
+        'sourceCreatedAt',
+        'sourceUpdatedAt',
+        'updatedAt',
+      ],
+    });
   });
 
   return {
@@ -163,28 +176,45 @@ async function storeGitHubPullRequests({ teamId, sprintId, pullRequests }) {
     );
   }
 
-  await sequelize.transaction(async (transaction) => {
-    for (let index = 0; index < normalizedPullRequests.length; index += 1) {
-      const normalized = normalizedPullRequests[index];
-      const source = extractPullRequestSource(pullRequests[index]);
+  const pullRequestRows = normalizedPullRequests.map((normalized, index) => {
+    const source = extractPullRequestSource(pullRequests[index]);
 
-      await SprintPullRequest.upsert({
-        teamId,
-        sprintId,
-        prNumber: normalized.prNumber,
-        relatedIssueKey: normalized.issueKey,
-        branchName: normalized.branchName,
-        title: typeof source.title === 'string' ? source.title.trim() || null : null,
-        prStatus: normalized.prStatus,
-        mergeStatus: normalized.mergeStatus,
-        changedFiles: normalized.changedFiles,
-        diffSummary: normalized.diffSummary,
-        sourceCreatedAt: source.created_at || source.createdAt || null,
-        sourceUpdatedAt: source.updated_at || source.updatedAt || null,
-        sourceMergedAt: source.merged_at || source.mergedAt || null,
-        url: source.html_url || source.url || null,
-      }, { transaction });
-    }
+    return {
+      teamId,
+      sprintId,
+      prNumber: normalized.prNumber,
+      relatedIssueKey: normalized.issueKey,
+      branchName: normalized.branchName,
+      title: typeof source.title === 'string' ? source.title.trim() || null : null,
+      prStatus: normalized.prStatus,
+      mergeStatus: normalized.mergeStatus,
+      changedFiles: normalized.changedFiles,
+      diffSummary: normalized.diffSummary,
+      sourceCreatedAt: source.created_at || source.createdAt || null,
+      sourceUpdatedAt: source.updated_at || source.updatedAt || null,
+      sourceMergedAt: source.merged_at || source.mergedAt || null,
+      url: source.html_url || source.url || null,
+    };
+  });
+
+  await sequelize.transaction(async (transaction) => {
+    await SprintPullRequest.bulkCreate(pullRequestRows, {
+      transaction,
+      updateOnDuplicate: [
+        'relatedIssueKey',
+        'branchName',
+        'title',
+        'prStatus',
+        'mergeStatus',
+        'changedFiles',
+        'diffSummary',
+        'sourceCreatedAt',
+        'sourceUpdatedAt',
+        'sourceMergedAt',
+        'url',
+        'updatedAt',
+      ],
+    });
   });
 
   return {

@@ -93,7 +93,7 @@ test('scheduled refresh synchronizes active sprint Jira issues and matching GitH
       };
     }
 
-    if (normalizedUrl.endsWith('/pulls?state=all&per_page=100')) {
+    if (normalizedUrl.endsWith('/pulls?state=all&per_page=100&page=1')) {
       assert.match(String(options?.headers?.Authorization || ''), /^token /);
       return {
         ok: true,
@@ -107,6 +107,15 @@ test('scheduled refresh synchronizes active sprint Jira issues and matching GitH
             head: { ref: 'SPM-214-login-validation' },
           },
         ]),
+      };
+    }
+
+    if (normalizedUrl.endsWith('/pulls?state=all&per_page=100&page=2')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ([]),
       };
     }
 

@@ -5,6 +5,7 @@ const {
 } = require('./jiraRequestBuilder');
 const { resolveTokenReference } = require('./tokenReferenceResolver');
 const { storeJiraIssues } = require('./sprintMonitoringPersistenceService');
+const MAX_JIRA_ISSUES_PER_SYNC = 1000;
 
 function asTrimmedString(value) {
   if (typeof value !== 'string') {
@@ -32,7 +33,11 @@ function resolveJiraBaseUrl(binding) {
 }
 
 function getFetchImplementation() {
-  return global.fetch || require('node-fetch');
+  if (typeof global.fetch !== 'function') {
+    throw ApiError.internal('Global fetch API is unavailable. Node.js 18 or newer is required');
+  }
+
+  return global.fetch;
 }
 
 async function parseErrorResponse(response) {
@@ -51,6 +56,36 @@ async function parseErrorResponse(response) {
   } catch (error) {
     return null;
   }
+}
+
+function buildPaginatedJiraRequest(request, startAt) {
+  const paginatedOptions = {
+    ...request.options,
+    headers: {
+      ...(request.options?.headers || {}),
+    },
+  };
+
+  if (paginatedOptions.body !== undefined) {
+    const body = JSON.parse(paginatedOptions.body);
+    body.startAt = startAt;
+    paginatedOptions.body = JSON.stringify(body);
+    return {
+      url: request.url,
+      options: paginatedOptions,
+      maxResults: Number.isInteger(body.maxResults) && body.maxResults > 0 ? body.maxResults : 100,
+    };
+  }
+
+  const url = new URL(request.url);
+  url.searchParams.set('startAt', String(startAt));
+  const maxResults = Number.parseInt(url.searchParams.get('maxResults') || '100', 10);
+
+  return {
+    url: url.toString(),
+    options: paginatedOptions,
+    maxResults: Number.isInteger(maxResults) && maxResults > 0 ? maxResults : 100,
+  };
 }
 
 async function fetchJiraSprintIssues({
@@ -89,19 +124,40 @@ async function fetchJiraSprintIssues({
       apiToken,
     });
 
-  const response = await getFetchImplementation()(request.url, request.options);
-  if (!response.ok) {
-    const errorPayload = await parseErrorResponse(response);
-    const message = typeof errorPayload === 'string'
-      ? errorPayload
-      : errorPayload?.errorMessages?.join(', ')
-        || errorPayload?.message
-        || 'Failed to fetch Jira sprint issues';
-    throw new ApiError(response.status >= 500 ? 502 : response.status, 'JIRA_UPSTREAM_REQUEST_FAILED', message);
+  const issues = [];
+  let startAt = 0;
+
+  while (issues.length < MAX_JIRA_ISSUES_PER_SYNC) {
+    const paginatedRequest = buildPaginatedJiraRequest(request, startAt);
+    const response = await getFetchImplementation()(paginatedRequest.url, paginatedRequest.options);
+    if (!response.ok) {
+      const errorPayload = await parseErrorResponse(response);
+      const message = typeof errorPayload === 'string'
+        ? errorPayload
+        : errorPayload?.errorMessages?.join(', ')
+          || errorPayload?.message
+          || 'Failed to fetch Jira sprint issues';
+      throw new ApiError(response.status >= 500 ? 502 : response.status, 'JIRA_UPSTREAM_REQUEST_FAILED', message);
+    }
+
+    const payload = await response.json();
+    const pageIssues = Array.isArray(payload?.issues) ? payload.issues : [];
+    issues.push(...pageIssues);
+
+    const total = Number.isInteger(payload?.total) && payload.total >= 0
+      ? payload.total
+      : null;
+    if (pageIssues.length === 0) {
+      break;
+    }
+
+    startAt += pageIssues.length;
+    if ((total !== null && startAt >= total) || pageIssues.length < paginatedRequest.maxResults) {
+      break;
+    }
   }
 
-  const payload = await response.json();
-  return Array.isArray(payload?.issues) ? payload.issues : [];
+  return issues.slice(0, MAX_JIRA_ISSUES_PER_SYNC);
 }
 
 async function syncJiraSprintIssues({ binding, tokenReference, teamId, sprintId, boardId, includeStatuses = [] }) {

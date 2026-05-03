@@ -223,6 +223,121 @@ test('team leader can trigger GitHub sync, fetch repo pull requests, and persist
   assert.equal(storedPullRequest.mergeStatus, 'MERGEABLE');
 });
 
+test('github sync paginates repository pull request listing before filtering', async () => {
+  const leader = await createStudentUser({
+    email: 'github-sync-pagination@example.edu',
+    fullName: 'GitHub Sync Pagination',
+    studentId: '11070003113',
+  });
+  await createGithubReadyTeam({ leader, teamId: 'team-github-sync-pagination' });
+
+  const seenPages = [];
+  global.fetch = async (url, options = {}) => {
+    if (String(url).startsWith(baseUrl)) {
+      return originalFetch(url, options);
+    }
+
+    assert.match(String(options?.headers?.Authorization || ''), /^token /);
+    const requestUrl = new URL(String(url));
+
+    if (requestUrl.pathname.endsWith('/pulls') && requestUrl.searchParams.get('per_page') === '100') {
+      seenPages.push(requestUrl.searchParams.get('page') || '1');
+      if (requestUrl.searchParams.get('page') === '2') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ([
+            {
+              number: 205,
+              title: 'SPM-215 Add second page support',
+              body: 'Second page match',
+              head: { ref: 'SPM-215-second-page-support' },
+            },
+          ]),
+        };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => Array.from({ length: 100 }, (_, index) => ({
+          number: index + 1,
+          title: `OPS-${index + 1} Non-matching PR`,
+          body: 'Should be filtered out',
+          head: { ref: `ops-${index + 1}` },
+        })),
+      };
+    }
+
+    if (requestUrl.pathname.endsWith('/pulls/205')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          number: 205,
+          title: 'SPM-215 Add second page support',
+          body: 'Second page match',
+          state: 'open',
+          merged: false,
+          mergeable_state: 'clean',
+          head: { ref: 'SPM-215-second-page-support' },
+          html_url: 'https://github.com/acme-org/senior-app-1/pull/205',
+          created_at: '2026-05-02T12:00:00Z',
+          updated_at: '2026-05-02T12:30:00Z',
+          merged_at: null,
+          additions: 12,
+          deletions: 4,
+          changed_files: 1,
+        }),
+      };
+    }
+
+    if (requestUrl.pathname.endsWith('/pulls/205/files')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ([
+          {
+            filename: 'backend/services/githubSprintSyncService.js',
+            status: 'modified',
+            additions: 12,
+            deletions: 4,
+            changes: 16,
+          },
+        ]),
+      };
+    }
+
+    throw new Error(`Unexpected fetch URL: ${url}`);
+  };
+
+  const { response, json } = await request('/api/v1/teams/team-github-sync-pagination/sprints/sprint_2026_03/github-verifications', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(leader)),
+    },
+    body: JSON.stringify({
+      requestedBy: String(leader.id),
+      relatedIssueKeys: ['SPM-215'],
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(json.data.upstreamPullRequestCount, 1);
+  assert.deepEqual(seenPages, ['1', '2']);
+  assert.equal(await SprintPullRequest.count({
+    where: {
+      teamId: 'team-github-sync-pagination',
+      sprintId: 'sprint_2026_03',
+    },
+  }), 1);
+});
+
 test('github sync rejects requests without branch or issue filters', async () => {
   const leader = await createStudentUser({
     email: 'github-sync-empty-filters@example.edu',

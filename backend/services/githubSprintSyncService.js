@@ -3,6 +3,8 @@ const { makeGitHubRequest } = require('./githubApiClientService');
 const { extractIssueKeyFromText } = require('./githubPrDataNormalizer');
 const { resolveTokenReference } = require('./tokenReferenceResolver');
 const { storeGitHubPullRequests } = require('./sprintMonitoringPersistenceService');
+const GITHUB_PULLS_PAGE_SIZE = 100;
+const GITHUB_PULLS_MAX_PAGES = 10;
 
 function asTrimmedString(value) {
   if (typeof value !== 'string') {
@@ -72,19 +74,26 @@ async function fetchRepositoryPullRequests({ binding, tokenReference, branchName
   });
 
   const githubToken = resolveTokenReference(tokenReference?.githubTokenRef, { provider: 'GITHUB' });
-  const pulls = await makeGitHubRequest(
-    githubToken,
-    organizationName,
-    repositoryName,
-    `/repos/${organizationName}/${repositoryName}/pulls?state=all&per_page=100`,
-  );
+  const pulls = [];
+  for (let page = 1; page <= GITHUB_PULLS_MAX_PAGES; page += 1) {
+    const pagePulls = await makeGitHubRequest(
+      githubToken,
+      organizationName,
+      repositoryName,
+      `/repos/${organizationName}/${repositoryName}/pulls?state=all&per_page=${GITHUB_PULLS_PAGE_SIZE}&page=${page}`,
+    );
+    const normalizedPagePulls = Array.isArray(pagePulls) ? pagePulls : [];
+    pulls.push(...normalizedPagePulls);
 
-  const filteredPulls = Array.isArray(pulls)
-    ? pulls.filter((pullRequest) => matchesFilters(pullRequest, {
-      branchNames: normalizedBranchNames,
-      issueKeys: normalizedIssueKeys,
-    }))
-    : [];
+    if (normalizedPagePulls.length < GITHUB_PULLS_PAGE_SIZE) {
+      break;
+    }
+  }
+
+  const filteredPulls = pulls.filter((pullRequest) => matchesFilters(pullRequest, {
+    branchNames: normalizedBranchNames,
+    issueKeys: normalizedIssueKeys,
+  }));
 
   const detailConcurrency = 5;
   const detailedPulls = [];

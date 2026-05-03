@@ -1,7 +1,11 @@
 const ApiError = require('../errors/apiError');
 
 function getFetchImplementation() {
-  return global.fetch || require('node-fetch');
+  if (typeof global.fetch !== 'function') {
+    throw ApiError.internal('Global fetch API is unavailable. Node.js 18 or newer is required');
+  }
+
+  return global.fetch;
 }
 
 /**
