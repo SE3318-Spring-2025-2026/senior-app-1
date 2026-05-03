@@ -11,9 +11,9 @@ jest.mock('../../contexts/AuthContext', () => ({
   }),
 }));
 
-function renderIntegrationPage(teamId = 'team-1') {
+function renderIntegrationPage(teamId = 'team-1', search = '') {
   return render(
-    <MemoryRouter initialEntries={[`/students/groups/${teamId}/integrations`]}>
+    <MemoryRouter initialEntries={[`/students/groups/${teamId}/integrations${search}`]}>
       <Routes>
         <Route path="/students/groups/:teamId/integrations" element={<IntegrationConfigurationPage />} />
       </Routes>
@@ -84,6 +84,93 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
     expect(screen.queryByDisplayValue('vault://jira/team-1')).not.toBeInTheDocument();
   });
 
+  test('integration configuration UI shows monitoring sync summary for a selected sprint', async () => {
+    apiClient.get
+      .mockResolvedValueOnce({
+        data: {
+          bindingId: 'binding-1',
+          teamId: 'team-1',
+          providerSet: ['GITHUB', 'JIRA'],
+          organizationName: 'acme-org',
+          repositoryName: 'senior-app',
+          jiraProjectKey: 'SPM',
+          defaultBranch: 'main',
+          status: 'ACTIVE',
+          hasGithubTokenRef: true,
+          hasJiraTokenRef: true,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          teamId: 'team-1',
+          sprintId: 'sprint-42',
+          integration: {
+            status: 'ACTIVE',
+          },
+          stories: [
+            {
+              issueKey: 'SPM-1',
+              isActive: true,
+              lastSeenAt: '2026-04-01T10:00:00.000Z',
+              linkedPullRequests: [
+                {
+                  prNumber: 12,
+                  mergeStatus: 'merged',
+                  isActive: true,
+                  lastSeenAt: '2026-04-01T10:05:00.000Z',
+                },
+              ],
+            },
+            {
+              issueKey: 'SPM-2',
+              isActive: true,
+              lastSeenAt: '2026-04-01T09:00:00.000Z',
+              linkedPullRequests: [
+                {
+                  prNumber: 15,
+                  mergeStatus: 'open',
+                  isActive: true,
+                  lastSeenAt: '2026-04-01T09:10:00.000Z',
+                },
+              ],
+            },
+            {
+              issueKey: 'SPM-3',
+              isActive: false,
+              lastSeenAt: '2026-03-31T11:00:00.000Z',
+              linkedPullRequests: [],
+            },
+          ],
+          unlinkedPullRequests: [
+            {
+              prNumber: 99,
+              isActive: true,
+              lastSeenAt: '2026-04-01T08:00:00.000Z',
+            },
+            {
+              prNumber: 98,
+              isActive: false,
+              lastSeenAt: '2026-03-31T08:00:00.000Z',
+            },
+          ],
+        },
+      });
+
+    renderIntegrationPage('team-1', '?sprintId=sprint-42');
+
+    expect(await screen.findByRole('heading', { name: /integration configuration/i })).toBeInTheDocument();
+    expect(await screen.findByText(/monitoring status \/ sync summary/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('sprint-42')).toBeInTheDocument();
+    expect(screen.getByText(/synced jira stories/i).closest('.group-summary-item')).toHaveTextContent('2');
+    expect(screen.getByText(/synced github prs/i).closest('.group-summary-item')).toHaveTextContent('3');
+    expect(screen.getByText(/matched prs/i).closest('.group-summary-item')).toHaveTextContent('2');
+    expect(screen.getByText(/merged prs/i).closest('.group-summary-item')).toHaveTextContent('1');
+    expect(screen.getByText(/stale records/i).closest('.group-summary-item')).toHaveTextContent('2');
+    expect(screen.getByText(/stale records/i)).toBeInTheDocument();
+    expect(screen.getByText(/last sync time/i).closest('.group-summary-item')).toHaveTextContent(/Apr 2026/i);
+    expect(apiClient.get).toHaveBeenNthCalledWith(2, '/v1/teams/team-1/sprints/sprint-42/monitoring?includeStale=true');
+  });
+
   test('integration configuration UI shows loading and empty configuration states', async () => {
     const deferred = createDeferred();
     apiClient.get.mockReturnValueOnce(deferred.promise);
@@ -131,6 +218,56 @@ describe('Sprint monitoring frontend flows (issue #308)', () => {
 
     expect(await screen.findByText(/api unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/api unavailable/i)).toBeInTheDocument();
+  });
+
+  test('integration configuration UI shows monitoring empty and error states', async () => {
+    apiClient.get
+      .mockResolvedValueOnce({
+        data: {
+          teamId: 'team-5',
+          providerSet: ['GITHUB', 'JIRA'],
+          organizationName: 'acme-org',
+          repositoryName: 'senior-app',
+          jiraProjectKey: 'SPM',
+          status: 'PARTIAL',
+          hasGithubTokenRef: true,
+          hasJiraTokenRef: false,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          teamId: 'team-5',
+          sprintId: 'sprint-empty',
+          stories: [],
+          unlinkedPullRequests: [],
+        },
+      });
+
+    const { unmount } = renderIntegrationPage('team-5', '?sprintId=sprint-empty');
+
+    expect(await screen.findByText(/jira token missing/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no monitoring data exists for this sprint yet/i)).toBeInTheDocument();
+
+    unmount();
+
+    apiClient.get
+      .mockResolvedValueOnce({
+        data: {
+          teamId: 'team-6',
+          providerSet: ['GITHUB', 'JIRA'],
+          organizationName: 'acme-org',
+          repositoryName: 'senior-app',
+          jiraProjectKey: 'SPM',
+          status: 'ACTIVE',
+          hasGithubTokenRef: true,
+          hasJiraTokenRef: true,
+        },
+      })
+      .mockRejectedValueOnce(new Error('Monitoring unavailable'));
+
+    renderIntegrationPage('team-6', '?sprintId=sprint-err');
+
+    expect(await screen.findByText(/monitoring unavailable/i)).toBeInTheDocument();
   });
 
   test('integration configuration UI clears stale team data when a new team load fails', async () => {
