@@ -1,3 +1,4 @@
+import SprintEvaluationHistoryPage from './SprintEvaluationHistoryPage';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import AdminHomePage from './AdminHomePage';
 import AdminCoordinatorCreatePage from './AdminCoordinatorCreatePage';
@@ -52,6 +53,11 @@ export default function App() {
               <Route path="/students/groups/manage" element={<StudentGroupShellPage />} />
               <Route path="/students/groups/new" element={<StudentGroupShellPage />} />
               <Route path="/students/groups/:teamId/integrations" element={<AuthGuard allowedRoles={['STUDENT']}><IntegrationConfigurationPage /></AuthGuard>} />
+<<<<<<< Persist-evaluation-results
+              <Route path="/students/groups/:teamId/sprints/evaluation" element={<AuthGuard allowedRoles={['STUDENT']}><SprintEvaluationPage /></AuthGuard>} />
+              <Route path="/students/groups/:teamId/sprints/:sprintId/evaluation-history" element={<AuthGuard allowedRoles={['STUDENT']}><SprintEvaluationHistoryPage /></AuthGuard>} />
+=======
+>>>>>>> main
               <Route path="/students/notifications" element={<StudentInvitationsPage />} />
               <Route path="/team-leader/submission" element={<AuthGuard allowedRoles={['STUDENT']}><SubmissionEditorPage /></AuthGuard>} />
               <Route path="/team-leader/advisor-requests/new" element={<SubmitAdvisorRequestPage />} />
