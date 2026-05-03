@@ -166,3 +166,98 @@ test('stores structured Jira and GitHub sprint monitoring data and returns linke
   assert.equal(snapshot.json.stories[0].linkedPullRequests[0].prNumber, 142);
   assert.equal(snapshot.json.unlinkedPullRequests.length, 0);
 });
+
+test('snapshot hides stale records by default and exposes them when includeStale=true', async () => {
+  const leader = await User.create({
+    email: 'monitoring-stale@example.edu',
+    fullName: 'Monitoring Stale Owner',
+    studentId: '11070003102',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    password: 'StrongPass1!',
+  });
+
+  await Group.create({
+    id: 'team-monitoring-stale',
+    name: 'Group team-monitoring-stale',
+    leaderId: String(leader.id),
+    memberIds: [String(leader.id)],
+    maxMembers: 4,
+  });
+
+  await IntegrationBinding.create({
+    teamId: 'team-monitoring-stale',
+    providerSet: ['GITHUB', 'JIRA'],
+    organizationName: 'acme-org',
+    repositoryName: 'senior-app',
+    jiraWorkspaceId: 'workspace-acme',
+    jiraProjectKey: 'SPM',
+    defaultBranch: 'main',
+    initiatedBy: String(leader.id),
+    status: 'ACTIVE',
+  });
+
+  await SprintStory.bulkCreate([
+    {
+      teamId: 'team-monitoring-stale',
+      sprintId: 'sprint-77',
+      issueKey: 'SPM-300',
+      title: 'Active story',
+      status: 'IN_PROGRESS',
+      isActive: true,
+      lastSeenAt: new Date(),
+      staleAt: null,
+    },
+    {
+      teamId: 'team-monitoring-stale',
+      sprintId: 'sprint-77',
+      issueKey: 'SPM-301',
+      title: 'Stale story',
+      status: 'DONE',
+      isActive: false,
+      lastSeenAt: new Date('2026-05-01T10:00:00Z'),
+      staleAt: new Date('2026-05-02T10:00:00Z'),
+    },
+  ]);
+
+  await SprintPullRequest.bulkCreate([
+    {
+      teamId: 'team-monitoring-stale',
+      sprintId: 'sprint-77',
+      prNumber: 300,
+      relatedIssueKey: null,
+      prStatus: 'OPEN',
+      mergeStatus: 'UNKNOWN',
+      isActive: true,
+      lastSeenAt: new Date(),
+      staleAt: null,
+    },
+    {
+      teamId: 'team-monitoring-stale',
+      sprintId: 'sprint-77',
+      prNumber: 301,
+      relatedIssueKey: null,
+      prStatus: 'CLOSED',
+      mergeStatus: 'NOT_MERGED',
+      isActive: false,
+      lastSeenAt: new Date('2026-05-01T10:00:00Z'),
+      staleAt: new Date('2026-05-02T10:00:00Z'),
+    },
+  ]);
+
+  const defaultSnapshot = await request('/api/v1/teams/team-monitoring-stale/sprints/sprint-77/monitoring', {
+    headers: await authHeadersFor(leader),
+  });
+  assert.equal(defaultSnapshot.response.status, 200);
+  assert.deepEqual(defaultSnapshot.json.stories.map((story) => story.issueKey), ['SPM-300']);
+  assert.deepEqual(defaultSnapshot.json.unlinkedPullRequests.map((pullRequest) => pullRequest.prNumber), [300]);
+
+  const staleSnapshot = await request('/api/v1/teams/team-monitoring-stale/sprints/sprint-77/monitoring?includeStale=true', {
+    headers: await authHeadersFor(leader),
+  });
+  assert.equal(staleSnapshot.response.status, 200);
+  assert.deepEqual(staleSnapshot.json.stories.map((story) => story.issueKey), ['SPM-300', 'SPM-301']);
+  assert.deepEqual(staleSnapshot.json.unlinkedPullRequests.map((pullRequest) => pullRequest.prNumber), [300, 301]);
+  assert.equal(staleSnapshot.json.stories[1].isActive, false);
+  assert.ok(staleSnapshot.json.stories[1].staleAt);
+});

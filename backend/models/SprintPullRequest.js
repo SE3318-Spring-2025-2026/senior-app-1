@@ -71,6 +71,19 @@ const SprintPullRequest = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    lastSeenAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    staleAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     tableName: 'SprintPullRequests',
@@ -85,6 +98,9 @@ const SprintPullRequest = sequelize.define(
       },
       {
         fields: ['teamId', 'sprintId', 'relatedIssueKey'],
+      },
+      {
+        fields: ['teamId', 'sprintId', 'isActive'],
       },
     ],
   },

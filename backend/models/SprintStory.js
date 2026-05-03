@@ -58,6 +58,19 @@ const SprintStory = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    lastSeenAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    staleAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     tableName: 'SprintStories',
@@ -69,6 +82,9 @@ const SprintStory = sequelize.define(
       },
       {
         fields: ['teamId', 'sprintId'],
+      },
+      {
+        fields: ['teamId', 'sprintId', 'isActive'],
       },
     ],
   },

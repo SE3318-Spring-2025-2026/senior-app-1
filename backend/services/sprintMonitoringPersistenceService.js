@@ -1,4 +1,5 @@
 const sequelize = require('../db');
+const { Op } = require('sequelize');
 const ApiError = require('../errors/apiError');
 const { SprintPullRequest, SprintStory } = require('../models');
 const { normalizeJiraIssue } = require('./jiraIssueNormalizer');
@@ -100,22 +101,50 @@ async function storeJiraIssues({ teamId, sprintId, issues }) {
     storyPoints: issue.storyPoints,
     sourceCreatedAt: issue.sourceCreatedAt,
     sourceUpdatedAt: issue.sourceUpdatedAt,
+    isActive: true,
+    lastSeenAt: new Date(),
+    staleAt: null,
   }));
 
   await sequelize.transaction(async (transaction) => {
-    await SprintStory.bulkCreate(storyRows, {
+    const syncedAt = new Date();
+    const currentIssueKeys = normalizedIssues.map((issue) => issue.issueKey);
+
+    if (storyRows.length > 0) {
+      await SprintStory.bulkCreate(storyRows.map((row) => ({
+        ...row,
+        lastSeenAt: syncedAt,
+      })), {
+        transaction,
+        updateOnDuplicate: [
+          'title',
+          'description',
+          'assigneeId',
+          'reporterId',
+          'status',
+          'storyPoints',
+          'sourceCreatedAt',
+          'sourceUpdatedAt',
+          'isActive',
+          'lastSeenAt',
+          'staleAt',
+          'updatedAt',
+        ],
+      });
+    }
+
+    await SprintStory.update({
+      isActive: false,
+      staleAt: syncedAt,
+    }, {
+      where: {
+        teamId,
+        sprintId,
+        ...(currentIssueKeys.length > 0
+          ? { issueKey: { [Op.notIn]: currentIssueKeys } }
+          : {}),
+      },
       transaction,
-      updateOnDuplicate: [
-        'title',
-        'description',
-        'assigneeId',
-        'reporterId',
-        'status',
-        'storyPoints',
-        'sourceCreatedAt',
-        'sourceUpdatedAt',
-        'updatedAt',
-      ],
     });
   });
 
@@ -194,26 +223,54 @@ async function storeGitHubPullRequests({ teamId, sprintId, pullRequests }) {
       sourceUpdatedAt: source.updated_at || source.updatedAt || null,
       sourceMergedAt: source.merged_at || source.mergedAt || null,
       url: source.html_url || source.url || null,
+      isActive: true,
+      lastSeenAt: new Date(),
+      staleAt: null,
     };
   });
 
   await sequelize.transaction(async (transaction) => {
-    await SprintPullRequest.bulkCreate(pullRequestRows, {
+    const syncedAt = new Date();
+    const currentPrNumbers = normalizedPullRequests.map((pullRequest) => pullRequest.prNumber);
+
+    if (pullRequestRows.length > 0) {
+      await SprintPullRequest.bulkCreate(pullRequestRows.map((row) => ({
+        ...row,
+        lastSeenAt: syncedAt,
+      })), {
+        transaction,
+        updateOnDuplicate: [
+          'relatedIssueKey',
+          'branchName',
+          'title',
+          'prStatus',
+          'mergeStatus',
+          'changedFiles',
+          'diffSummary',
+          'sourceCreatedAt',
+          'sourceUpdatedAt',
+          'sourceMergedAt',
+          'url',
+          'isActive',
+          'lastSeenAt',
+          'staleAt',
+          'updatedAt',
+        ],
+      });
+    }
+
+    await SprintPullRequest.update({
+      isActive: false,
+      staleAt: syncedAt,
+    }, {
+      where: {
+        teamId,
+        sprintId,
+        ...(currentPrNumbers.length > 0
+          ? { prNumber: { [Op.notIn]: currentPrNumbers } }
+          : {}),
+      },
       transaction,
-      updateOnDuplicate: [
-        'relatedIssueKey',
-        'branchName',
-        'title',
-        'prStatus',
-        'mergeStatus',
-        'changedFiles',
-        'diffSummary',
-        'sourceCreatedAt',
-        'sourceUpdatedAt',
-        'sourceMergedAt',
-        'url',
-        'updatedAt',
-      ],
     });
   });
 
