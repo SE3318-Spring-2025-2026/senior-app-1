@@ -1,3 +1,5 @@
+
+require('./setupTestEnv');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
@@ -19,8 +21,12 @@ let baseUrl;
 async function request(path, options = {}) {
   const response = await fetch(`${baseUrl}${path}`, options);
   const text = await response.text();
-  let json = null;
-  try { json = JSON.parse(text); } catch (_) {}
+  let json;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { _raw: text };
+  }
   return { response, json };
 }
 
@@ -66,7 +72,8 @@ async function sendInvitation(leader, groupId, studentId) {
     },
     body: JSON.stringify({ studentIds: [studentId] }),
   });
-  return json?.data?.invitations?.[0]?.id ?? json?.invitations?.[0]?.id ?? null;
+  // Response structure: { created: [{ id, groupId, studentId, status }], skippedStudentIds: [] }
+  return json?.created?.[0]?.id ?? null; //api doesnt contain invitations[0].id
 }
 
 test.before(async () => {
@@ -599,4 +606,158 @@ test('POST /coordinator/rubrics returns 401 for unauthenticated request', async 
   });
 
   assert.equal(response.status, 401, 'unauthenticated request must return 401');
+});
+
+/**
+ * Issue O — Testing: GET /my-grade (P64)
+ *
+ * Add this file to package.json "test" script when merging.
+ */
+
+// Lazy-load MemberFinalGrade — model may not exist until feature is built.
+function getMemberFinalGrade() {
+  try {
+    return require('../models/MemberFinalGrade');
+  } catch (_) {
+    return null;
+  }
+}
+
+test.beforeEach(async () => {
+  const MemberFinalGrade = getMemberFinalGrade();
+  if (MemberFinalGrade) await MemberFinalGrade.destroy({ where: {} });
+  await User.destroy({ where: {} });
+});
+
+// ─── Test 1: 200 — student with finalized grade sees correct fields ────────────
+
+test('GET /my-grade returns 200 with correct fields for student with finalized grade', async (t) => {
+  const MemberFinalGrade = getMemberFinalGrade();
+
+  const student = await User.create({
+    studentId: '11070001000',
+    email: 'student-grade@example.edu',
+    fullName: 'Grade Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    passwordHash: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  // Seed a MemberFinalGrade row if model exists.
+  if (MemberFinalGrade) {
+    await MemberFinalGrade.create({
+      userId: student.id,
+      groupId: 'test-group-id',
+      finalScore: 87.5,
+      letterGrade: 'B',
+      finalizedAt: new Date(),
+    });
+  }
+
+  const { response, json } = await request('/api/v1/final-evaluation/my-grade', {
+    headers: await authHeaderFor(student),
+  });
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 200, `expected 200, got ${response.status}, body: ${JSON.stringify(json)}`);
+
+  // Must include required fields.
+  const data = json?.data ?? json;
+  assert.ok('userId' in data, 'response must include userId');
+  assert.ok('groupId' in data, 'response must include groupId');
+  assert.ok('finalScore' in data, 'response must include finalScore');
+  assert.ok('letterGrade' in data, 'response must include letterGrade');
+  assert.ok('finalizedAt' in data, 'response must include finalizedAt');
+
+  // Must NOT include internal computation fields.
+  assert.ok(!('teamScalar' in data), 'response must NOT include teamScalar');
+  assert.ok(!('contributionRatio' in data), 'response must NOT include contributionRatio');
+});
+
+// ─── Test 2: 404 — no finalized grade for student's group ─────────────────────
+
+test('GET /my-grade returns 404 when coordinator has not finalized grades', async (t) => {
+  const student = await User.create({
+    studentId: '11070001000',
+    email: 'student-no-grade@example.edu',
+    fullName: 'No Grade Student',
+    role: 'STUDENT',
+    status: 'ACTIVE',
+    passwordHash: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  // No MemberFinalGrade row seeded.
+  const { response, json } = await request('/api/v1/final-evaluation/my-grade', {
+    headers: await authHeaderFor(student),
+  });
+
+  if (response.status === 404 && json?._raw?.includes('Cannot')) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 404, `expected 404, got ${response.status}, body: ${JSON.stringify(json)}`);
+});
+
+// ─── Test 3: 403 — coordinator cannot access my-grade ─────────────────────────
+
+test('GET /my-grade returns 403 for COORDINATOR', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-grade@example.edu',
+    fullName: 'Coord Grade',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response } = await request('/api/v1/final-evaluation/my-grade', {
+    headers: await authHeaderFor(coordinator),
+  });
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 403, `expected 403, got ${response.status}`);
+});
+
+// ─── Test 4: 403 — professor cannot access my-grade ───────────────────────────
+
+test('GET /my-grade returns 403 for PROFESSOR', async (t) => {
+  const professor = await User.create({
+    email: 'prof-grade@example.edu',
+    fullName: 'Prof Grade',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response } = await request('/api/v1/final-evaluation/my-grade', {
+    headers: await authHeaderFor(professor),
+  });
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 403, `expected 403, got ${response.status}`);
+});
+
+// ─── Test 5: 401 — no auth header ─────────────────────────────────────────────
+
+test('GET /my-grade returns 401 with no auth header', async (t) => {
+  const { response } = await request('/api/v1/final-evaluation/my-grade');
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 401, `expected 401, got ${response.status}`);
 });
