@@ -94,7 +94,8 @@ class SubmissionService {
 
   static async fetchSubmissionForReview(submissionId) {
     const deliverable = await Deliverable.findByPk(submissionId, {
-      include: [{ model: Group, attributes: ['id', 'name', 'leaderId'] }],
+       include: [{ model: Group, attributes: ['id', 'name', 'leaderId'] }],
+      //include: [{ model: Group, as: 'group', attributes: ['id', 'name', 'leaderId'] }],
     });
 
     if (!deliverable) {
