@@ -32,6 +32,7 @@ const PrMetric = require('./PrMetric');
 const SprintPullRequest = require('./SprintPullRequest');
 const SprintStory = require('./SprintStory');
 const StoryMetric = require('./StoryMetric');
+const MemberFinalGrade = require('./MemberFinalGrade');
 
 module.exports = {
   User,
@@ -60,4 +61,5 @@ module.exports = {
   SprintPullRequest,
   SprintStory,
   StoryMetric,
+  MemberFinalGrade,
 };
