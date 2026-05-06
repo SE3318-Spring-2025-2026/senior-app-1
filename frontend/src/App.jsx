@@ -1,3 +1,4 @@
+import SprintEvaluationHistoryPage from './SprintEvaluationHistoryPage';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import AdminHomePage from './AdminHomePage';
 import AdminCoordinatorCreatePage from './AdminCoordinatorCreatePage';
@@ -14,6 +15,7 @@ import CoordinatorStudentIdUploadPage from './CoordinatorStudentIdUploadPage';
 import CoordinatorRubricPage from './CoordinatorRubricPage';
 import GroupPage from './GroupPage';
 import HomePage from './HomePage';
+import IntegrationConfigurationPage from './IntegrationConfigurationPage';
 import ProfessorHomePage from './ProfessorHomePage';
 import ProfessorAdvisorRequestsPage from './ProfessorAdvisorRequestsPage';
 import ProfessorLoginPage from './ProfessorLoginPage';
@@ -28,6 +30,7 @@ import AppShell from './components/AppShell';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import './styles.css';
+import SprintEvaluationPage from './SprintEvaluationPage';
 
 import AdvisorRequestsPage from './AdvisorRequestsPage';
 import ProfessorCommitteeSubmissionsPage from './ProfessorCommitteeSubmissionsPage';
@@ -50,6 +53,9 @@ export default function App() {
               <Route path="/students/login" element={<AuthPage />} />
               <Route path="/students/groups/manage" element={<StudentGroupShellPage />} />
               <Route path="/students/groups/new" element={<StudentGroupShellPage />} />
+              <Route path="/students/groups/:teamId/integrations" element={<AuthGuard allowedRoles={['STUDENT']}><IntegrationConfigurationPage /></AuthGuard>} />
+              <Route path="/students/groups/:teamId/sprints/evaluation" element={<AuthGuard allowedRoles={['STUDENT']}><SprintEvaluationPage /></AuthGuard>} />
+              <Route path="/students/groups/:teamId/sprints/:sprintId/evaluation-history" element={<AuthGuard allowedRoles={['STUDENT']}><SprintEvaluationHistoryPage /></AuthGuard>} />
               <Route path="/students/notifications" element={<StudentInvitationsPage />} />
               <Route path="/team-leader/submission" element={<AuthGuard allowedRoles={['STUDENT']}><SubmissionEditorPage /></AuthGuard>} />
               <Route path="/team-leader/advisor-requests/new" element={<SubmitAdvisorRequestPage />} />
@@ -75,8 +81,8 @@ export default function App() {
               <Route path="/coordinator/grading/weight-configuration" element={<AuthGuard allowedRoles={['COORDINATOR']}><CoordinatorWeightConfigurationPage /></AuthGuard>} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
               <Route path="/advisor/requests" element={<AdvisorRequestsPage />} />
-              <Route path="/professors/committee-submissions" element={<ProfessorCommitteeSubmissionsPage />} />
-              <Route path="/professors/committee-review/:submissionId" element={<CommitteeGradingPage />} />
+              <Route path="/professors/committee-submissions" element={<AuthGuard allowedRoles={['PROFESSOR']}><ProfessorCommitteeSubmissionsPage /></AuthGuard>} />
+              <Route path="/professors/committee-review/:submissionId" element={<AuthGuard allowedRoles={['PROFESSOR']}><CommitteeGradingPage /></AuthGuard>} />
               <Route path="*" element={<HomePage />} />
             </Route>
           </Routes>

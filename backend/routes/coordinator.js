@@ -1,5 +1,6 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireNonEmptyBody } = require('../middleware/requestValidation');
 const { coordinatorLogin } = require('../controllers/adminController');
 const { importValidStudentIds } = require('../controllers/userDatabaseController');
 const { updateGroupMembership, createRubric } = require('../controllers/coordinatorController');
@@ -13,25 +14,27 @@ const coordinatorRubricController = require('../controllers/coordinatorRubricCon
 
 const router = express.Router();
 
-router.post('/login', coordinatorLogin);
+router.post('/login', requireNonEmptyBody, coordinatorLogin);
 router.post(
   '/student-id-registry/import',
   authenticate,
   authorize(['COORDINATOR']),
+  requireNonEmptyBody,
   importValidStudentIds,
 );
-router.post('/rubrics', authenticate, authorize(['COORDINATOR']), createRubric);
+router.post('/rubrics', authenticate, authorize(['COORDINATOR']), requireNonEmptyBody, createRubric);
 
 router.get('/advisors', authenticate, authorize(['COORDINATOR']), listCoordinatorAdvisors);
 router.get('/groups', authenticate, authorize(['COORDINATOR']), groupController.listGroups);
-router.patch('/groups/:groupId/advisor-transfer', authenticate, authorize(['COORDINATOR']), transferByCoordinator);
-router.patch('/groups/:groupId/members', authenticate, authorize(['COORDINATOR']), updateGroupMembership);
-router.patch('/groups/:groupId/membership/coordinator', authenticate, authorize(['COORDINATOR']), updateGroupMembership);
+router.patch('/groups/:groupId/advisor-transfer', authenticate, authorize(['COORDINATOR']), requireNonEmptyBody, transferByCoordinator);
+router.patch('/groups/:groupId/members', authenticate, authorize(['COORDINATOR']), requireNonEmptyBody, updateGroupMembership);
+router.patch('/groups/:groupId/membership/coordinator', authenticate, authorize(['COORDINATOR']), requireNonEmptyBody, updateGroupMembership);
 
 router.put(
   '/weights',
   authenticate,
   authorize(['COORDINATOR']),
+  requireNonEmptyBody,
   coordinatorWeightsController.updateWeightsValidation,
   coordinatorWeightsController.updateWeights,
 );
@@ -53,6 +56,7 @@ router.put(
   '/rubrics',
   authenticate,
   authorize(['COORDINATOR']),
+  requireNonEmptyBody,
   coordinatorRubricController.upsertRubricValidation,
   coordinatorRubricController.upsertRubric,
 );

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import apiClient from './services/apiClient';
 
 const roleTitles = {
   STUDENT: 'Student',
@@ -208,17 +209,11 @@ export default function HomePage() {
       return;
     }
 
-    fetch('/api/v1/students/me', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok || !payload.user) {
+    apiClient.get('/v1/students/me')
+      .then(({ data: payload }) => {
+        if (!payload?.user) {
           return;
         }
-
         const updatedUser = writeStudentSessionUser(payload.user);
         setStudentSession({
           fullName: updatedUser.fullName || updatedUser.name || updatedUser.studentId || updatedUser.email || 'Student',
@@ -327,19 +322,9 @@ export default function HomePage() {
       return;
     }
 
-    fetch('/api/v1/groups', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          setStudentGroups([]);
-          return;
-        }
-
-        setStudentGroups(Array.isArray(payload.data) ? payload.data : []);
+    apiClient.get('/v1/groups')
+      .then(({ data: payload }) => {
+        setStudentGroups(Array.isArray(payload?.data) ? payload.data : []);
       })
       .catch(() => {
         setStudentGroups([]);
@@ -361,31 +346,20 @@ export default function HomePage() {
     setGitHubLinkPending(true);
 
     try {
-      const response = await fetch('/api/v1/students/me/github/link', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const feedback = {
-          type: 'error',
-          title: 'GitHub link could not start',
-          message: payload.message || 'Failed to create the GitHub authorization URL.',
-        };
-        notify(feedback);
-        return;
-      }
-
+      const { data: payload } = await apiClient.get('/v1/students/me/github/link');
       window.location.assign(payload.authorizationUrl);
-    } catch {
-      const feedback = {
-        type: 'error',
-        title: 'GitHub link could not start',
-        message: 'The backend could not be reached while starting GitHub OAuth.',
-      };
+    } catch (err) {
+      const feedback = err.response
+        ? {
+            type: 'error',
+            title: 'GitHub link could not start',
+            message: err.response.data?.message || 'Failed to create the GitHub authorization URL.',
+          }
+        : {
+            type: 'error',
+            title: 'GitHub link could not start',
+            message: 'The backend could not be reached while starting GitHub OAuth.',
+          };
       notify(feedback);
     } finally {
       setGitHubLinkPending(false);

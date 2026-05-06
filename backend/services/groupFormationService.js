@@ -30,7 +30,7 @@ async function processInviteeResponse(invitationId, response, actor) {
     throw createServiceError(400, 'INVALID_INVITATION_RESPONSE', 'Response must be ACCEPT or REJECT.');
   }
 
-  return sequelize.transaction(async (transaction) => {
+  const invitation = await sequelize.transaction(async (transaction) => {
     const invitation = await Invitation.findByPk(invitationId, { transaction });
 
     if (!invitation) {
@@ -52,32 +52,25 @@ async function processInviteeResponse(invitationId, response, actor) {
     }
 
     await invitation.reload({ transaction });
-
-    try {
-      await AuditLog.create(
-        {
-          action: toAuditAction(normalizedResponse),
-          actorId: actor.id,
-          targetId: invitation.id,
-          targetType: 'INVITATION',
-          metadata: {
-            groupId: invitation.groupId,
-          },
-        },
-        { transaction },
-      );
-    } catch (error) {
-      console.error('Audit log write failed for invitation response.', {
-        invitationId,
-        actorId: actor.id,
-        action: toAuditAction(normalizedResponse),
-        error: error.message,
-      });
-      throw createServiceError(500, 'AUDIT_LOG_WRITE_FAILED', 'Audit log write failed for invitation response.');
-    }
-
     return invitation;
   });
+
+  AuditLog.create({
+    action: toAuditAction(normalizedResponse),
+    actorId: actor.id,
+    targetId: invitation.id,
+    targetType: 'INVITATION',
+    metadata: { groupId: invitation.groupId },
+  }).catch((error) => {
+    console.error('Audit log write failed for invitation response.', {
+      invitationId,
+      actorId: actor.id,
+      action: toAuditAction(normalizedResponse),
+      error: error.message,
+    });
+  });
+
+  return invitation;
 }
 
 module.exports = {

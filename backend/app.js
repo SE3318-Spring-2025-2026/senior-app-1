@@ -3,8 +3,14 @@ const fs = require('fs');
 const path = require('path');
 
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('./middleware/asyncRouteErrors');
 
 const { User, Group, AuditLog } = require('./models');
+const {
+  errorResponseNormalizer,
+  globalErrorHandler,
+  notFoundHandler,
+} = require('./middleware/errorResponse');
 
 const adminRoutes = require('./routes/admin');
 const coordinatorRoutes = require('./routes/coordinator');
@@ -17,16 +23,23 @@ const authRoutes = require('./routes/auth');
 const invitationRoutes = require('./routes/invitations');
 const notificationsRoutes = require('./routes/notifications');
 const passwordSetupTokenStoreRoutes = require('./routes/passwordSetupTokenStore');
+const internalGithubRoutes = require('./routes/internalGithub');
 const userDatabaseRoutes = require('./routes/userDatabase');
 const groupRoutes = require('./routes/groups');
 const groupDatabaseRoutes = require('./routes/groupDatabase');
+const internalIntegrationsRoutes = require('./routes/internalIntegrations');
+const internalEvaluationsRoutes = require('./routes/internalEvaluations');
+const internalJiraRoutes = require('./routes/internalJira');
+const internalSprintSyncRoutes = require('./routes/internalSprintSync');
+const teamsRoutes = require('./routes/teams');
 const submissionsRoutes = require('./routes/submissions');
 const committeeRoutes = require('./routes/committee');
 
 const app = express();
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(errorResponseNormalizer);
 
 // Serve frontend if exists
 if (fs.existsSync(frontendDistPath)) {
@@ -36,7 +49,6 @@ if (fs.existsSync(frontendDistPath)) {
 // Make models globally accessible
 app.locals.models = { User, Group, AuditLog };
 
-// Routes
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/coordinator', coordinatorRoutes);
 app.use('/api/v1/advisors', advisorRoutes);
@@ -48,16 +60,21 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1', invitationRoutes);
 app.use('/api/v1/notifications', notificationsRoutes);
 app.use('/api/v1/password-setup-token-store', passwordSetupTokenStoreRoutes);
+app.use('/api/v1/internal', internalGithubRoutes);
 app.use('/api/v1/user-database', userDatabaseRoutes);
 app.use('/api/v1/group-database', groupDatabaseRoutes);
 app.use('/api/v1/groups', groupRoutes);
+app.use('/api/v1/teams', teamsRoutes);
+app.use('/api/v1/internal', internalIntegrationsRoutes);
+app.use('/internal/integrations', internalIntegrationsRoutes);
+app.use('/internal/evaluations', internalEvaluationsRoutes);
+app.use('/internal/jira', internalJiraRoutes);
+app.use('/internal/github', internalGithubRoutes);
+app.use('/internal/sprint-sync', internalSprintSyncRoutes);
 app.use('/api/v1/committee/submissions', submissionsRoutes);
 app.use('/api/v1/committee', committeeRoutes);
 
-// Global error handler
-app.use((err, req, res, _next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Internal Server Error' });
-});
+app.use(notFoundHandler);
+app.use(globalErrorHandler);
 
 module.exports = app;

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import apiClient from './services/apiClient';
 
 const initialForm = {
   setupToken: '',
@@ -87,22 +88,10 @@ export default function ProfessorPasswordSetupPage() {
     });
 
     try {
-      const response = await fetch('/api/v1/professors/password-setup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          setupToken: form.setupToken,
-          newPassword: form.newPassword,
-        }),
+      const { data: result } = await apiClient.post('/v1/professors/password-setup', {
+        setupToken: form.setupToken,
+        newPassword: form.newPassword,
       });
-      const result = await response.json();
-
-      if (!response.ok) {
-        setFeedback(mapSetupError(result, response.status));
-        return;
-      }
 
       setFeedback({
         type: 'success',
@@ -121,6 +110,10 @@ export default function ProfessorPasswordSetupPage() {
         newPassword: '',
       }));
     } catch (error) {
+      if (error.response) {
+        setFeedback(mapSetupError(error.response.data || {}, error.response.status));
+        return;
+      }
       setFeedback({
         type: 'error',
         title: 'Request failed',

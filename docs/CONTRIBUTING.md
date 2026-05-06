@@ -52,6 +52,24 @@ senior-app-1/
 
 ## Setup & Run
 
+### Prerequisites
+
+| Tool   | Required version | Why                                                                          |
+| ------ | ---------------- | ---------------------------------------------------------------------------- |
+| Node   | **≥ 20.19** (22 recommended) | Vite 7 uses `crypto.hash`, which lands in 20.19 / 22.12. |
+| npm    | ≥ 9              | Ships with Node 20+.                                                         |
+
+The repo includes a [`.nvmrc`](../.nvmrc) pinning Node 22. With nvm:
+
+```bash
+nvm use            # picks up .nvmrc
+node --version     # should print v22.x or v20.19+
+```
+
+If `nvm` is not installed, follow https://github.com/nvm-sh/nvm#installing-and-updating, or use Node 22 from your distro's package manager.
+
+### Install & seed
+
 ```bash
 # from repo root
 npm install                       # root deps (concurrently runners)
@@ -70,11 +88,14 @@ npm run dev
 # frontend → http://localhost:5173
 ```
 
-Run tests:
+### Run tests
+
 ```bash
-npm test                         # runs the backend test suite
+npm test                         # runs the backend test suite (node:test)
 npm --prefix frontend test       # runs frontend tests (Jest + Playwright)
 ```
+
+The backend test suite uses `:memory:` SQLite, so no extra setup is needed. If you see `crypto.hash is not a function` when starting the frontend, your Node is too old — upgrade to ≥ 20.19.
 
 ---
 
@@ -398,6 +419,7 @@ test: <short description>                      → for missing test coverage
 ## Dos & Don'ts
 
 ### Do
+- Get **team leader approval** before changing any existing API endpoint (URL, method, request/response shape). Open a PR and have a team leader merge it — don't merge API changes yourself.
 - Mount every new router in `app.js`.
 - Register every new model in `models/index.js`.
 - Add new test files to `backend/package.json` `"test"` script.
@@ -408,6 +430,7 @@ test: <short description>                      → for missing test coverage
 - Define unique constraints via the model `indexes` option.
 
 ### Don't
+- Don't change an existing API endpoint (path, HTTP method, request body, or response shape) without team leader review and merge.
 - Don't call `Model.addConstraint(...)` — it's not a function on Sequelize models and crashes module load.
 - Don't `import { v4: isUUID } from 'uuid'` — `v4` generates UUIDs, it doesn't validate them.
 - Don't `await` audit log writes inside request handlers.
