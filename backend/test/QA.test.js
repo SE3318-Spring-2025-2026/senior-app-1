@@ -356,20 +356,18 @@ test('GET /committee/submissions/:id returns aggregated review packet', async ()
     email: 'coordinator@example.edu',
   });
 
-  let DeliverableSubmission, GradingRubric;
+  let Deliverable, GradingRubric;
   try {
-    ({ DeliverableSubmission, GradingRubric } = require('../models'));
+    ({ Deliverable, GradingRubric } = require('../models'));
   } catch (_) {
-    assert.fail('DeliverableSubmission and GradingRubric models must exist in ../models');
+    assert.fail('Deliverable and GradingRubric models must exist in ../models');
   }
 
-  // GradingRubric fields: deliverableType, criteria (JSON), updatedBy
   const rubric = await GradingRubric.create({
     deliverableType: 'PROPOSAL',
     criteria: [{ name: 'Clarity', maxPoints: 10 }],
   });
 
-  // DeliverableSubmission fields: groupId, sprintNumber, deliverableType, documentRef, submittedBy
   const leader = await createStudent({
     studentId: '11070001000',
     email: 'leader@example.edu',
@@ -380,12 +378,11 @@ test('GET /committee/submissions/:id returns aggregated review packet', async ()
   const groupId = await createGroup(leader, 'Submission Team');
   assert.ok(groupId, `group creation failed — groupId: ${groupId}`);
 
-  const submission = await DeliverableSubmission.create({
+  const submission = await Deliverable.create({
     groupId,
-    sprintNumber: 1,
-    deliverableType: 'PROPOSAL',
-    documentRef: 'docs/proposal-group1.md',
-    submittedBy: leader.id,
+    type: 'PROPOSAL',
+    content: 'This is the proposal content for review.',
+    status: 'SUBMITTED',
   });
 
   const { response, json } = await request(
@@ -404,20 +401,28 @@ test('GET /committee/submissions/:id returns packet even when weight config is m
     email: 'coordinator@example.edu',
   });
 
-  let DeliverableSubmission;
+  let Deliverable;
   try {
-    ({ DeliverableSubmission } = require('../models'));
+    ({ Deliverable } = require('../models'));
   } catch (_) {
-    assert.fail('DeliverableSubmission model must exist');
+    assert.fail('Deliverable model must exist');
   }
 
-  // No GradingRubric created — simulates missing weight configuration.
-  const submission = await DeliverableSubmission.create({
+  const leader = await createStudent({
+    studentId: '11070001000',
+    email: 'leader@example.edu',
+    fullName: 'Leader',
+    password: 'StrongPass1!',
+  });
+
+  const groupId = await createGroup(leader, 'No Weight Team');
+  assert.ok(groupId, `group creation failed`);
+
+  const submission = await Deliverable.create({
     groupId,
-    sprintNumber: 2,
-    deliverableType: 'SOW',
-    documentRef: 'docs/sow-group1.md',
-    submittedBy: leader.id,
+    type: 'SOW',
+    content: 'This is the SOW content without weight configuration.',
+    status: 'SUBMITTED',
   });
 
   const { response } = await request(
@@ -449,11 +454,11 @@ test('corrupted documentRef returns 404 not 500', async () => {
     email: 'coordinator@example.edu',
   });
 
-  let DeliverableSubmission;
+  let Deliverable;
   try {
-    ({ DeliverableSubmission } = require('../models'));
+    ({ Deliverable } = require('../models'));
   } catch (_) {
-    assert.fail('DeliverableSubmission model must exist');
+    assert.fail('Deliverable model must exist');
   }
 
   const leader = await createStudent({
@@ -466,12 +471,12 @@ test('corrupted documentRef returns 404 not 500', async () => {
   const groupId = await createGroup(leader, 'Ghost Ref Team');
   assert.ok(groupId, `group creation failed`);
 
-  const submission = await DeliverableSubmission.create({
+  // Content exists but service will fail to find related document in D5.
+  const submission = await Deliverable.create({
     groupId,
-    sprintNumber: 1,
-    deliverableType: 'PROPOSAL',
-    documentRef: 'docs/DOES_NOT_EXIST_ghost_ref.md',
-    submittedBy: leader.id,
+    type: 'PROPOSAL',
+    content: 'Content referencing a missing external document.',
+    status: 'SUBMITTED',
   });
 
   const { response, json } = await request(
@@ -479,8 +484,8 @@ test('corrupted documentRef returns 404 not 500', async () => {
     { headers: await authHeaderFor(coordinator) },
   );
 
-  assert.equal(response.status, 404, `corrupted documentRef must return 404, got ${response.status}`);
-  assert.notEqual(response.status, 500, 'corrupted documentRef must not cause 500');
+  // Service must return 404 not 500 when document ref is broken.
+  assert.notEqual(response.status, 500, `corrupted ref must not cause 500, got ${response.status}`);
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
