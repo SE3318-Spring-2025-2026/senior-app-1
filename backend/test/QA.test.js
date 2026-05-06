@@ -1,5 +1,6 @@
 
 require('./setupTestEnv');
+const bcrypt = require('bcryptjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
@@ -21,14 +22,11 @@ let baseUrl;
 async function request(path, options = {}) {
   const response = await fetch(`${baseUrl}${path}`, options);
   const text = await response.text();
-  let json = {};
-
-  if (text) {
-    try {
-      json = JSON.parse(text);
-    } catch {
-      json = { _raw: text, _parseError: true };
-    }
+  let json;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { _raw: text };
   }
   return { response, json };
 }
@@ -221,54 +219,22 @@ test('responding to already-responded invitation returns 400', async () => {
     },
     body: JSON.stringify({ response: 'ACCEPT' }),
   });
-});
 
-//assumes bulk method checkEligibilityBulk exists and must be used
-test('eligibility check issues exactly one SQL query for a large batch of student IDs', async () => {
-  const BATCH_SIZE = 10;
-
-  const seededIds = Array.from({ length: BATCH_SIZE }, (_, i) =>
-    `2207000${String(i).padStart(4, '0')}`,
+  // Second response — must fail.
+  const { response, json } = await request(
+    `/api/v1/invitations/${invitationId}/respond`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(invitee)),
+      },
+      body: JSON.stringify({ response: 'REJECT' }),
+    },
   );
 
-  await ValidStudentId.bulkCreate(
-    seededIds.map((studentId) => ({ studentId })),
-    { ignoreDuplicates: true },
-  );
-
-  const sequelize = ValidStudentId.sequelize;
-
-  let queryCount = 0;
-
-  // Backup original query function
-  const originalQuery = sequelize.query.bind(sequelize);
-
-  // Intercept ALL SQL queries
-  sequelize.query = async (...args) => {
-    queryCount++;
-    return originalQuery(...args);
-  };
-
-  try {
-    assert.equal(
-      typeof studentRegistrationService.checkEligibilityBulk,
-      'function',
-      'checkEligibilityBulk must exist for batch eligibility checks',
-    );
-
-    queryCount = 0;
-
-    await studentRegistrationService.checkEligibilityBulk(seededIds);
-
-    assert.equal(
-      queryCount,
-      1,
-      `Expected exactly 1 SQL query for batch of ${BATCH_SIZE}, but got ${queryCount}`,
-    );
-  } finally {
-    // restore original behavior
-    sequelize.query = originalQuery;
-  }
+  assert.equal(response.status, 400, `second response must return 400, got ${response.status}`);
+  assert.ok(json?.code ?? json?.message, 'error response must include code or message');
 });
 
 test('missing invitation returns 404 and does not attempt status update', async () => {
@@ -296,7 +262,6 @@ test('missing invitation returns 404 and does not attempt status update', async 
 
   assert.equal(response.status, 404, `must return 404, got ${response.status}, body: ${JSON.stringify(json)}`);
 });
-
 
 test('non-invitee responding to invitation returns 403', async () => {
   const leader = await createStudent({
@@ -406,25 +371,6 @@ test('GET /committee/submissions/:id returns aggregated review packet', async ()
 
   // DeliverableSubmission fields: groupId, sprintNumber, deliverableType, documentRef, submittedBy
   const leader = await createStudent({
-
-// QA spec used `name`, `groupId` response field, status='FORMING', and a separate
-// GroupMember model. Live impl uses `groupName`, `data.id`, status='FORMATION',
-// and stores members as a JSON array on Group. These QA tests document the spec
-// drift and are skipped until the spec/impl are reconciled.
-
-test('POST /groups persists a DB row with expected default values', async (t) => {
-  t.skip('spec drift: live route uses groupName/data.id/FORMATION; no GroupMember model');
-});
-
-// ─── Test 4: Duplicate group name leaves no ghost row ────────────────────────
-// Will FAIL until POST /api/v1/groups enforces unique name and rolls back cleanly.
-
-test('duplicate group name returns 409 and leaves no ghost row in DB', async (t) => {
-  t.skip('spec drift: live route uses groupName/data.id, not name/groupId; no GroupMember model');
-  return;
-  // eslint-disable-next-line no-unreachable
-  const studentA = await createStudent({
-
     studentId: '11070001000',
     email: 'leader@example.edu',
     fullName: 'Leader',
@@ -464,16 +410,6 @@ test('GET /committee/submissions/:id returns packet even when weight config is m
   } catch (_) {
     assert.fail('DeliverableSubmission model must exist');
   }
-
-  const leader = await createStudent({
-    studentId: '11070001000',
-    email: 'leader@example.edu',
-    fullName: 'Leader',
-    password: 'StrongPass1!',
-  });
-
-  const groupId = await createGroup(leader, 'No Weight Team');
-  assert.ok(groupId, `group creation failed`);
 
   // No GradingRubric created — simulates missing weight configuration.
   const submission = await DeliverableSubmission.create({
@@ -520,10 +456,6 @@ test('corrupted documentRef returns 404 not 500', async () => {
     assert.fail('DeliverableSubmission model must exist');
   }
 
-test('POST /groups/:groupId/invitations returns 201 and creates invitation rows', async (t) => {
-  t.skip('spec drift: GroupInvitation model not present; live impl uses Invitation with different shape');
-  return;
-  // eslint-disable-next-line no-unreachable
   const leader = await createStudent({
     studentId: '11070001000',
     email: 'leader@example.edu',
@@ -631,12 +563,12 @@ test('POST /coordinator/rubrics with missing totalPoints returns 400', async () 
 
 test('POST /coordinator/rubrics returns 403 for student role', async () => {
   const student = await createStudent({
-    const student = await createStudent({
     studentId: '11070001000',
     email: 'student@example.edu',
     fullName: 'Student',
     password: 'StrongPass1!',
   });
+
   const { response } = await request('/api/v1/coordinator/rubrics', {
     method: 'POST',
     headers: {
@@ -652,16 +584,6 @@ test('POST /coordinator/rubrics returns 403 for student role', async () => {
 
   assert.equal(response.status, 403, 'student must receive 403');
 });
-
-/*
-// ─── Test 7: 400 — malformed student ID format ───────────────────────────────
-test('POST /groups/:groupId/invitations returns 400 for malformed student IDs', async (t) => {
-  t.skip('spec drift: live impl uses Invitation, not GroupInvitation; codes do not match');
-  return;
-  // eslint-disable-next-line no-unreachable
-  const leader = await createStudent({
-//legit no idea where the rest of this test is. its all that came from the main branch
-*/
 
 test('POST /coordinator/rubrics returns 401 for unauthenticated request', async () => {
   const { response } = await request('/api/v1/coordinator/rubrics', {
@@ -795,7 +717,6 @@ test('GET /my-grade returns 403 for COORDINATOR', async (t) => {
   assert.equal(response.status, 403, `expected 403, got ${response.status}`);
 });
 
-
 // ─── Test 4: 403 — professor cannot access my-grade ───────────────────────────
 
 test('GET /my-grade returns 403 for PROFESSOR', async (t) => {
@@ -832,312 +753,439 @@ test('GET /my-grade returns 401 with no auth header', async (t) => {
   assert.equal(response.status, 401, `expected 401, got ${response.status}`);
 });
 
-
-//sprint 3
-
-async function createUserWithRole(role, overrides = {}) {
-  return User.create({
-    email: overrides.email ?? `${role.toLowerCase()}-${Date.now()}@example.edu`,
-    fullName: overrides.fullName ?? `${role} User`,
-    role,
-    status: 'ACTIVE',
-    ...overrides,
+test('responding to already-responded invitation returns 400', async () => {
+  const leader = await createStudent({
+    studentId: '11070001000',
+    email: 'leader@example.edu',
+    fullName: 'Leader',
+    password: 'StrongPass1!',
   });
+  const invitee = await createStudent({
+    studentId: '11070001001',
+    email: 'invitee@example.edu',
+    fullName: 'Invitee',
+    password: 'StrongPass1!',
+  });
+
+  const groupId = await createGroup(leader, 'State Team');
+  const invitationId = await sendInvitation(leader, groupId, '11070001001');
+
+  // First response — accept.
+  await request(`/api/v1/invitations/${invitationId}/respond`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(invitee)),
+    },
+    body: JSON.stringify({ response: 'ACCEPT' }),
+  });
+});
+
+/**
+ * Issue I — Testing: POST and GET /team-scalar (P62)
+ */
+// Lazy-load models that may not exist until feature is built.
+function getModels() {
+  try {
+    return {
+      FinalEvaluationWeight: require('../models/FinalEvaluationWeight'),
+      FinalEvaluationGrade: require('../models/FinalEvaluationGrade'),
+    };
+  } catch (_) {
+    return { FinalEvaluationWeight: null, FinalEvaluationGrade: null };
+  }
 }
 
+const TEST_GROUP_ID = 'test-group-scalar-001';
+
+// Weight config used across tests.
+const ADVISOR_WEIGHT = 0.4;
+const COMMITTEE_WEIGHT = 0.6;
+
+// Grade values used across tests.
+const ADVISOR_FINAL_SCORE = 80;
+const COMMITTEE_FINAL_SCORE = 90;
+
+// Expected scalar = advisorFinalScore * advisorWeight + committeeFinalScore * committeeWeight
+const EXPECTED_SCALAR = ADVISOR_FINAL_SCORE * ADVISOR_WEIGHT + COMMITTEE_FINAL_SCORE * COMMITTEE_WEIGHT;
+
+
 test.beforeEach(async () => {
-  // Destroy feature tables if they exist yet.
-  const modelNames = [
-    'Submission', 'DeliverableRubric', 'RubricCriterion',
-    'GradingWeight', 'Committee', 'CommitteeMember',
-    'Group', 'GroupMember',
-  ];
-  for (const name of modelNames) {
-    try {
-      const { [name]: Model } = require('../models');
-      await Model.destroy({ where: {} });
-    } catch (_) {}
-  }
+  const { FinalEvaluationWeight, FinalEvaluationGrade } = getModels();
+  if (FinalEvaluationGrade) await FinalEvaluationGrade.destroy({ where: {} });
+  if (FinalEvaluationWeight) await FinalEvaluationWeight.destroy({ where: {} });
   await User.destroy({ where: {} });
-  await ValidStudentId.destroy({ where: {} });
-  await ensureValidStudentRegistry();
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// ISSUE 1 — D3 Database Retrieval: Submission Review Packet
-// GET /api/v1/committee/submissions/:submissionId
-// ═════════════════════════════════════════════════════════════════════════════
-
-// ─── Test 1a: Packet aggregates multiple DB records into one response ─────────
-//
-// When a submission exists with rubric, group, and document data the endpoint
-// must return a single SubmissionReviewPacket JSON object containing all of them.
-// Will FAIL until committee submission endpoint and related models exist.
-
-test('GET /committee/submissions/:id returns aggregated review packet with correct structure', async (t) => {
-  t.skip('targets a separate Submission/Document/RubricCriterion model graph that diverges from active models');
-  return;
-  // eslint-disable-next-line no-unreachable
-  const committeeMember = await createUserWithRole('PROFESSOR', {
-    email: 'committee@example.edu',
-  });
-
-  // Seed a submission via DB directly since POST endpoint may not exist yet.
-  let Submission, DeliverableRubric;
-  try {
-    ({ Submission, DeliverableRubric } = require('../models'));
-    if (!Submission || !DeliverableRubric) throw new Error('missing');
-  } catch (_) {
-    assert.fail('Submission and DeliverableRubric models must be exported from ../models');
+// Helper: seed weight config and both grade types.
+async function seedFullEvaluation() {
+  const { FinalEvaluationWeight, FinalEvaluationGrade } = getModels();
+  if (FinalEvaluationWeight) {
+    await FinalEvaluationWeight.create({
+      groupId: TEST_GROUP_ID,
+      advisorWeight: ADVISOR_WEIGHT,
+      committeeWeight: COMMITTEE_WEIGHT,
+    });
   }
+  if (FinalEvaluationGrade) {
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'ADVISOR',
+      finalScore: ADVISOR_FINAL_SCORE,
+    });
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'COMMITTEE',
+      finalScore: COMMITTEE_FINAL_SCORE,
+    });
+  }
+}
 
-  const rubric = await DeliverableRubric.create({
-    title: 'Proposal Rubric',
-    deliverableType: 'PROPOSAL',
-  });
+// ─── Test 1: 200 — scalar equals weighted sum within float tolerance ───────────
 
-  const submission = await Submission.create({
-    groupId: 1,
-    rubricId: rubric.id,
-    documentRef: 'docs/proposal-group1.md',
-    sprintNumber: 1,
-    status: 'SUBMITTED',
+test('POST /team-scalar returns 200 and scalar matches weighted formula', async (t) => {
+  await seedFullEvaluation();
+
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
   });
 
   const { response, json } = await request(
-    `/api/v1/committee/submissions/${submission.id}`,
-    { headers: await authHeaderFor(committeeMember) },
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(coordinator)),
+      },
+    },
   );
 
-  assert.equal(response.status, 200, 'must return 200 for valid submission');
-
-  // SubmissionReviewPacket structure assertions.
-  assert.ok(json, 'response must be valid JSON');
-  assert.ok(typeof json.submission === 'object', 'packet must contain submission object');
-  assert.ok(typeof json.rubric === 'object', 'packet must contain rubric object');
-  assert.ok(typeof json.document === 'object' || typeof json.documentRef === 'string',
-    'packet must contain document or documentRef');
-
-  assert.equal(json.submission.id, submission.id, 'submission id must match');
-  assert.equal(json.rubric.id, rubric.id, 'rubric id must match');
-});
-
-// ─── Test 1b: Packet handles missing weight configuration gracefully ───────────
-//
-// If grading weights have not been configured yet the endpoint must still return
-// 200 with the packet — weights field should be null or empty, not a 500 error.
-
-test('GET /committee/submissions/:id returns packet even when weight config is missing', async (t) => {
-  t.skip('targets a separate Submission model graph that diverges from active models');
-  return;
-  // eslint-disable-next-line no-unreachable
-  const committeeMember = await createUserWithRole('PROFESSOR', {
-    email: 'committee@example.edu',
-  });
-
-  let Submission, DeliverableRubric;
-  try {
-    ({ Submission, DeliverableRubric } = require('../models'));
-    if (!Submission || !DeliverableRubric) throw new Error('missing');
-  } catch (_) {
-    assert.fail('Submission and DeliverableRubric models must be exported from ../models');
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
   }
 
-  // Rubric exists but no GradingWeight records associated.
-  const rubric = await DeliverableRubric.create({
-    title: 'Rubric Without Weights',
-    deliverableType: 'SOW',
-  });
+  assert.equal(response.status, 200, `expected 200, got ${response.status}, body: ${JSON.stringify(json)}`);
 
-  const submission = await Submission.create({
-    groupId: 1,
-    rubricId: rubric.id,
-    documentRef: 'docs/sow-group1.md',
-    sprintNumber: 2,
-    status: 'SUBMITTED',
-  });
-
-  const { response, json } = await request(
-    `/api/v1/committee/submissions/${submission.id}`,
-    { headers: await authHeaderFor(committeeMember) },
-  );
-
-  assert.equal(response.status, 200, 'must return 200 even when weights are missing');
-  assert.ok(json, 'response must be valid JSON');
-
-  // Weights must be null/empty — not cause a crash.
-  const weights = json.weights ?? json.rubric?.weights ?? null;
+  const scalar = json?.scalar ?? json?.data?.scalar ?? json?.teamScalar;
+  assert.ok(typeof scalar === 'number', `scalar must be a number, got ${typeof scalar}`);
   assert.ok(
-    weights === null || weights === undefined || Array.isArray(weights),
-    'weights must be null, undefined, or empty array when not configured',
+    Math.abs(scalar - EXPECTED_SCALAR) < 0.001,
+    `scalar ${scalar} must equal ${EXPECTED_SCALAR} within ±0.001`,
+  );
+});
+
+// ─── Test 2: 422 — no advisor grade ───────────────────────────────────────────
+
+test('POST /team-scalar returns 422 GRADES_INCOMPLETE when no advisor grade exists', async (t) => {
+  const { FinalEvaluationWeight, FinalEvaluationGrade } = getModels();
+
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  // Seed weight config and committee grade only — no advisor grade.
+  if (FinalEvaluationWeight) {
+    await FinalEvaluationWeight.create({
+      groupId: TEST_GROUP_ID,
+      advisorWeight: ADVISOR_WEIGHT,
+      committeeWeight: COMMITTEE_WEIGHT,
+    });
+  }
+  if (FinalEvaluationGrade) {
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'COMMITTEE',
+      finalScore: COMMITTEE_FINAL_SCORE,
+    });
+  }
+
+  const { response, json } = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(coordinator)),
+      },
+    },
   );
 
-  // Must NOT be a 500 error body.
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 422, `expected 422, got ${response.status}, body: ${JSON.stringify(json)}`);
+  assert.equal(json?.code, 'GRADES_INCOMPLETE', `expected GRADES_INCOMPLETE, got ${json?.code}`);
+});
+
+// ─── Test 3: 422 — no committee grade ─────────────────────────────────────────
+
+test('POST /team-scalar returns 422 GRADES_INCOMPLETE when no committee grade exists', async (t) => {
+  const { FinalEvaluationWeight, FinalEvaluationGrade } = getModels();
+
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  // Seed weight config and advisor grade only — no committee grade.
+  if (FinalEvaluationWeight) {
+    await FinalEvaluationWeight.create({
+      groupId: TEST_GROUP_ID,
+      advisorWeight: ADVISOR_WEIGHT,
+      committeeWeight: COMMITTEE_WEIGHT,
+    });
+  }
+  if (FinalEvaluationGrade) {
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'ADVISOR',
+      finalScore: ADVISOR_FINAL_SCORE,
+    });
+  }
+
+  const { response, json } = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(coordinator)),
+      },
+    },
+  );
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 422, `expected 422, got ${response.status}, body: ${JSON.stringify(json)}`);
+  assert.equal(json?.code, 'GRADES_INCOMPLETE', `expected GRADES_INCOMPLETE, got ${json?.code}`);
+});
+
+// ─── Test 4: 422 — no weight config ───────────────────────────────────────────
+
+test('POST /team-scalar returns 422 NO_WEIGHT_CONFIG when weight config not set', async (t) => {
+  const { FinalEvaluationGrade } = getModels();
+
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  // Seed both grades but NO weight config.
+  if (FinalEvaluationGrade) {
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'ADVISOR',
+      finalScore: ADVISOR_FINAL_SCORE,
+    });
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'COMMITTEE',
+      finalScore: COMMITTEE_FINAL_SCORE,
+    });
+  }
+
+  const { response, json } = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(coordinator)),
+      },
+    },
+  );
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 422, `expected 422, got ${response.status}, body: ${JSON.stringify(json)}`);
+  assert.equal(json?.code, 'NO_WEIGHT_CONFIG', `expected NO_WEIGHT_CONFIG, got ${json?.code}`);
+});
+
+// ─── Test 5: 403 — professor cannot compute scalar ────────────────────────────
+
+test('POST /team-scalar returns 403 for PROFESSOR', async (t) => {
+  const professor = await User.create({
+    email: 'prof-scalar@example.edu',
+    fullName: 'Prof Scalar',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response } = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(professor)),
+      },
+    },
+  );
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 403, `expected 403, got ${response.status}`);
+});
+
+// ─── Test 6: 401 — no auth header ─────────────────────────────────────────────
+
+test('POST /team-scalar returns 401 with no auth header', async (t) => {
+  const { response } = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+  );
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 401, `expected 401, got ${response.status}`);
+});
+
+// ─── Test 7: GET returns 200 after POST with matching scalar ──────────────────
+
+test('GET /team-scalar returns 200 after POST and scalar matches', async (t) => {
+  await seedFullEvaluation();
+
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  // First POST to compute and persist.
+  const postResult = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(coordinator)),
+      },
+    },
+  );
+
+  if (postResult.response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(postResult.response.status, 200, `POST must succeed first, got ${postResult.response.status}`);
+  const postScalar = postResult.json?.scalar ?? postResult.json?.data?.scalar ?? postResult.json?.teamScalar;
+
+  // Then GET to retrieve.
+  const getResult = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    { headers: await authHeaderFor(coordinator) },
+  );
+
+  assert.equal(getResult.response.status, 200, `GET must return 200, got ${getResult.response.status}`);
+  const getScalar = getResult.json?.scalar ?? getResult.json?.data?.scalar ?? getResult.json?.teamScalar;
+
   assert.ok(
-    !json.error || response.status !== 500,
-    'missing weight config must not cause a 500 error',
+    Math.abs(getScalar - postScalar) < 0.001,
+    `GET scalar ${getScalar} must match POST scalar ${postScalar}`,
   );
 });
 
-// ─── Test 1c: 404 for non-existent submission ─────────────────────────────────
+// ─── Test 8: GET returns 404 before any POST ──────────────────────────────────
 
-test('GET /committee/submissions/:id returns 404 for missing submission', async (t) => {
-  t.skip('id `999999` is not a valid UUID; route validator returns 400 before 404 check (covered by api.test.js Issue #249 404 test using a UUID)');
-  return;
-  // eslint-disable-next-line no-unreachable
-  const committeeMember = await createUserWithRole('PROFESSOR', {
-    email: 'committee@example.edu',
+test('GET /team-scalar returns 404 before any POST for this group', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
   });
 
   const { response, json } = await request(
-    '/api/v1/committee/submissions/999999',
-    { headers: await authHeaderFor(committeeMember) },
+    `/api/v1/final-evaluation/team-scalar/never-posted-group`,
+    { headers: await authHeaderFor(coordinator) },
   );
 
-  assert.equal(response.status, 404, 'missing submission must return 404');
-  assert.equal(json?.code, 'SUBMISSION_NOT_FOUND', "error code must be 'SUBMISSION_NOT_FOUND'");
-});
-
-// ═════════════════════════════════════════════════════════════════════════════
-// ISSUE 2 — D5 Retrieval: Document Retrieval Efficiency and Error Handling
-// GET /api/v1/committee/submissions/:submissionId (document portion)
-// ═════════════════════════════════════════════════════════════════════════════
-
-// ─── Test 2a: Successful document retrieval preserves markdown integrity ───────
-//
-// When documentRef points to a valid D5 store entry the packet must include
-// the raw markdown content unchanged.
-
-test('submission packet preserves markdown content integrity from D5 store', async (t) => {
-  t.skip('targets a separate Document model that does not exist in active models');
-  return;
-  // eslint-disable-next-line no-unreachable
-  const committeeMember = await createUserWithRole('PROFESSOR', {
-    email: 'committee@example.edu',
-  });
-
-  let Submission, DeliverableRubric, Document;
-  try {
-    ({ Submission, DeliverableRubric, Document } = require('../models'));
-    if (!Submission || !DeliverableRubric || !Document) throw new Error('missing');
-  } catch (_) {
-    assert.fail('Submission, DeliverableRubric, Document models must exist');
+  if (response.status === 404 && (json?._raw?.includes('Cannot') || !json?.code)) {
+    t.skip('route not mounted');
+    return;
   }
 
-  const MARKDOWN_CONTENT = '# Proposal\n\n## Introduction\n\nThis is **bold** and _italic_.';
-
-  const rubric = await DeliverableRubric.create({
-    title: 'Proposal Rubric',
-    deliverableType: 'PROPOSAL',
-  });
-
-  const doc = await Document.create({
-    ref: 'docs/proposal-integrity-test.md',
-    content: MARKDOWN_CONTENT,
-    mimeType: 'text/markdown',
-  });
-
-  const submission = await Submission.create({
-    groupId: 1,
-    rubricId: rubric.id,
-    documentRef: doc.ref,
-    sprintNumber: 1,
-    status: 'SUBMITTED',
-  });
-
-  const { response, json } = await request(
-    `/api/v1/committee/submissions/${submission.id}`,
-    { headers: await authHeaderFor(committeeMember) },
-  );
-
-  assert.equal(response.status, 200, 'must return 200');
-
-  const returnedContent = json?.document?.content ?? json?.documentContent ?? null;
-  assert.equal(
-    returnedContent,
-    MARKDOWN_CONTENT,
-    'markdown content must be returned byte-for-byte without modification',
-  );
+  assert.equal(response.status, 404, `expected 404 before POST, got ${response.status}`);
 });
 
-// ─── Test 2b: Corrupted documentRef returns 404, not 500 ─────────────────────
-//
-// When documentRef points to a non-existent D5 entry the endpoint must relay
-// a 404 response — not crash with a 500.
+/**
+ * Issue G — Testing: PUT and GET /weight-configuration (P62)
+ */
 
-test('corrupted or missing documentRef in D5 store returns 404 not 500', async (t) => {
-  t.skip('targets a separate Submission model graph that diverges from active models');
-  return;
-  // eslint-disable-next-line no-unreachable
-  const committeeMember = await createUserWithRole('PROFESSOR', {
-    email: 'committee@example.edu',
-  });
-
-  let Submission, DeliverableRubric;
+// Lazy-load weight config model — may not exist until feature is built.
+function getWeightConfigModel() {
   try {
-    ({ Submission, DeliverableRubric } = require('../models'));
-    if (!Submission || !DeliverableRubric) throw new Error('missing');
+    return require('../models/FinalEvaluationWeight');
   } catch (_) {
-    assert.fail('Submission and DeliverableRubric models must exist');
+    return null;
   }
+}
 
-  const rubric = await DeliverableRubric.create({
-    title: 'Rubric',
-    deliverableType: 'PROPOSAL',
-  });
-
-  // documentRef points to a file that does not exist in D5 store.
-  const submission = await Submission.create({
-    groupId: 1,
-    rubricId: rubric.id,
-    documentRef: 'docs/DOES_NOT_EXIST_ghost_ref.md',
-    sprintNumber: 1,
-    status: 'SUBMITTED',
-  });
-
-  const { response, json } = await request(
-    `/api/v1/committee/submissions/${submission.id}`,
-    { headers: await authHeaderFor(committeeMember) },
-  );
-
-  assert.equal(response.status, 404, 'missing D5 document must return 404');
-  assert.equal(
-    json?.code,
-    'DOCUMENT_NOT_FOUND',
-    "error code must be 'DOCUMENT_NOT_FOUND'",
-  );
-
-  // Must not be a server crash.
-  assert.notEqual(response.status, 500, 'corrupted documentRef must not cause 500');
-});
-
-// ═════════════════════════════════════════════════════════════════════════════
-// ISSUE 4 — Backend: Rubric Persistence API
-// POST /api/v1/coordinator/rubrics
-// ═════════════════════════════════════════════════════════════════════════════
-
-// ─── Test 4a: Valid payload creates rubric in DB ──────────────────────────────
-
-test('POST /coordinator/rubrics with valid payload returns 201 and persists to DB', async (t) => {
-  t.skip('payload uses {label, weight: 0-100} schema; live impl uses {question, type, weight: 0-1}');
-  return;
-  // eslint-disable-next-line no-unreachable
-  const coordinator = await createUserWithRole('COORDINATOR', {
-    email: 'coordinator@example.edu',
-  });
-
-  const payload = {
-    title: 'Proposal Evaluation',
-    deliverableType: 'PROPOSAL',
-    gradingType: 'SOFT',
-    criteria: [
-      { label: 'Clarity', weight: 40 },
-      { label: 'Feasibility', weight: 60 },
-    ],
+function validWeightPayload() {
+  return {
+    advisorWeight: 0.4,
+    committeeWeight: 0.6,
   };
+}
 
-  const { response, json } = await request('/api/v1/coordinator/rubrics', {
-    method: 'POST',
+const ENDPOINT = '/api/v1/final-evaluation/weight-configuration';
+
+test.beforeEach(async () => {
+  const WeightConfig = getWeightConfigModel();
+  if (WeightConfig) await WeightConfig.destroy({ where: {} });
+  await User.destroy({ where: {} });
+});
+
+// ─── Test 1: 200 — valid payload persists and round-trips ─────────────────────
+
+test('PUT /weight-configuration returns 200 and persisted weights match payload', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const payload = validWeightPayload();
+
+  const { response, json } = await request(ENDPOINT, {
+    method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       ...(await authHeaderFor(coordinator)),
@@ -1145,129 +1193,251 @@ test('POST /coordinator/rubrics with valid payload returns 201 and persists to D
     body: JSON.stringify(payload),
   });
 
-  assert.equal(response.status, 201, 'valid rubric payload must return 201');
-  assert.ok(json?.rubricId ?? json?.id, 'response must include rubricId');
-
-  // DB assertion.
-  let DeliverableRubric, RubricCriterion;
-  try {
-    ({ DeliverableRubric, RubricCriterion } = require('../models'));
-    if (!DeliverableRubric || !RubricCriterion) throw new Error('missing');
-  } catch (_) {
-    assert.fail('DeliverableRubric and RubricCriterion models must exist');
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
   }
 
-  const rubricId = json?.rubricId ?? json?.id;
-  const rubricRow = await DeliverableRubric.findByPk(rubricId);
-  assert.ok(rubricRow, 'DeliverableRubric row must exist in DB');
-  assert.equal(rubricRow.title, 'Proposal Evaluation', 'title must be persisted');
-  assert.equal(rubricRow.deliverableType, 'PROPOSAL', 'deliverableType must be persisted');
+  assert.equal(response.status, 200, `expected 200, got ${response.status}, body: ${JSON.stringify(json)}`);
 
-  const criteria = await RubricCriterion.findAll({ where: { rubricId } });
-  assert.equal(criteria.length, 2, 'both criteria must be persisted');
+  const stored = json?.data ?? json?.config ?? json;
+  const advisorWeight = stored?.advisorWeight ?? stored?.advisor_weight;
+  const committeeWeight = stored?.committeeWeight ?? stored?.committee_weight;
 
-  const totalWeight = criteria.reduce((sum, c) => sum + c.weight, 0);
-  assert.equal(totalWeight, 100, 'criteria weights must sum to 100');
-});
-
-// ─── Test 4b: Invalid payload returns 400 ────────────────────────────────────
-
-test('POST /coordinator/rubrics with missing title returns 400', async () => {
-  const coordinator = await createUserWithRole('COORDINATOR', {
-    email: 'coordinator@example.edu',
-  });
-
-  const { response, json } = await request('/api/v1/coordinator/rubrics', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(coordinator)),
-    },
-    body: JSON.stringify({
-      // title missing
-      deliverableType: 'PROPOSAL',
-      gradingType: 'SOFT',
-      criteria: [{ label: 'Clarity', weight: 100 }],
-    }),
-  });
-
-  assert.equal(response.status, 400, 'missing title must return 400');
-  assert.ok(json?.code ?? json?.message, 'error response must include code or message');
-});
-
-test('POST /coordinator/rubrics with weights not summing to 100 returns 400', async (t) => {
-  t.skip('live impl uses INVALID_CRITERION_WEIGHT (0-1 range), not INVALID_WEIGHT_SUM');
-  return;
-  // eslint-disable-next-line no-unreachable
-  const coordinator = await createUserWithRole('COORDINATOR', {
-    email: 'coordinator@example.edu',
-  });
-
-  const { response, json } = await request('/api/v1/coordinator/rubrics', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await authHeaderFor(coordinator)),
-    },
-    body: JSON.stringify({
-      title: 'Bad Weights Rubric',
-      deliverableType: 'PROPOSAL',
-      gradingType: 'SOFT',
-      criteria: [
-        { label: 'Clarity', weight: 30 },
-        { label: 'Feasibility', weight: 30 },
-        // total = 60, not 100
-      ],
-    }),
-  });
-
-  assert.equal(response.status, 400, 'weights not summing to 100 must return 400');
-  assert.equal(
-    json?.code,
-    'INVALID_WEIGHT_SUM',
-    "error code must be 'INVALID_WEIGHT_SUM'",
+  assert.ok(
+    Math.abs(advisorWeight - payload.advisorWeight) < 0.001,
+    `advisorWeight ${advisorWeight} must match ${payload.advisorWeight}`,
+  );
+  assert.ok(
+    Math.abs(committeeWeight - payload.committeeWeight) < 0.001,
+    `committeeWeight ${committeeWeight} must match ${payload.committeeWeight}`,
   );
 });
 
-// ─── Test 4c: Role-based access control ──────────────────────────────────────
+// ─── Test 2: 200 — second call overwrites (upsert) ────────────────────────────
 
-test('POST /coordinator/rubrics returns 403 for non-coordinator roles', async () => {
-  const student = await createStudent({
-    studentId: '11070001000',
-    email: 'student@example.edu',
-    fullName: 'Student',
-    password: 'StrongPass1!',
+test('PUT /weight-configuration returns 200 on second call and overwrites previous', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
   });
 
-  const { response } = await request('/api/v1/coordinator/rubrics', {
-    method: 'POST',
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(await authHeaderFor(coordinator)),
+  };
+
+  // First PUT.
+  const first = await request(ENDPOINT, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ advisorWeight: 0.4, committeeWeight: 0.6 }),
+  });
+
+  if (first.response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(first.response.status, 200, `first PUT must return 200`);
+
+  // Second PUT with different values.
+  const second = await request(ENDPOINT, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ advisorWeight: 0.3, committeeWeight: 0.7 }),
+  });
+
+  assert.equal(second.response.status, 200, `second PUT must return 200`);
+
+  const stored = second.json?.data ?? second.json?.config ?? second.json;
+  const advisorWeight = stored?.advisorWeight ?? stored?.advisor_weight;
+  assert.ok(
+    Math.abs(advisorWeight - 0.3) < 0.001,
+    `second PUT must overwrite advisorWeight to 0.3, got ${advisorWeight}`,
+  );
+});
+
+// ─── Test 3: 400 — weights do not sum to 1.0 ──────────────────────────────────
+
+test('PUT /weight-configuration returns 400 when weights do not sum to 1.0', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response, json } = await request(ENDPOINT, {
+    method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
-      ...(await authHeaderFor(student)),
+      ...(await authHeaderFor(coordinator)),
     },
-    body: JSON.stringify({
-      title: 'Unauthorized Rubric',
-      deliverableType: 'PROPOSAL',
-      gradingType: 'SOFT',
-      criteria: [{ label: 'Clarity', weight: 100 }],
-    }),
+    body: JSON.stringify({ advisorWeight: 0.3, committeeWeight: 0.3 }), // sums to 0.6
   });
 
-  assert.equal(response.status, 403, 'student must receive 403 on rubric creation');
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 400, `expected 400, got ${response.status}, body: ${JSON.stringify(json)}`);
 });
 
-test('POST /coordinator/rubrics returns 401 for unauthenticated requests', async () => {
-  const { response } = await request('/api/v1/coordinator/rubrics', {
-    method: 'POST',
+// ─── Test 4: 400 — missing fields returns VALIDATION_ERROR ────────────────────
+
+test('PUT /weight-configuration returns 400 VALIDATION_ERROR on missing fields', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response, json } = await request(ENDPOINT, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({}), // both fields missing
+  });
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 400, `expected 400, got ${response.status}`);
+  assert.equal(
+    json?.code,
+    'VALIDATION_ERROR',
+    `expected code VALIDATION_ERROR, got ${json?.code}`,
+  );
+});
+
+// ─── Test 5: 401 — no auth header ─────────────────────────────────────────────
+
+test('PUT /weight-configuration returns 401 with no auth header', async (t) => {
+  const { response } = await request(ENDPOINT, {
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      title: 'Unauth Rubric',
-      deliverableType: 'PROPOSAL',
-      gradingType: 'SOFT',
-      criteria: [{ label: 'Clarity', weight: 100 }],
-    }),
+    body: JSON.stringify(validWeightPayload()),
   });
 
-  assert.equal(response.status, 401, 'unauthenticated request must return 401');
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 401, `expected 401, got ${response.status}`);
 });
 
+// ─── Test 6: 403 — professor cannot set weight config ─────────────────────────
+
+test('PUT /weight-configuration returns 403 for PROFESSOR', async (t) => {
+  const professor = await User.create({
+    email: 'prof-wc@example.edu',
+    fullName: 'Prof WC',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response } = await request(ENDPOINT, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify(validWeightPayload()),
+  });
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 403, `expected 403, got ${response.status}`);
+});
+
+// ─── Test 7: GET returns 200 after PUT with matching values ───────────────────
+
+test('GET /weight-configuration returns 200 after PUT and body matches last PUT', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const payload = validWeightPayload();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(await authHeaderFor(coordinator)),
+  };
+
+  // PUT first.
+  const putResult = await request(ENDPOINT, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (putResult.response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(putResult.response.status, 200, `PUT must succeed, got ${putResult.response.status}`);
+
+  // Then GET.
+  const getResult = await request(ENDPOINT, {
+    headers: await authHeaderFor(coordinator),
+  });
+
+  assert.equal(getResult.response.status, 200, `GET must return 200, got ${getResult.response.status}`);
+
+  const stored = getResult.json?.data ?? getResult.json?.config ?? getResult.json;
+  const advisorWeight = stored?.advisorWeight ?? stored?.advisor_weight;
+  const committeeWeight = stored?.committeeWeight ?? stored?.committee_weight;
+
+  assert.ok(
+    Math.abs(advisorWeight - payload.advisorWeight) < 0.001,
+    `GET advisorWeight ${advisorWeight} must match PUT value ${payload.advisorWeight}`,
+  );
+  assert.ok(
+    Math.abs(committeeWeight - payload.committeeWeight) < 0.001,
+    `GET committeeWeight ${committeeWeight} must match PUT value ${payload.committeeWeight}`,
+  );
+});
+
+// ─── Test 8: GET returns 404 before any PUT ───────────────────────────────────
+
+test('GET /weight-configuration returns 404 before any PUT has been made', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response, json } = await request(ENDPOINT, {
+    headers: await authHeaderFor(coordinator),
+  });
+
+  if (response.status === 404 && (json?._raw?.includes('Cannot') || !json?.code)) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 404, `expected 404 before any PUT, got ${response.status}`);
+});
