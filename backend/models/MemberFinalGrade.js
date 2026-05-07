@@ -37,6 +37,11 @@ const MemberFinalGrade = sequelize.define(
       type: DataTypes.STRING(2),
       allowNull: false,
     },
+    finalizedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
   },
   {
     tableName: 'MemberFinalGrades',

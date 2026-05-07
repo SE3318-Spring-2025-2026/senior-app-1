@@ -1,6 +1,18 @@
-const { validationResult, param } = require('express-validator');
+'use strict';
+
+const { param, validationResult } = require('express-validator');
 const { validate: isUUID } = require('uuid');
 const finalEvaluationService = require('../services/finalEvaluationService');
+const {
+  calculateTeamScalar,
+  getTeamScalar,
+  getContributions,
+  getMyGrade,
+} = finalEvaluationService;
+
+const groupIdValidation = [
+  param('groupId').isUUID().withMessage('groupId must be a valid UUID'),
+];
 
 const finalizeValidation = [
   param('groupId')
@@ -14,47 +26,102 @@ const getGradesValidation = [
     .withMessage('groupId must be a non-empty string'),
 ];
 
-async function finalize(req, res) {
+function scalarResponse(ts) {
+  return {
+    groupId: ts.groupId,
+    scalar: ts.scalar,
+    advisorFinalScore: ts.advisorFinalScore,
+    committeeFinalScore: ts.committeeFinalScore,
+    weightConfigId: ts.weightConfigId,
+    calculatedAt: ts.calculatedAt,
+  };
+}
+
+async function postTeamScalar(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
   }
 
-  const { groupId } = req.params;
-
   try {
-    const grades = await finalEvaluationService.finalize(groupId);
+    const result = await calculateTeamScalar(req.params.groupId);
     return res.status(200).json({
       code: 'SUCCESS',
-      message: 'Final grades computed and stored',
-      data: grades.map(serialize),
+      message: 'Team scalar calculated and stored',
+      data: scalarResponse(result),
     });
   } catch (err) {
-    return handleServiceError(err, res);
+    if (err.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: err.message });
+    }
+    if (err.code === 'GRADES_INCOMPLETE') {
+      return res.status(422).json({ code: 'GRADES_INCOMPLETE', message: err.message });
+    }
+    if (err.code === 'NO_WEIGHT_CONFIG') {
+      return res.status(422).json({ code: 'NO_WEIGHT_CONFIG', message: err.message });
+    }
+    console.error('calculateTeamScalar error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 }
 
-async function getGrades(req, res) {
+async function getTeamScalarHandler(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
   }
 
-  const { groupId } = req.params;
-
   try {
-    const grades = await finalEvaluationService.getFinalGrades(groupId);
+    const result = await getTeamScalar(req.params.groupId);
     return res.status(200).json({
       code: 'SUCCESS',
-      message: 'Final grades retrieved',
-      data: grades.map(serialize),
+      message: 'Team scalar retrieved',
+      data: scalarResponse(result),
     });
   } catch (err) {
-    return handleServiceError(err, res);
+    if (err.code === 'TEAM_SCALAR_NOT_FOUND') {
+      return res.status(404).json({ code: 'TEAM_SCALAR_NOT_FOUND', message: err.message });
+    }
+    console.error('getTeamScalar error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 }
 
-function serialize(g) {
+async function getContributionsHandler(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const result = await getContributions(req.params.groupId);
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Contributions computed',
+      data: result,
+    });
+  } catch (err) {
+    if (err.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: err.message });
+    }
+    if (err.code === 'NO_SPRINT_SYNC_DATA') {
+      return res.status(422).json({ code: 'NO_SPRINT_SYNC_DATA', message: err.message });
+    }
+    console.error('getContributions error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+}
+
+async function myGrade(req, res, next) {
+  try {
+    const view = await getMyGrade(req.user);
+    return res.status(200).json(view);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+function serializeFinal(g) {
   return {
     id: g.id,
     groupId: g.groupId,
@@ -68,7 +135,7 @@ function serialize(g) {
   };
 }
 
-function handleServiceError(err, res) {
+function handleFinalizeError(err, res) {
   const clientCodes = {
     MISSING_GROUP_ID: 400,
     TEAM_SCALAR_UNAVAILABLE: 422,
@@ -83,4 +150,50 @@ function handleServiceError(err, res) {
   return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to process final grades' });
 }
 
-module.exports = { finalize, getGrades, finalizeValidation, getGradesValidation };
+async function finalize(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const grades = await finalEvaluationService.finalize(req.params.groupId);
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Final grades computed and stored',
+      data: grades.map(serializeFinal),
+    });
+  } catch (err) {
+    return handleFinalizeError(err, res);
+  }
+}
+
+async function getGrades(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const grades = await finalEvaluationService.getFinalGrades(req.params.groupId);
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Final grades retrieved',
+      data: grades.map(serializeFinal),
+    });
+  } catch (err) {
+    return handleFinalizeError(err, res);
+  }
+}
+
+module.exports = {
+  groupIdValidation,
+  finalizeValidation,
+  getGradesValidation,
+  postTeamScalar,
+  getTeamScalarHandler,
+  getContributionsHandler,
+  myGrade,
+  finalize,
+  getGrades,
+};
