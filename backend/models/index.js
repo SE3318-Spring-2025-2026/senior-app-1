@@ -29,6 +29,8 @@ const DeliverableSubmission = require('./DeliverableSubmission');
 const DeliverableWeightConfiguration = require('./DeliverableWeightConfiguration');
 const GroupDeliverable = require('./GroupDeliverable');
 const PrMetric = require('./PrMetric');
+const SprintPullRequest = require('./SprintPullRequest');
+const SprintStory = require('./SprintStory');
 const StoryMetric = require('./StoryMetric');
 const FinalEvaluationGrade = require('./FinalEvaluationGrade');
 const FinalEvaluationWeight = require('./FinalEvaluationWeight');
@@ -58,6 +60,8 @@ module.exports = {
   DeliverableWeightConfiguration,
   GroupDeliverable,
   PrMetric,
+  SprintPullRequest,
+  SprintStory,
   StoryMetric,
   FinalEvaluationGrade,
   FinalEvaluationWeight,
