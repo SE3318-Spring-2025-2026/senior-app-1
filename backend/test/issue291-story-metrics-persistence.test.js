@@ -188,6 +188,60 @@ test('safely handles repeated metric submissions by updating existing metric row
   assert.equal(storedMetrics[0].metricValue, 0.95);
 });
 
+test('rejects story metrics for teams without an integration binding', async () => {
+  const { response, json } = await request('/internal/sprint-sync/stories', {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({
+      teamId: 'missing-team',
+      sprintId: 'sprint_2026_03',
+      stories: [
+        {
+          issueKey: 'SPM-214',
+          metricName: 'storyCompletionScore',
+          metricValue: 0.85,
+          unit: 'ratio',
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 404);
+  assert.equal(json.code, 'INTEGRATION_BINDING_NOT_FOUND');
+});
+
+test('rejects duplicate story metrics in the same payload', async () => {
+  await createTeamBinding();
+
+  const { response, json } = await request('/internal/sprint-sync/stories', {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: 'sprint_2026_03',
+      stories: [
+        {
+          issueKey: 'SPM-214',
+          metricName: 'storyCompletionScore',
+          metricValue: 0.85,
+          unit: 'ratio',
+        },
+        {
+          issueKey: 'SPM-214',
+          metricName: 'storyCompletionScore',
+          metricValue: 0.95,
+          unit: 'ratio',
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(json.code, 'VALIDATION_ERROR');
+  assert.equal(json.message, 'Duplicate story metrics in request payload');
+  assert.equal(await StoryMetric.count(), 0);
+});
+
 test('requires internal API key for story metric persistence', async () => {
   const { response, json } = await request('/internal/sprint-sync/stories', {
     method: 'POST',

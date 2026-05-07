@@ -68,6 +68,18 @@ test('PR metric model rejects missing required fields and invalid metric values'
       teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
       sprintId: 'sprint_2026_03',
       prNumber: 142,
+      metricName: '',
+      metricValue: 0.92,
+      unit: 'ratio',
+    }),
+    /Validation/,
+  );
+
+  await assert.rejects(
+    PrMetric.create({
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: 'sprint_2026_03',
+      prNumber: 142,
       metricName: 'reviewReadinessScore',
       metricValue: -1,
       unit: 'ratio',
@@ -120,4 +132,36 @@ test('PR metric model keeps one value per team sprint PR metric name', async () 
     }),
     /UniqueConstraintError|Validation error/,
   );
+});
+
+test('PR metric model requires an existing integration binding and supports eager loading', async () => {
+  await assert.rejects(
+    PrMetric.create({
+      teamId: 'missing-team',
+      sprintId: 'sprint_2026_03',
+      prNumber: 142,
+      metricName: 'reviewReadinessScore',
+      metricValue: 0.92,
+      unit: 'ratio',
+    }),
+    /ForeignKeyConstraintError/,
+  );
+
+  await createTeamBinding('team_assoc');
+  await PrMetric.create({
+    teamId: 'team_assoc',
+    sprintId: 'sprint_2026_03',
+    prNumber: 142,
+    metricName: 'reviewReadinessScore',
+    metricValue: 0.92,
+    unit: 'ratio',
+  });
+
+  const binding = await IntegrationBinding.findOne({
+    where: { teamId: 'team_assoc' },
+    include: 'prMetrics',
+  });
+
+  assert.equal(binding.prMetrics.length, 1);
+  assert.equal(binding.prMetrics[0].prNumber, 142);
 });
