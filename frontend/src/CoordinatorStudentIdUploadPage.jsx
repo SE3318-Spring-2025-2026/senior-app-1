@@ -69,7 +69,7 @@ export default function CoordinatorStudentIdUploadPage() {
       title: 'Coordinator login required',
       message: 'Please sign in before opening the student ID upload page.',
     });
-    navigate('/coordinator/login', { replace: true });
+    navigate('/login', { replace: true });
   }, [navigate, notify, token]);
 
   async function handleSubmit(event) {

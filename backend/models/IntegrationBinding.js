@@ -31,6 +31,10 @@ const IntegrationBinding = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    jiraUserEmail: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     jiraProjectKey: {
       type: DataTypes.STRING,
       allowNull: false,

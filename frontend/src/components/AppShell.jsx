@@ -238,14 +238,11 @@ export default function AppShell() {
                     </>
                   ) : (
                     <>
-                      <Link to="/auth" role="menuitem" className="app-profile-option" onClick={() => setOpenProfile(false)}>
-                        Login / Sign up
+                      <Link to="/login" role="menuitem" className="app-profile-option" onClick={() => setOpenProfile(false)}>
+                        Login
                       </Link>
-                      <Link to="/students/login" role="menuitem" className="app-profile-option" onClick={() => setOpenProfile(false)}>
-                        Student Login
-                      </Link>
-                      <Link to="/admin/login" role="menuitem" className="app-profile-option" onClick={() => setOpenProfile(false)}>
-                        Admin Login
+                      <Link to="/students/register" role="menuitem" className="app-profile-option" onClick={() => setOpenProfile(false)}>
+                        Sign up
                       </Link>
                     </>
                   )}

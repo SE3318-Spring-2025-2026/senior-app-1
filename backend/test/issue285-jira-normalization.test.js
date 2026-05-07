@@ -25,7 +25,10 @@ test('normalizes a Jira issue with direct and nested field mappings', async () =
     status: 'IN_PROGRESS',
     storyPoints: 5,
     assigneeId: 'stu_20230017',
+    reporterId: null,
     sprintId: 'sprint_2026_03',
+    sourceCreatedAt: null,
+    sourceUpdatedAt: null,
   });
 });
 
@@ -45,7 +48,10 @@ test('normalization safely handles missing description and assignee fields', asy
   assert.equal(normalized.status, 'TO_DO');
   assert.equal(normalized.storyPoints, null);
   assert.equal(normalized.assigneeId, null);
+  assert.equal(normalized.reporterId, null);
   assert.equal(normalized.sprintId, 'sprint_2026_03');
+  assert.equal(normalized.sourceCreatedAt, null);
+  assert.equal(normalized.sourceUpdatedAt, null);
 });
 
 test('normalization extracts text from Atlassian document descriptions', async () => {
@@ -79,7 +85,10 @@ test('normalization extracts text from Atlassian document descriptions', async (
   assert.equal(normalized.description, 'First line of text.\nSecond line of text.');
   assert.equal(normalized.storyPoints, 8);
   assert.equal(normalized.assigneeId, 'jira-user-17');
+  assert.equal(normalized.reporterId, null);
   assert.equal(normalized.status, 'DONE');
+  assert.equal(normalized.sourceCreatedAt, null);
+  assert.equal(normalized.sourceUpdatedAt, null);
 });
 
 test('normalization resolves sprint id from active sprint arrays, numeric ids, or fallback value', async () => {
@@ -139,6 +148,7 @@ test('normalization does not fall back to assignee display fields when stable id
   });
 
   assert.equal(normalized.assigneeId, null);
+  assert.equal(normalized.reporterId, null);
   assert.equal(normalized.sprintId, 'sprint_2026_06');
 });
 
@@ -152,6 +162,9 @@ test('normalization keeps required shape even when Jira issue payload is sparse'
     status: 'UNKNOWN',
     storyPoints: null,
     assigneeId: null,
+    reporterId: null,
     sprintId: null,
+    sourceCreatedAt: null,
+    sourceUpdatedAt: null,
   });
 });
