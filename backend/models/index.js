@@ -6,6 +6,12 @@
  * a single location and so `sequelize.sync()` / migrations see all tables.
  */
 
+
+const User = require('./User');
+const Professor = require('./Professor');
+const ValidStudentId = require('./ValidStudentId');
+const OAuthState = require('./OAuthState');
+const LinkedGitHubAccount = require('./LinkedGitHubAccount');
 const Group = require('./Group');
 const AdvisorRequest = require('./AdvisorRequest');
 const GroupAdvisorAssignment = require('./GroupAdvisorAssignment');
@@ -27,6 +33,7 @@ const PrMetric = require('./PrMetric');
 const SprintPullRequest = require('./SprintPullRequest');
 const SprintStory = require('./SprintStory');
 const StoryMetric = require('./StoryMetric');
+const FinalEvaluationGrade = require('./FinalEvaluationGrade');
 const FinalEvaluationWeight = require('./FinalEvaluationWeight');
 const TeamScalar = require('./TeamScalar');
 const SprintMemberRecord = require('./SprintMemberRecord');
@@ -98,4 +105,3 @@ module.exports = {
   SprintMemberRecord,
   AdvisorGrade,
 };
-const Notification = require('./Notification');
