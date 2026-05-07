@@ -1,11 +1,3 @@
-/**
- * models/index.js
- *
- * Central model registry.
- * Add every Sequelize model here so the rest of the app can import from
- * a single location and so `sequelize.sync()` / migrations see all tables.
- */
-
 const User = require('./User');
 const Professor = require('./Professor');
 const ValidStudentId = require('./ValidStudentId');
@@ -17,6 +9,7 @@ const GroupAdvisorAssignment = require('./GroupAdvisorAssignment');
 const Invitation = require('./Invitation');
 const AuditLog = require('./AuditLog');
 const Notification = require('./Notification');
+<<<<<<< Updated upstream
 const IntegrationTokenReference = require('./IntegrationTokenReference');
 const IntegrationBinding = require('./IntegrationBinding');
 const GradingRubric = require('./GradingRubric');
@@ -32,6 +25,9 @@ const PrMetric = require('./PrMetric');
 const SprintPullRequest = require('./SprintPullRequest');
 const SprintStory = require('./SprintStory');
 const StoryMetric = require('./StoryMetric');
+=======
+const FinalEvaluationWeight = require('./FinalEvaluationWeight');
+>>>>>>> Stashed changes
 
 module.exports = {
   User,
@@ -45,6 +41,7 @@ module.exports = {
   Invitation,
   AuditLog,
   Notification,
+<<<<<<< Updated upstream
   IntegrationTokenReference,
   IntegrationBinding,
   GradingRubric,
@@ -60,4 +57,7 @@ module.exports = {
   SprintPullRequest,
   SprintStory,
   StoryMetric,
+=======
+  FinalEvaluationWeight,
+>>>>>>> Stashed changes
 };

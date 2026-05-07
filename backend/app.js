@@ -49,6 +49,11 @@ if (fs.existsSync(frontendDistPath)) {
 // Make models globally accessible
 app.locals.models = { User, Group, AuditLog };
 
+<<<<<<< Updated upstream
+=======
+// Routes
+app.use('/api/v1/final-evaluation', require('./routes/finalEvaluation'));
+>>>>>>> Stashed changes
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/coordinator', coordinatorRoutes);
 app.use('/api/v1/advisors', advisorRoutes);
