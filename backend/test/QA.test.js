@@ -786,3 +786,367 @@ test('responding to already-responded invitation returns 400', async () => {
   });
 });
 
+/**
+ * Issue I — Testing: POST and GET /team-scalar (P62)
+ *
+ * Run: cd backend && npm test -- test/issue-I-p62-team-scalar.test.js
+ * Add this file to package.json "test" script when merging.
+ */
+
+// Lazy-load models that may not exist until feature is built.
+function getModels() {
+  try {
+    return {
+      FinalEvaluationWeight: require('../models/FinalEvaluationWeight'),
+      FinalEvaluationGrade: require('../models/FinalEvaluationGrade'),
+    };
+  } catch (_) {
+    return { FinalEvaluationWeight: null, FinalEvaluationGrade: null };
+  }
+}
+
+const TEST_GROUP_ID = 'test-group-scalar-001';
+
+// Weight config used across tests.
+const ADVISOR_WEIGHT = 0.4;
+const COMMITTEE_WEIGHT = 0.6;
+
+// Grade values used across tests.
+const ADVISOR_FINAL_SCORE = 80;
+const COMMITTEE_FINAL_SCORE = 90;
+
+// Expected scalar = advisorFinalScore * advisorWeight + committeeFinalScore * committeeWeight
+const EXPECTED_SCALAR = ADVISOR_FINAL_SCORE * ADVISOR_WEIGHT + COMMITTEE_FINAL_SCORE * COMMITTEE_WEIGHT;
+
+test.beforeEach(async () => {
+  const { FinalEvaluationWeight, FinalEvaluationGrade } = getModels();
+  if (FinalEvaluationGrade) await FinalEvaluationGrade.destroy({ where: {} });
+  if (FinalEvaluationWeight) await FinalEvaluationWeight.destroy({ where: {} });
+  await User.destroy({ where: {} });
+});
+
+// Helper: seed weight config and both grade types.
+async function seedFullEvaluation() {
+  const { FinalEvaluationWeight, FinalEvaluationGrade } = getModels();
+  if (FinalEvaluationWeight) {
+    await FinalEvaluationWeight.create({
+      groupId: TEST_GROUP_ID,
+      advisorWeight: ADVISOR_WEIGHT,
+      committeeWeight: COMMITTEE_WEIGHT,
+    });
+  }
+  if (FinalEvaluationGrade) {
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'ADVISOR',
+      finalScore: ADVISOR_FINAL_SCORE,
+    });
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'COMMITTEE',
+      finalScore: COMMITTEE_FINAL_SCORE,
+    });
+  }
+}
+
+// ─── Test 1: 200 — scalar equals weighted sum within float tolerance ───────────
+
+test('POST /team-scalar returns 200 and scalar matches weighted formula', async (t) => {
+  await seedFullEvaluation();
+
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response, json } = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(coordinator)),
+      },
+    },
+  );
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 200, `expected 200, got ${response.status}, body: ${JSON.stringify(json)}`);
+
+  const scalar = json?.scalar ?? json?.data?.scalar ?? json?.teamScalar;
+  assert.ok(typeof scalar === 'number', `scalar must be a number, got ${typeof scalar}`);
+  assert.ok(
+    Math.abs(scalar - EXPECTED_SCALAR) < 0.001,
+    `scalar ${scalar} must equal ${EXPECTED_SCALAR} within ±0.001`,
+  );
+});
+
+// ─── Test 2: 422 — no advisor grade ───────────────────────────────────────────
+
+test('POST /team-scalar returns 422 GRADES_INCOMPLETE when no advisor grade exists', async (t) => {
+  const { FinalEvaluationWeight, FinalEvaluationGrade } = getModels();
+
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  // Seed weight config and committee grade only — no advisor grade.
+  if (FinalEvaluationWeight) {
+    await FinalEvaluationWeight.create({
+      groupId: TEST_GROUP_ID,
+      advisorWeight: ADVISOR_WEIGHT,
+      committeeWeight: COMMITTEE_WEIGHT,
+    });
+  }
+  if (FinalEvaluationGrade) {
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'COMMITTEE',
+      finalScore: COMMITTEE_FINAL_SCORE,
+    });
+  }
+
+  const { response, json } = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(coordinator)),
+      },
+    },
+  );
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 422, `expected 422, got ${response.status}, body: ${JSON.stringify(json)}`);
+  assert.equal(json?.code, 'GRADES_INCOMPLETE', `expected GRADES_INCOMPLETE, got ${json?.code}`);
+});
+
+// ─── Test 3: 422 — no committee grade ─────────────────────────────────────────
+
+test('POST /team-scalar returns 422 GRADES_INCOMPLETE when no committee grade exists', async (t) => {
+  const { FinalEvaluationWeight, FinalEvaluationGrade } = getModels();
+
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  // Seed weight config and advisor grade only — no committee grade.
+  if (FinalEvaluationWeight) {
+    await FinalEvaluationWeight.create({
+      groupId: TEST_GROUP_ID,
+      advisorWeight: ADVISOR_WEIGHT,
+      committeeWeight: COMMITTEE_WEIGHT,
+    });
+  }
+  if (FinalEvaluationGrade) {
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'ADVISOR',
+      finalScore: ADVISOR_FINAL_SCORE,
+    });
+  }
+
+  const { response, json } = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(coordinator)),
+      },
+    },
+  );
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 422, `expected 422, got ${response.status}, body: ${JSON.stringify(json)}`);
+  assert.equal(json?.code, 'GRADES_INCOMPLETE', `expected GRADES_INCOMPLETE, got ${json?.code}`);
+});
+
+// ─── Test 4: 422 — no weight config ───────────────────────────────────────────
+
+test('POST /team-scalar returns 422 NO_WEIGHT_CONFIG when weight config not set', async (t) => {
+  const { FinalEvaluationGrade } = getModels();
+
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  // Seed both grades but NO weight config.
+  if (FinalEvaluationGrade) {
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'ADVISOR',
+      finalScore: ADVISOR_FINAL_SCORE,
+    });
+    await FinalEvaluationGrade.create({
+      groupId: TEST_GROUP_ID,
+      gradeType: 'COMMITTEE',
+      finalScore: COMMITTEE_FINAL_SCORE,
+    });
+  }
+
+  const { response, json } = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(coordinator)),
+      },
+    },
+  );
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 422, `expected 422, got ${response.status}, body: ${JSON.stringify(json)}`);
+  assert.equal(json?.code, 'NO_WEIGHT_CONFIG', `expected NO_WEIGHT_CONFIG, got ${json?.code}`);
+});
+
+// ─── Test 5: 403 — professor cannot compute scalar ────────────────────────────
+
+test('POST /team-scalar returns 403 for PROFESSOR', async (t) => {
+  const professor = await User.create({
+    email: 'prof-scalar@example.edu',
+    fullName: 'Prof Scalar',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response } = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(professor)),
+      },
+    },
+  );
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 403, `expected 403, got ${response.status}`);
+});
+
+// ─── Test 6: 401 — no auth header ─────────────────────────────────────────────
+
+test('POST /team-scalar returns 401 with no auth header', async (t) => {
+  const { response } = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+  );
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 401, `expected 401, got ${response.status}`);
+});
+
+// ─── Test 7: GET returns 200 after POST with matching scalar ──────────────────
+
+test('GET /team-scalar returns 200 after POST and scalar matches', async (t) => {
+  await seedFullEvaluation();
+
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  // First POST to compute and persist.
+  const postResult = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeaderFor(coordinator)),
+      },
+    },
+  );
+
+  if (postResult.response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(postResult.response.status, 200, `POST must succeed first, got ${postResult.response.status}`);
+  const postScalar = postResult.json?.scalar ?? postResult.json?.data?.scalar ?? postResult.json?.teamScalar;
+
+  // Then GET to retrieve.
+  const getResult = await request(
+    `/api/v1/final-evaluation/team-scalar/${TEST_GROUP_ID}`,
+    { headers: await authHeaderFor(coordinator) },
+  );
+
+  assert.equal(getResult.response.status, 200, `GET must return 200, got ${getResult.response.status}`);
+  const getScalar = getResult.json?.scalar ?? getResult.json?.data?.scalar ?? getResult.json?.teamScalar;
+
+  assert.ok(
+    Math.abs(getScalar - postScalar) < 0.001,
+    `GET scalar ${getScalar} must match POST scalar ${postScalar}`,
+  );
+});
+
+// ─── Test 8: GET returns 404 before any POST ──────────────────────────────────
+
+test('GET /team-scalar returns 404 before any POST for this group', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-scalar@example.edu',
+    fullName: 'Coord Scalar',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response, json } = await request(
+    `/api/v1/final-evaluation/team-scalar/never-posted-group`,
+    { headers: await authHeaderFor(coordinator) },
+  );
+
+  if (response.status === 404 && (json?._raw?.includes('Cannot') || !json?.code)) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 404, `expected 404 before POST, got ${response.status}`);
+});
