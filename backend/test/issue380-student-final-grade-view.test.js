@@ -26,7 +26,7 @@ let server;
 let baseUrl;
 
 const GROUP_ID = 'bbbbcccc-dddd-eeee-ffff-aaaaaaaaaaaa';
-const HASH = bcrypt.hashSync('StrongPass1!', 10);
+let HASH;
 
 async function request(path, options = {}) {
   const res = await fetch(`${baseUrl}${path}`, options);
@@ -42,6 +42,7 @@ function bearerHeader(user) {
 }
 
 test.before(async () => {
+  HASH = bcrypt.hashSync('StrongPass1!', 10);
   await sequelize.sync({ force: true });
   await ensureValidStudentRegistry();
   server = app.listen(0);

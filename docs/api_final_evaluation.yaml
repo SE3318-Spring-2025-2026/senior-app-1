@@ -927,8 +927,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         "404":
-          description: No finalized grade found. Coordinator has not run P64 for your group yet.
+          description: |
+            Grade not available. The `code` field distinguishes two cases:
+            - `GROUP_NOT_FOUND` — the student is not a member of any group yet.
+            - `GRADE_NOT_FOUND` — the student has a group but the coordinator has not run P64 finalization yet.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              examples:
+                group_not_found:
+                  summary: Student has no group
+                  value:
+                    code: GROUP_NOT_FOUND
+                    message: No group found for this student
+                grade_not_found:
+                  summary: Grades not yet finalized
+                  value:
+                    code: GRADE_NOT_FOUND
+                    message: Coordinator has not finalized grades for your group yet
