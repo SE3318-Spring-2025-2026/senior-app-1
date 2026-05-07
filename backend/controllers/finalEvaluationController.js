@@ -1,10 +1,24 @@
 'use strict';
 
-const { param, validationResult } = require('express-validator');
-const { calculateTeamScalar, getTeamScalar, getContributions } = require('../services/finalEvaluationService');
+const { body, param, validationResult } = require('express-validator');
+const {
+  submitAdvisorGrade,
+  submitCommitteeGrade,
+  calculateTeamScalar,
+  getTeamScalar,
+  getContributions,
+} = require('../services/finalEvaluationService');
 
 const groupIdValidation = [
   param('groupId').isUUID().withMessage('groupId must be a valid UUID'),
+];
+
+const gradePayloadValidation = [
+  body('deliverableId').isUUID().withMessage('deliverableId must be a valid UUID'),
+  body('scores').isArray({ min: 1 }).withMessage('scores must be a non-empty array'),
+  body('scores.*.criterionId').isString().trim().notEmpty().withMessage('criterionId is required'),
+  body('scores.*.value').isFloat({ min: 0, max: 1 }).withMessage('value must be between 0 and 1'),
+  body('comments').optional({ nullable: true }).isString().withMessage('comments must be a string'),
 ];
 
 function scalarResponse(ts) {
@@ -93,8 +107,82 @@ async function getContributionsHandler(req, res) {
   }
 }
 
+async function postAdvisorGrade(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const grade = await submitAdvisorGrade({
+      groupId: req.params.groupId,
+      deliverableId: req.body.deliverableId,
+      scores: req.body.scores,
+      comments: req.body.comments,
+      gradedBy: req.user.id,
+    });
+    return res.status(201).json({
+      code: 'SUCCESS',
+      message: 'Advisor grade submitted',
+      data: {
+        ...grade.toJSON(),
+        deliverableId: req.body.deliverableId,
+      },
+    });
+  } catch (err) {
+    if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND') {
+      return res.status(404).json({ code: err.code, message: err.message });
+    }
+    if (err.code === 'NOT_ASSIGNED_ADVISOR') {
+      return res.status(403).json({ code: err.code, message: err.message });
+    }
+    if (err.code === 'GRADE_ALREADY_SUBMITTED') {
+      return res.status(409).json({ code: err.code, message: err.message });
+    }
+    console.error('submitAdvisorGrade error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+}
+
+async function postCommitteeGrade(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const grade = await submitCommitteeGrade({
+      groupId: req.params.groupId,
+      deliverableId: req.body.deliverableId,
+      scores: req.body.scores,
+      comments: req.body.comments,
+      gradedBy: req.user.id,
+    });
+    return res.status(201).json({
+      code: 'SUCCESS',
+      message: 'Committee grade submitted',
+      data: {
+        ...grade.toJSON(),
+        deliverableId: req.body.deliverableId,
+      },
+    });
+  } catch (err) {
+    if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND') {
+      return res.status(404).json({ code: err.code, message: err.message });
+    }
+    if (err.code === 'GRADE_ALREADY_SUBMITTED') {
+      return res.status(409).json({ code: err.code, message: err.message });
+    }
+    console.error('submitCommitteeGrade error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+}
+
 module.exports = {
   groupIdValidation,
+  gradePayloadValidation,
+  postAdvisorGrade,
+  postCommitteeGrade,
   postTeamScalar,
   getTeamScalarHandler,
   getContributionsHandler,

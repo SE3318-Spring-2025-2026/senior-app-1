@@ -1,11 +1,122 @@
 'use strict';
 
-const { Group, FinalEvaluationGrade, FinalEvaluationWeight, TeamScalar, SprintMemberRecord, User } = require('../models');
+const {
+  Group,
+  FinalEvaluationGrade,
+  FinalEvaluationWeight,
+  TeamScalar,
+  SprintMemberRecord,
+  User,
+  Deliverable,
+  AuditLog,
+} = require('../models');
 
 function serviceError(code, message) {
   const err = new Error(message);
   err.code = code;
   return err;
+}
+
+function calculateFinalScore(scores) {
+  return parseFloat((scores.reduce((sum, score) => sum + score.value, 0) / scores.length).toFixed(4));
+}
+
+async function submitAdvisorGrade({ groupId, deliverableId, gradedBy, scores, comments }) {
+  const group = await Group.findByPk(groupId);
+  if (!group) throw serviceError('GROUP_NOT_FOUND', 'Group not found');
+
+  if (String(group.advisorId || '') !== String(gradedBy)) {
+    throw serviceError('NOT_ASSIGNED_ADVISOR', 'Only the assigned advisor can submit advisor grade');
+  }
+
+  const deliverable = await Deliverable.findOne({ where: { id: deliverableId, groupId } });
+  if (!deliverable) throw serviceError('DELIVERABLE_NOT_FOUND', 'Deliverable not found');
+
+  const existing = await FinalEvaluationGrade.findOne({
+    where: {
+      groupId,
+      gradeType: 'ADVISOR',
+      gradedBy,
+    },
+  });
+  if (existing) {
+    throw serviceError('GRADE_ALREADY_SUBMITTED', 'Advisor grade already submitted');
+  }
+
+  const grade = await FinalEvaluationGrade.create({
+    groupId,
+    gradeType: 'ADVISOR',
+    gradedBy,
+    scores,
+    finalScore: calculateFinalScore(scores),
+    comments: comments ?? null,
+  });
+
+  _logGradingEvent({
+    actorId: gradedBy,
+    gradeId: grade.id,
+    groupId,
+    deliverableId,
+    graderRole: 'ADVISOR',
+    gradeType: 'ADVISOR',
+  }).catch((err) => console.error('[finalEvaluationService] audit log failed:', err));
+
+  return grade;
+}
+
+async function submitCommitteeGrade({ groupId, deliverableId, gradedBy, scores, comments }) {
+  const group = await Group.findByPk(groupId);
+  if (!group) throw serviceError('GROUP_NOT_FOUND', 'Group not found');
+
+  const deliverable = await Deliverable.findOne({ where: { id: deliverableId, groupId } });
+  if (!deliverable) throw serviceError('DELIVERABLE_NOT_FOUND', 'Deliverable not found');
+
+  const existing = await FinalEvaluationGrade.findOne({
+    where: {
+      groupId,
+      gradeType: 'COMMITTEE',
+      gradedBy,
+    },
+  });
+  if (existing) {
+    throw serviceError('GRADE_ALREADY_SUBMITTED', 'Committee grade already submitted');
+  }
+
+  const grade = await FinalEvaluationGrade.create({
+    groupId,
+    gradeType: 'COMMITTEE',
+    gradedBy,
+    scores,
+    finalScore: calculateFinalScore(scores),
+    comments: comments ?? null,
+  });
+
+  _logGradingEvent({
+    actorId: gradedBy,
+    gradeId: grade.id,
+    groupId,
+    deliverableId,
+    graderRole: 'COMMITTEE',
+    gradeType: 'COMMITTEE',
+  }).catch((err) => console.error('[finalEvaluationService] audit log failed:', err));
+
+  return grade;
+}
+
+function _logGradingEvent({ actorId, gradeId, groupId, deliverableId, graderRole, gradeType }) {
+  return AuditLog.create({
+    action: 'GRADE_SUBMITTED',
+    actorId,
+    targetType: 'GRADE',
+    targetId: gradeId,
+    metadata: {
+      groupId,
+      deliverableId,
+      graderRole,
+      gradeType,
+      timestamp: new Date().toISOString(),
+    },
+  });
 }
 
 async function calculateTeamScalar(groupId) {
@@ -119,4 +230,10 @@ async function getContributions(groupId) {
   };
 }
 
-module.exports = { calculateTeamScalar, getTeamScalar, getContributions };
+module.exports = {
+  submitAdvisorGrade,
+  submitCommitteeGrade,
+  calculateTeamScalar,
+  getTeamScalar,
+  getContributions,
+};
