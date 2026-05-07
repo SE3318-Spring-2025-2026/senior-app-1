@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 "use strict";
 
 const { param, body, validationResult } = require("express-validator");
@@ -473,6 +474,9 @@ const submitCommitteeGrade = async (req, res, next) => {
 =======
 // ADVISOR GRADE ENDPOINTS
 const { body } = require('express-validator');
+=======
+const { param, body, validationResult } = require('express-validator');
+>>>>>>> 65544e7 (refactor: remove legacy endpoints, keep only advisor grade logic (PR #366 clean))
 const { submitAdvisorGrade } = require('../services/finalEvaluationService');
 
 const submitAdvisorGradeValidation = [
@@ -509,8 +513,10 @@ async function postAdvisorGrade(req, res, next) {
   }
 }
 
-module.exports.submitAdvisorGradeValidation = submitAdvisorGradeValidation;
-module.exports.postAdvisorGrade = postAdvisorGrade;
+module.exports = {
+  submitAdvisorGradeValidation,
+  postAdvisorGrade,
+};
 'use strict';
 
 const { param, validationResult } = require('express-validator');

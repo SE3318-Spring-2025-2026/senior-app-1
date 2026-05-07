@@ -24,7 +24,6 @@ const Grade = require('./Grade');
 const DeliverableRubric = require('./DeliverableRubric');
 const Deliverable = require('./Deliverable');
 const CommitteeReview = require('./CommitteeReview');
-
 const SprintWeightConfiguration = require('./SprintWeightConfiguration');
 const DeliverableSubmission = require('./DeliverableSubmission');
 const DeliverableWeightConfiguration = require('./DeliverableWeightConfiguration');
@@ -33,12 +32,11 @@ const PrMetric = require('./PrMetric');
 const SprintPullRequest = require('./SprintPullRequest');
 const SprintStory = require('./SprintStory');
 const StoryMetric = require('./StoryMetric');
+const FinalEvaluationGrade = require('./FinalEvaluationGrade');
 const FinalEvaluationWeight = require('./FinalEvaluationWeight');
 const TeamScalar = require('./TeamScalar');
 const SprintMemberRecord = require('./SprintMemberRecord');
-const FinalEvaluationGrade = require('./FinalEvaluationGrade');
 const AdvisorGrade = require('./AdvisorGrade');
-
 module.exports = {
   User,
   Professor,

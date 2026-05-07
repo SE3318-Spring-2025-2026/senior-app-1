@@ -1,10 +1,15 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 const { Group, FinalEvaluationGrade, FinalEvaluationWeight, TeamScalar, SprintMemberRecord, User, Deliverable, AuditLog } = require('../models');
 
 =======
 // ADVISOR GRADE SERVICE
 const { Group, FinalEvaluationGrade, Deliverable } = require('../models');
 >>>>>>> 163acc7 (feat: add advisor grade endpoint, service, and validation (PR #366 requirements, conflict-free))
+=======
+const { Group, FinalEvaluationGrade, Deliverable } = require('../models');
+
+>>>>>>> 65544e7 (refactor: remove legacy endpoints, keep only advisor grade logic (PR #366 clean))
 function serviceError(code, message) {
   const err = new Error(message);
   err.code = code;
@@ -886,10 +891,16 @@ async function submitAdvisorGrade({ groupId, userId, finalScore, scores, comment
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 module.exports = FinalEvaluationService;
 >>>>>>> d244b26 (feat: P61 - Submit and update committee grade for group deliverable #368)
 =======
 module.exports.submitAdvisorGrade = submitAdvisorGrade;
+=======
+module.exports = {
+  submitAdvisorGrade,
+};
+>>>>>>> 65544e7 (refactor: remove legacy endpoints, keep only advisor grade logic (PR #366 clean))
 'use strict';
 
 const { Group, FinalEvaluationGrade, FinalEvaluationWeight, TeamScalar, SprintMemberRecord, User } = require('../models');
