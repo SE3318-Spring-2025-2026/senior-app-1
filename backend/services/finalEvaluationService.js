@@ -18,6 +18,9 @@ function serviceError(code, message) {
 }
 
 function calculateFinalScore(scores) {
+  if (!Array.isArray(scores) || scores.length === 0) {
+    throw serviceError('INVALID_SCORES', 'At least one score is required');
+  }
   return parseFloat((scores.reduce((sum, score) => sum + score.value, 0) / scores.length).toFixed(4));
 }
 

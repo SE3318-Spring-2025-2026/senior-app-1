@@ -130,6 +130,9 @@ async function postAdvisorGrade(req, res) {
       },
     });
   } catch (err) {
+    if (err.code === 'INVALID_SCORES') {
+      return res.status(400).json({ code: err.code, message: err.message });
+    }
     if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND') {
       return res.status(404).json({ code: err.code, message: err.message });
     }
@@ -167,6 +170,9 @@ async function postCommitteeGrade(req, res) {
       },
     });
   } catch (err) {
+    if (err.code === 'INVALID_SCORES') {
+      return res.status(400).json({ code: err.code, message: err.message });
+    }
     if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND') {
       return res.status(404).json({ code: err.code, message: err.message });
     }
