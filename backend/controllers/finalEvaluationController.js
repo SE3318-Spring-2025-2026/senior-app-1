@@ -513,10 +513,7 @@ async function postAdvisorGrade(req, res, next) {
   }
 }
 
-module.exports = {
-  submitAdvisorGradeValidation,
-  postAdvisorGrade,
-};
+// ...existing code...
 'use strict';
 
 const { param, validationResult } = require('express-validator');
@@ -829,6 +826,8 @@ async function getContributionsHandler(req, res) {
   getGradesForGroup,
 =======
 module.exports = {
+  submitAdvisorGradeValidation,
+  postAdvisorGrade,
   groupIdValidation,
   postTeamScalar,
   getTeamScalarHandler,
