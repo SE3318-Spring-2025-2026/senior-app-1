@@ -6,6 +6,7 @@ const {
   groupIdValidation,
   postTeamScalar,
   getTeamScalarHandler,
+  getContributionsHandler,
 } = require('../controllers/finalEvaluationController');
 
 const router = express.Router();
@@ -24,6 +25,14 @@ router.get(
   authorize(['COORDINATOR', 'PROFESSOR']),
   groupIdValidation,
   getTeamScalarHandler,
+);
+
+router.get(
+  '/groups/:groupId/contributions',
+  authenticate,
+  authorize(['COORDINATOR', 'PROFESSOR', 'ADMIN']),
+  groupIdValidation,
+  getContributionsHandler,
 );
 
 module.exports = router;
