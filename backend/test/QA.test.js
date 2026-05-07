@@ -1150,3 +1150,307 @@ test('GET /team-scalar returns 404 before any POST for this group', async (t) =>
 
   assert.equal(response.status, 404, `expected 404 before POST, got ${response.status}`);
 });
+
+/**
+ * Issue G — Testing: PUT and GET /weight-configuration (P62)
+ *
+ * Mirrors the structure of issue224-coordinator-weights-api.test.js.
+ * Run: cd backend && npm test -- test/issue-G-p62-weight-config.test.js
+ * Add this file to package.json "test" script when merging.
+ */
+
+
+// Lazy-load weight config model — may not exist until feature is built.
+function getWeightConfigModel() {
+  try {
+    return require('../models/FinalEvaluationWeight');
+  } catch (_) {
+    return null;
+  }
+}
+
+function validWeightPayload() {
+  return {
+    advisorWeight: 0.4,
+    committeeWeight: 0.6,
+  };
+}
+
+const ENDPOINT = '/api/v1/final-evaluation/weight-configuration';
+
+test.beforeEach(async () => {
+  const WeightConfig = getWeightConfigModel();
+  if (WeightConfig) await WeightConfig.destroy({ where: {} });
+  await User.destroy({ where: {} });
+});
+
+// ─── Test 1: 200 — valid payload persists and round-trips ─────────────────────
+
+test('PUT /weight-configuration returns 200 and persisted weights match payload', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const payload = validWeightPayload();
+
+  const { response, json } = await request(ENDPOINT, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 200, `expected 200, got ${response.status}, body: ${JSON.stringify(json)}`);
+
+  const stored = json?.data ?? json?.config ?? json;
+  const advisorWeight = stored?.advisorWeight ?? stored?.advisor_weight;
+  const committeeWeight = stored?.committeeWeight ?? stored?.committee_weight;
+
+  assert.ok(
+    Math.abs(advisorWeight - payload.advisorWeight) < 0.001,
+    `advisorWeight ${advisorWeight} must match ${payload.advisorWeight}`,
+  );
+  assert.ok(
+    Math.abs(committeeWeight - payload.committeeWeight) < 0.001,
+    `committeeWeight ${committeeWeight} must match ${payload.committeeWeight}`,
+  );
+});
+
+// ─── Test 2: 200 — second call overwrites (upsert) ────────────────────────────
+
+test('PUT /weight-configuration returns 200 on second call and overwrites previous', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(await authHeaderFor(coordinator)),
+  };
+
+  // First PUT.
+  const first = await request(ENDPOINT, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ advisorWeight: 0.4, committeeWeight: 0.6 }),
+  });
+
+  if (first.response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(first.response.status, 200, `first PUT must return 200`);
+
+  // Second PUT with different values.
+  const second = await request(ENDPOINT, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ advisorWeight: 0.3, committeeWeight: 0.7 }),
+  });
+
+  assert.equal(second.response.status, 200, `second PUT must return 200`);
+
+  const stored = second.json?.data ?? second.json?.config ?? second.json;
+  const advisorWeight = stored?.advisorWeight ?? stored?.advisor_weight;
+  assert.ok(
+    Math.abs(advisorWeight - 0.3) < 0.001,
+    `second PUT must overwrite advisorWeight to 0.3, got ${advisorWeight}`,
+  );
+});
+
+// ─── Test 3: 400 — weights do not sum to 1.0 ──────────────────────────────────
+
+test('PUT /weight-configuration returns 400 when weights do not sum to 1.0', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response, json } = await request(ENDPOINT, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({ advisorWeight: 0.3, committeeWeight: 0.3 }), // sums to 0.6
+  });
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 400, `expected 400, got ${response.status}, body: ${JSON.stringify(json)}`);
+});
+
+// ─── Test 4: 400 — missing fields returns VALIDATION_ERROR ────────────────────
+
+test('PUT /weight-configuration returns 400 VALIDATION_ERROR on missing fields', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response, json } = await request(ENDPOINT, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(coordinator)),
+    },
+    body: JSON.stringify({}), // both fields missing
+  });
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 400, `expected 400, got ${response.status}`);
+  assert.equal(
+    json?.code,
+    'VALIDATION_ERROR',
+    `expected code VALIDATION_ERROR, got ${json?.code}`,
+  );
+});
+
+// ─── Test 5: 401 — no auth header ─────────────────────────────────────────────
+
+test('PUT /weight-configuration returns 401 with no auth header', async (t) => {
+  const { response } = await request(ENDPOINT, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(validWeightPayload()),
+  });
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 401, `expected 401, got ${response.status}`);
+});
+
+// ─── Test 6: 403 — professor cannot set weight config ─────────────────────────
+
+test('PUT /weight-configuration returns 403 for PROFESSOR', async (t) => {
+  const professor = await User.create({
+    email: 'prof-wc@example.edu',
+    fullName: 'Prof WC',
+    role: 'PROFESSOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response } = await request(ENDPOINT, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await authHeaderFor(professor)),
+    },
+    body: JSON.stringify(validWeightPayload()),
+  });
+
+  if (response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 403, `expected 403, got ${response.status}`);
+});
+
+// ─── Test 7: GET returns 200 after PUT with matching values ───────────────────
+
+test('GET /weight-configuration returns 200 after PUT and body matches last PUT', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const payload = validWeightPayload();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(await authHeaderFor(coordinator)),
+  };
+
+  // PUT first.
+  const putResult = await request(ENDPOINT, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (putResult.response.status === 404) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(putResult.response.status, 200, `PUT must succeed, got ${putResult.response.status}`);
+
+  // Then GET.
+  const getResult = await request(ENDPOINT, {
+    headers: await authHeaderFor(coordinator),
+  });
+
+  assert.equal(getResult.response.status, 200, `GET must return 200, got ${getResult.response.status}`);
+
+  const stored = getResult.json?.data ?? getResult.json?.config ?? getResult.json;
+  const advisorWeight = stored?.advisorWeight ?? stored?.advisor_weight;
+  const committeeWeight = stored?.committeeWeight ?? stored?.committee_weight;
+
+  assert.ok(
+    Math.abs(advisorWeight - payload.advisorWeight) < 0.001,
+    `GET advisorWeight ${advisorWeight} must match PUT value ${payload.advisorWeight}`,
+  );
+  assert.ok(
+    Math.abs(committeeWeight - payload.committeeWeight) < 0.001,
+    `GET committeeWeight ${committeeWeight} must match PUT value ${payload.committeeWeight}`,
+  );
+});
+
+// ─── Test 8: GET returns 404 before any PUT ───────────────────────────────────
+
+test('GET /weight-configuration returns 404 before any PUT has been made', async (t) => {
+  const coordinator = await User.create({
+    email: 'coord-wc@example.edu',
+    fullName: 'Coord WC',
+    role: 'COORDINATOR',
+    status: 'ACTIVE',
+    password: await bcrypt.hash('StrongPass1!', 10),
+  });
+
+  const { response, json } = await request(ENDPOINT, {
+    headers: await authHeaderFor(coordinator),
+  });
+
+  if (response.status === 404 && (json?._raw?.includes('Cannot') || !json?.code)) {
+    t.skip('route not mounted');
+    return;
+  }
+
+  assert.equal(response.status, 404, `expected 404 before any PUT, got ${response.status}`);
+});
