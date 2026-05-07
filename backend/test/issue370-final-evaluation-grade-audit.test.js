@@ -73,11 +73,11 @@ async function createDeliverable(groupId, overrides = {}) {
   });
 }
 
-async function waitForAuditLog(where, tries = 15) {
+async function waitForAuditLog(where, tries = 12) {
   for (let i = 0; i < tries; i++) {
     const row = await AuditLog.findOne({ where, order: [['createdAt', 'DESC']] });
     if (row) return row;
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
   return null;
 }
