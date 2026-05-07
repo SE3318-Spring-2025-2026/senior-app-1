@@ -5,7 +5,9 @@ const {
   IntegrationBinding,
   IntegrationTokenReference,
 } = require('../models');
-const { buildJiraSprintIssuesRequest } = require('../services/jiraRequestBuilder');
+const { ApiError } = require('../middleware/errorResponse');
+const { hasProvider } = require('../services/sprintMonitoringPersistenceService');
+const { syncJiraSprintIssues } = require('../services/jiraSprintSyncService');
 
 function asTrimmedString(value) {
   if (typeof value !== 'string') {
@@ -13,14 +15,6 @@ function asTrimmedString(value) {
   }
 
   return value.trim();
-}
-
-function hasJiraProvider(binding) {
-  const providers = Array.isArray(binding?.providerSet)
-    ? binding.providerSet.map((provider) => String(provider).toUpperCase())
-    : [];
-
-  return providers.includes('JIRA');
 }
 
 const triggerJiraSyncValidation = [
@@ -111,7 +105,7 @@ async function triggerJiraSync(req, res) {
       });
     }
 
-    if (!hasJiraProvider(binding)) {
+    if (!hasProvider(binding, 'JIRA')) {
       return res.status(409).json({
         code: 'JIRA_PROVIDER_NOT_ENABLED',
         message: 'This team is not bound to Jira integration',
@@ -126,25 +120,38 @@ async function triggerJiraSync(req, res) {
       });
     }
 
-    buildJiraSprintIssuesRequest({
-      boardId,
+    const syncResult = await syncJiraSprintIssues({
+      binding,
+      tokenReference,
+      teamId,
       sprintId,
+      boardId,
       includeStatuses,
     });
 
-    return res.status(202).json({
+    return res.status(200).json({
       id: `op_${randomUUID()}`,
-      status: 'ACCEPTED',
-      message: 'Jira sprint sync request accepted.',
+      status: 'SYNCED',
+      message: 'Jira sprint sync completed successfully.',
       recordedAt: new Date().toISOString(),
       teamId,
       sprintId,
+      upstreamIssueCount: syncResult.upstreamIssueCount,
+      storedStoryCount: syncResult.storedStoryCount,
     });
   } catch (error) {
+    if (error instanceof ApiError) {
+      return res.status(error.status).json({
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      });
+    }
+
     console.error('Error in triggerJiraSync:', error);
     return res.status(500).json({
       code: 'JIRA_SYNC_REQUEST_BUILD_FAILED',
-      message: 'Failed to prepare Jira sprint sync request',
+      message: 'Failed to synchronize Jira sprint issues',
     });
   }
 }
