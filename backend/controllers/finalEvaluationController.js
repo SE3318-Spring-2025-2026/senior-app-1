@@ -499,6 +499,7 @@ async function getTeamScalarHandler(req, res) {
  * Validation middleware for POST /api/v1/final-evaluation/groups/:groupId/advisor-grade
  */
 const submitAdvisorGradeValidation = [
+<<<<<<< HEAD
   param('groupId')
     .custom((value) => isUUID(value))
     .withMessage('Group ID must be a valid UUID'),
@@ -519,6 +520,13 @@ const submitAdvisorGradeValidation = [
     .trim()
     .isLength({ max: 2000 })
     .withMessage('Comments must be 2000 characters or less'),
+=======
+  param('groupId').isUUID().withMessage('Group ID must be a valid UUID'),
+  body('finalScore').isFloat({ min: 0, max: 100 }).withMessage('finalScore must be between 0 and 100'),
+  body('scores').optional().isArray(),
+  body('comments').optional().isString(),
+  body('deliverableId').optional().isUUID().withMessage('If provided, deliverableId must be a valid UUID'),
+>>>>>>> 594c08e (Resolve all merge conflicts and standardize final evaluation logic (advisor/committee))
 ];
 
 /**
@@ -557,6 +565,7 @@ const updateAdvisorGradeValidation = [
  * Returns 404 if group or deliverable not found.
  * Returns 409 if advisor already submitted (ADVISOR_GRADE_EXISTS).
  */
+<<<<<<< HEAD
 const submitAdvisorGrade = async (req, res, next) => {
   try {
     // Check for validation errors
@@ -625,6 +634,33 @@ const submitAdvisorGrade = async (req, res, next) => {
     return res.status(500).json({ message: 'Internal Server Error' });
 >>>>>>> f902514 (fix: Add VALIDATION_ERROR envelope to all validation responses)
   }
+=======
+async function postAdvisorGrade(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+  try {
+    const groupId = req.params.groupId;
+    const userId = req.user.id;
+    const { finalScore, scores, comments, deliverableId } = req.body;
+    const result = await require('../services/finalEvaluationService').submitAdvisorGrade({ groupId, userId, finalScore, scores, comments, deliverableId });
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Advisor grade submitted',
+      data: result,
+    });
+  } catch (err) {
+    if (err.code === 'FORBIDDEN') {
+      return res.status(403).json({ code: 'FORBIDDEN', message: err.message });
+    }
+    if (err.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: err.message });
+    }
+    return next(err);
+  }
+}
+>>>>>>> 594c08e (Resolve all merge conflicts and standardize final evaluation logic (advisor/committee))
 
   try {
 <<<<<<< HEAD
