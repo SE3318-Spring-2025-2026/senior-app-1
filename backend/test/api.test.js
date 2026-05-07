@@ -742,7 +742,7 @@ test('audit log feed is admin-only', async () => {
   });
   assert.equal(forbidden.response.status, 403);
 
-  const success = await request('/api/v1/admin/audit-logs', {
+  const success = await request('/api/v1/admin/audit-logs?action=GROUP_CREATED', {
     headers: await authHeaderFor(admin),
   });
   assert.equal(success.response.status, 200);

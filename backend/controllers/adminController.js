@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const professorService = require('../services/professorService');
+const { logUserEvent } = require('../services/userEventLogService');
 
 function buildRoleLoginHandler(role, successMessage, invalidMessage, failureCode) {
   return async (req, res) => {
@@ -23,6 +24,11 @@ function buildRoleLoginHandler(role, successMessage, invalidMessage, failureCode
       });
 
       if (!user || !user.password) {
+        await logUserEvent(req, {
+          action: 'USER_LOGIN_FAILED',
+          targetType: 'USER',
+          metadata: { attemptedEmail: email, attemptedRole: role, reason: 'USER_NOT_FOUND' },
+        });
         return res.status(401).json({
           message: invalidMessage,
           code: 'INVALID_CREDENTIALS',
@@ -32,6 +38,12 @@ function buildRoleLoginHandler(role, successMessage, invalidMessage, failureCode
       const passwordMatches = await bcrypt.compare(password, user.password);
 
       if (!passwordMatches) {
+        await logUserEvent(req, {
+          action: 'USER_LOGIN_FAILED',
+          targetType: 'USER',
+          targetId: user.id,
+          metadata: { attemptedEmail: email, attemptedRole: role, reason: 'WRONG_PASSWORD' },
+        });
         return res.status(401).json({
           message: invalidMessage,
           code: 'INVALID_CREDENTIALS',
@@ -46,6 +58,14 @@ function buildRoleLoginHandler(role, successMessage, invalidMessage, failureCode
       }
 
       const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET);
+
+      await logUserEvent(req, {
+        action: 'USER_LOGIN_SUCCESS',
+        actorId: user.id,
+        targetType: 'USER',
+        targetId: user.id,
+        metadata: { role: user.role },
+      });
 
       return res.status(200).json({
         token,

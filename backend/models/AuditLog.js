@@ -35,11 +35,11 @@ const AuditLog = sequelize.define(
     },
 
     /**
-     * User who triggered the action
+     * User who triggered the action (nullable for unauthenticated events)
      */
     actorId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: User,
         key: 'id',
@@ -47,11 +47,11 @@ const AuditLog = sequelize.define(
     },
 
     /**
-     * Entity type (GROUP, INVITATION, MEMBERSHIP, etc.)
+     * Entity type (GROUP, INVITATION, MEMBERSHIP, USER, etc.)
      */
     targetType: {
       type: DataTypes.STRING(64),
-      allowNull: false,
+      allowNull: true,
     },
 
     /**
@@ -59,7 +59,7 @@ const AuditLog = sequelize.define(
      */
     targetId: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
     },
 
     /**

@@ -5,6 +5,7 @@ const githubLinkService = require('../services/githubLinkService');
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentRegistrationService = require('../services/studentRegistrationService');
 const studentService = require('../services/studentService');
+const { logUserEvent } = require('../services/userEventLogService');
 
 function shouldRedirectToFrontend(req) {
   // Browser navigations expect a redirect back to the UI, while API clients expect JSON.
@@ -154,6 +155,11 @@ const loginStudent = [
     const { studentId, password } = req.body;
 
     if (!(await studentService.isStudentIdEligible(studentId))) {
+      await logUserEvent(req, {
+        action: 'STUDENT_LOGIN_INELIGIBLE',
+        targetType: 'USER',
+        metadata: { attemptedStudentId: studentId, reason: 'STUDENT_ID_NOT_ELIGIBLE' },
+      });
       return res.status(403).json({
         code: 'STUDENT_NOT_ELIGIBLE',
         message: 'Student ID is not eligible for login.',
@@ -162,6 +168,11 @@ const loginStudent = [
 
     const student = await studentService.getStudentByStudentId(studentId);
     if (!student || student.status !== 'ACTIVE' || !student.passwordHash) {
+      await logUserEvent(req, {
+        action: 'USER_LOGIN_FAILED',
+        targetType: 'USER',
+        metadata: { attemptedStudentId: studentId, attemptedRole: 'STUDENT', reason: 'USER_NOT_FOUND' },
+      });
       return res.status(401).json({
         code: 'INVALID_CREDENTIALS',
         message: 'Invalid student ID or password.',
@@ -170,6 +181,12 @@ const loginStudent = [
 
     const passwordMatches = await bcrypt.compare(password, student.passwordHash);
     if (!passwordMatches) {
+      await logUserEvent(req, {
+        action: 'USER_LOGIN_FAILED',
+        targetType: 'USER',
+        targetId: student.id,
+        metadata: { attemptedStudentId: studentId, attemptedRole: 'STUDENT', reason: 'WRONG_PASSWORD' },
+      });
       return res.status(401).json({
         code: 'INVALID_CREDENTIALS',
         message: 'Invalid student ID or password.',
@@ -182,6 +199,14 @@ const loginStudent = [
         code: 'JWT_SECRET_MISSING',
       });
     }
+
+    await logUserEvent(req, {
+      action: 'USER_LOGIN_SUCCESS',
+      actorId: student.id,
+      targetType: 'USER',
+      targetId: student.id,
+      metadata: { role: student.role },
+    });
 
     const token = jwt.sign({ id: student.id, role: student.role }, process.env.JWT_SECRET);
     return res.status(200).json({
