@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
 =======
@@ -9,6 +10,8 @@ const sequelize = require('../db');
  * One grade per (groupId, deliverableId, submittedBy) tuple.
  */
 
+=======
+>>>>>>> 982df63 (fix: remove all legacy/duplicate code, keep only advisor grade logic for conflict-free PR)
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
 const Group = require('./Group');
@@ -81,6 +84,7 @@ const FinalEvaluationGrade = sequelize.define(
       allowNull: true,
     },
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     createdAt: {
       type: DataTypes.DATE,
@@ -93,6 +97,8 @@ const FinalEvaluationGrade = sequelize.define(
       defaultValue: DataTypes.NOW,
     },
 >>>>>>> d244b26 (feat: P61 - Submit and update committee grade for group deliverable #368)
+=======
+>>>>>>> 982df63 (fix: remove all legacy/duplicate code, keep only advisor grade logic for conflict-free PR)
   },
   {
     tableName: 'FinalEvaluationGrades',
