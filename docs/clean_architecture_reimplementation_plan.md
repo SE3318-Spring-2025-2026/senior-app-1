@@ -27,3 +27,4 @@ This plan replaces issue-per-assertion workflow with phased, bounded implementat
 - Frontend build passes.
 - Playwright scenario suite for implemented flows passes.
 - Open issues map to domain phases, not individual assertions.
+

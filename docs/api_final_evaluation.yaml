@@ -1,0 +1,934 @@
+openapi: 3.0.3
+info:
+  title: Senior Project Management System - Final Evaluation API
+  description: >
+    API specification for Process 6.0 Final Evaluation (Level 2 DFD).
+    Covers P61–P64 and maps to D2 (Group DB), D3 (Grading DB),
+    D4 (Sprint Sync Data), and D6 (Audit Logs).
+  version: 1.0.0
+
+servers:
+  - url: https://api.senior-project.edu/v1
+    description: Production server
+
+tags:
+  - name: 6.0 Final Evaluation
+    description: >
+      Advisor and committee grade capture, team scalar calculation,
+      individual contribution tracking, and final grade application.
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+
+  parameters:
+    GroupIdParam:
+      name: groupId
+      in: path
+      required: true
+      description: UUID of the group being evaluated.
+      schema:
+        type: string
+        format: uuid
+      example: grp_123e4567-e89b-12d3-a456-426614174000
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: GROUP_NOT_FOUND
+        message:
+          type: string
+          example: The requested group does not exist.
+
+    CriterionScore:
+      type: object
+      required: [criterionId, value]
+      properties:
+        criterionId:
+          type: string
+          example: crit_01
+        value:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Normalised score for this criterion (0 = min, 1 = max).
+          example: 0.85
+        note:
+          type: string
+          example: Clearly articulated problem statement.
+
+    AdvisorGrade:
+      type: object
+      required: [id, groupId, deliverableId, gradedBy, scores, finalScore, gradedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        groupId:
+          type: string
+          format: uuid
+        deliverableId:
+          type: string
+          format: uuid
+        gradedBy:
+          type: string
+          description: User ID of the submitting advisor.
+        scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/CriterionScore'
+        finalScore:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Weighted average of criterion scores.
+          example: 0.82
+        comments:
+          type: string
+          example: Team demonstrated good understanding of the problem domain.
+        gradedAt:
+          type: string
+          format: date-time
+
+    CommitteeGrade:
+      type: object
+      required: [id, groupId, deliverableId, reviewerId, scores, finalScore, gradedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        groupId:
+          type: string
+          format: uuid
+        deliverableId:
+          type: string
+          format: uuid
+        reviewerId:
+          type: string
+          description: User ID of the committee member.
+        scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/CriterionScore'
+        finalScore:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Weighted aggregate of rubric criterion scores.
+          example: 0.78
+        comments:
+          type: string
+          example: Solid implementation plan but milestones lack detail.
+        gradedAt:
+          type: string
+          format: date-time
+
+    WeightConfiguration:
+      type: object
+      required: [id, advisorWeight, committeeWeight, updatedBy, updatedAt]
+      description: >
+        Coordinator-defined weights controlling how advisor and committee
+        grades contribute to the team scalar. advisorWeight + committeeWeight
+        must equal 1.0.
+      properties:
+        id:
+          type: string
+          format: uuid
+        advisorWeight:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.4
+        committeeWeight:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.6
+        updatedBy:
+          type: string
+          description: User ID of the coordinator who last saved this config.
+        updatedAt:
+          type: string
+          format: date-time
+
+    TeamScalar:
+      type: object
+      required: [groupId, scalar, advisorFinalScore, committeeFinalScore, calculatedAt]
+      description: >
+        Result of P62. Weighted average of the group's advisor and committee
+        final scores using the active WeightConfiguration. Stored in D3.
+      properties:
+        groupId:
+          type: string
+          format: uuid
+        scalar:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Composite team score (0–1).
+          example: 0.795
+        advisorFinalScore:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.82
+        committeeFinalScore:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.78
+        weightConfigId:
+          type: string
+          format: uuid
+          description: ID of the WeightConfiguration snapshot used in this calculation.
+        calculatedAt:
+          type: string
+          format: date-time
+
+    MemberContribution:
+      type: object
+      required: [userId, fullName, storyPointsCompleted, totalCommits, contributionRatio]
+      description: >
+        Per-member contribution data derived from D4 (Sprint Sync Data).
+      properties:
+        userId:
+          type: string
+        fullName:
+          type: string
+          example: Alice Yıldız
+        storyPointsCompleted:
+          type: integer
+          minimum: 0
+          example: 34
+        totalCommits:
+          type: integer
+          minimum: 0
+          example: 47
+        contributionRatio:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: >
+            Member's share of team output. Derived from story points
+            weighted with commit count. All ratios in the group sum to 1.0.
+          example: 0.38
+
+    ContributionReport:
+      type: object
+      required: [groupId, members, computedAt]
+      properties:
+        groupId:
+          type: string
+          format: uuid
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberContribution'
+        computedAt:
+          type: string
+          format: date-time
+
+    MemberFinalGrade:
+      type: object
+      required: [userId, fullName, teamScalar, contributionRatio, finalScore, letterGrade]
+      description: >
+        Final grade for one member. Calculated as teamScalar × contributionRatio,
+        then mapped to a letter grade. Written to D3 by P64.
+      properties:
+        userId:
+          type: string
+        fullName:
+          type: string
+          example: Alice Yıldız
+        teamScalar:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.795
+        contributionRatio:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.38
+        finalScore:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Final percentage score (teamScalar × contributionRatio × 100, capped at 100).
+          example: 87.5
+        letterGrade:
+          type: string
+          enum: [AA, BA, BB, CB, CC, DC, DD, F]
+          example: BA
+
+    FinalEvaluationResult:
+      type: object
+      required: [groupId, members, finalizedAt, auditLogId]
+      properties:
+        groupId:
+          type: string
+          format: uuid
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberFinalGrade'
+        finalizedAt:
+          type: string
+          format: date-time
+        auditLogId:
+          type: string
+          format: uuid
+          description: ID of the D6 audit log entry created for this finalization.
+
+    StudentGradeView:
+      type: object
+      required: [userId, groupId, finalScore, letterGrade, finalizedAt]
+      description: >
+        Restricted view of a student's own final grade (f8 Grade Visibility).
+        Does not expose other members' grades or internal scalars.
+      properties:
+        userId:
+          type: string
+        groupId:
+          type: string
+          format: uuid
+        finalScore:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          example: 87.5
+        letterGrade:
+          type: string
+          enum: [AA, BA, BB, CB, CC, DC, DD, F]
+          example: BA
+        finalizedAt:
+          type: string
+          format: date-time
+
+paths:
+
+  # ── P61: Capture Advisor & Committee Grades ────────────────────────────────
+
+  /final-evaluation/groups/{groupId}/advisor-grade:
+    post:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P61 Submit Advisor Soft Grade"
+      description: |
+        Advisor submits criterion-level soft grades for the group's deliverable
+        (f1: Advisor → P61). Raw scores are stored in D3: Grading DB (f2).
+        Side effect: writes a GRADE_SUBMITTED audit event to D6: Audit Logs (f10).
+
+        **Auth:** ADVISOR role. Only the assigned advisor of the group may call this.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliverableId, scores]
+              properties:
+                deliverableId:
+                  type: string
+                  format: uuid
+                  description: The deliverable being graded (read from D2 Group DB).
+                scores:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/CriterionScore'
+                comments:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "201":
+          description: Advisor grade stored in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvisorGrade'
+        "400":
+          description: Validation error (missing scores, invalid criterion IDs, etc.).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: Caller is not the assigned advisor for this group.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Group or deliverable not found in D2.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: Advisor already submitted a grade for this deliverable. Use PUT to update.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P61 Update Advisor Soft Grade"
+      description: |
+        Overwrites an existing advisor grade before finalization. Only allowed
+        while the group's final grade has not yet been applied (P64 not run).
+        Updates D3: Grading DB. Side effect: writes updated audit event to D6.
+
+        **Auth:** ADVISOR role. Must be the assigned advisor of the group.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliverableId, scores]
+              properties:
+                deliverableId:
+                  type: string
+                  format: uuid
+                scores:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/CriterionScore'
+                comments:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "200":
+          description: Advisor grade updated in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvisorGrade'
+        "400":
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: Caller is not the assigned advisor, or grades are locked after finalization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: No existing advisor grade found for this group/deliverable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /final-evaluation/groups/{groupId}/committee-grade:
+    post:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P61 Submit Committee Grade"
+      description: |
+        A committee member (professor) submits rubric-based scores for the group
+        (f11: Committee → P61). Raw scores are stored in D3: Grading DB (f2).
+        Side effect: writes a GRADE_SUBMITTED audit event to D6: Audit Logs (f10).
+
+        **Auth:** PROFESSOR role.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliverableId, scores]
+              properties:
+                deliverableId:
+                  type: string
+                  format: uuid
+                  description: The deliverable being reviewed (read from D2 Group DB).
+                scores:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/CriterionScore'
+                comments:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "201":
+          description: Committee grade stored in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitteeGrade'
+        "400":
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: PROFESSOR role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Group or deliverable not found in D2.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: This committee member already submitted a grade. Use PUT to update.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P61 Update Committee Grade"
+      description: |
+        Overwrites an existing committee grade before finalization.
+        Updates D3: Grading DB. Side effect: writes updated audit event to D6.
+
+        **Auth:** PROFESSOR role. Must be the original reviewer.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliverableId, scores]
+              properties:
+                deliverableId:
+                  type: string
+                  format: uuid
+                scores:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/CriterionScore'
+                comments:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "200":
+          description: Committee grade updated in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitteeGrade'
+        "403":
+          description: Not the original reviewer, or grades locked after finalization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: No existing committee grade found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /final-evaluation/groups/{groupId}/grades:
+    get:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P61 Get Raw Grades for a Group"
+      description: |
+        Returns all advisor and committee grades recorded for the group,
+        read from D3: Grading DB. Used by coordinator to verify completeness
+        before triggering P62.
+
+        **Auth:** COORDINATOR or PROFESSOR role.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+      responses:
+        "200":
+          description: Raw grade records from D3.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groupId:
+                    type: string
+                    format: uuid
+                  advisorGrade:
+                    $ref: '#/components/schemas/AdvisorGrade'
+                  committeeGrades:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CommitteeGrade'
+        "403":
+          description: Insufficient role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Group not found in D2.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── P62: Calculate Team Scalar ─────────────────────────────────────────────
+
+  /final-evaluation/weight-configuration:
+    get:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P62 Get Active Weight Configuration"
+      description: |
+        Returns the current advisor/committee weight split set by the coordinator
+        (f12: Coordinator → P62). Read from D3: Grading DB.
+
+        **Auth:** COORDINATOR, PROFESSOR, or ADVISOR role.
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: Active weight configuration from D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeightConfiguration'
+        "404":
+          description: No weight configuration has been set yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P62 Set Weight Configuration"
+      description: |
+        Coordinator defines how advisor and committee scores are weighted when
+        calculating the team scalar (f12: Coordinator → P62).
+        advisorWeight + committeeWeight must equal 1.0.
+        Stored in D3: Grading DB.
+
+        **Auth:** COORDINATOR role only.
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [advisorWeight, committeeWeight]
+              properties:
+                advisorWeight:
+                  type: number
+                  format: float
+                  minimum: 0
+                  maximum: 1
+                  example: 0.4
+                committeeWeight:
+                  type: number
+                  format: float
+                  minimum: 0
+                  maximum: 1
+                  example: 0.6
+      responses:
+        "200":
+          description: Weight configuration saved to D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeightConfiguration'
+        "400":
+          description: Weights do not sum to 1.0, or values out of range.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: COORDINATOR role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /final-evaluation/groups/{groupId}/team-scalar:
+    post:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P62 Calculate Team Scalar"
+      description: |
+        Reads the group's advisor and committee raw grade data from D3 (f3)
+        and applies the active WeightConfiguration (f12) to produce a composite
+        team scalar. Result is stored back to D3 (f3 return).
+
+        Requires both an advisor grade and at least one committee grade to exist
+        for the group. Returns 422 if grades are incomplete.
+
+        Side effect: the resulting scalar is passed to P64 when finalization is triggered.
+
+        **Auth:** COORDINATOR role only.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+      responses:
+        "200":
+          description: Team scalar calculated and stored in D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamScalar'
+        "403":
+          description: COORDINATOR role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Group not found in D2.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: Advisor grade or committee grades are missing — cannot calculate scalar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: GRADES_INCOMPLETE
+                message: Advisor grade is missing for this group.
+
+    get:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P62 Get Team Scalar"
+      description: |
+        Returns the most recently calculated team scalar for the group from D3.
+        Returns 404 if P62 has not been run yet.
+
+        **Auth:** COORDINATOR or PROFESSOR role.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+      responses:
+        "200":
+          description: Team scalar from D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamScalar'
+        "404":
+          description: No team scalar has been calculated for this group yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── P63: Track Individual Contribution ────────────────────────────────────
+
+  /final-evaluation/groups/{groupId}/contributions:
+    get:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P63 Get Individual Contribution Ratios"
+      description: |
+        Reads sprint sync metrics (story points completed, commits) for each
+        member from D4: Sprint Sync Data (f5) and computes per-member
+        contribution ratios. All ratios in the group sum to 1.0.
+
+        Requires that D4 contains at least one synced sprint for the group.
+        Returns 422 if no sync data is available.
+
+        **Auth:** COORDINATOR or PROFESSOR role.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+      responses:
+        "200":
+          description: Contribution ratios derived from D4.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContributionReport'
+        "403":
+          description: Insufficient role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Group not found in D2.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: No sprint sync data found in D4 for this group.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: NO_SPRINT_SYNC_DATA
+                message: No sprint metrics found for this group. Ensure D4 is populated via Sprint Monitoring (P5.2).
+
+  # ── P64: Apply Final Grade Scalars ─────────────────────────────────────────
+
+  /final-evaluation/groups/{groupId}/finalize:
+    post:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P64 Apply Final Grade Scalars"
+      description: |
+        Combines the team scalar (f4: P62 → P64) and per-member contribution
+        ratios (f6: P63 → P64) to produce a final percentage score and letter
+        grade for each group member.
+
+        Final grades are written to D3: Grading DB (f7) and made visible to
+        students (f8). An evaluation audit event is written to D6: Audit Logs (f9).
+
+        This action is irreversible. Once finalized, advisor and committee grades
+        are locked (PUT endpoints return 403).
+
+        Requires:
+          - A team scalar computed by P62 (POST /team-scalar already called).
+          - Sprint contribution data available in D4 (GET /contributions returns 200).
+
+        **Auth:** COORDINATOR role only.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+      responses:
+        "200":
+          description: Final grades applied, stored in D3, and audit event written to D6.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinalEvaluationResult'
+        "403":
+          description: COORDINATOR role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Group not found in D2.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: Final grades have already been applied for this group.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: ALREADY_FINALIZED
+                message: Final grades were already applied for this group on 2026-05-15T10:30:00Z.
+        "422":
+          description: Team scalar or contribution data is missing — run P62 and verify D4 first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: PREREQUISITES_NOT_MET
+                message: Team scalar has not been calculated. Call POST /team-scalar first.
+
+  /final-evaluation/groups/{groupId}/final-grades:
+    get:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P64 Get Final Grades for a Group"
+      description: |
+        Returns the finalized grades for all members of the group from D3.
+        Includes team scalar, contribution ratios, and letter grades.
+
+        **Auth:** COORDINATOR, PROFESSOR, or the group's assigned ADVISOR.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupIdParam'
+      responses:
+        "200":
+          description: Final evaluation results from D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinalEvaluationResult'
+        "403":
+          description: Insufficient role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Group not found, or final grades have not been applied yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /final-evaluation/my-grade:
+    get:
+      tags: ["6.0 Final Evaluation"]
+      summary: "P64 Student Grade Visibility"
+      description: |
+        Returns the authenticated student's own final grade (f8: P64 → Student).
+        Reads from D3: Grading DB. Does not expose other group members' grades,
+        internal scalars, or contribution ratios.
+
+        Returns 404 if the coordinator has not yet finalized grades for the student's group.
+
+        **Auth:** STUDENT role only.
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: Student's final grade from D3.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentGradeView'
+        "403":
+          description: STUDENT role required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: No finalized grade found. Coordinator has not run P64 for your group yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
