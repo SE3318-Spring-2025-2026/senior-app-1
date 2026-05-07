@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 "use strict";
 
 const { param, body, validationResult } = require("express-validator");
@@ -469,6 +470,76 @@ const submitCommitteeGrade = async (req, res, next) => {
 
     // Return 200 with updated grade
 >>>>>>> f902514 (fix: Add VALIDATION_ERROR envelope to all validation responses)
+=======
+// ADVISOR GRADE ENDPOINTS
+const { body } = require('express-validator');
+const { submitAdvisorGrade } = require('../services/finalEvaluationService');
+
+const submitAdvisorGradeValidation = [
+  param('groupId').isUUID().withMessage('Group ID must be a valid UUID'),
+  body('finalScore').isFloat({ min: 0, max: 100 }).withMessage('finalScore must be between 0 and 100'),
+  body('scores').optional().isArray(),
+  body('comments').optional().isString(),
+  body('deliverableId').optional().isUUID().withMessage('If provided, deliverableId must be a valid UUID'),
+];
+
+async function postAdvisorGrade(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+  try {
+    const groupId = req.params.groupId;
+    const userId = req.user.id;
+    const { finalScore, scores, comments, deliverableId } = req.body;
+    const result = await submitAdvisorGrade({ groupId, userId, finalScore, scores, comments, deliverableId });
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Advisor grade submitted',
+      data: result,
+    });
+  } catch (err) {
+    if (err.code === 'FORBIDDEN') {
+      return res.status(403).json({ code: 'FORBIDDEN', message: err.message });
+    }
+    if (err.code === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: err.message });
+    }
+    return next(err);
+  }
+}
+
+module.exports.submitAdvisorGradeValidation = submitAdvisorGradeValidation;
+module.exports.postAdvisorGrade = postAdvisorGrade;
+'use strict';
+
+const { param, validationResult } = require('express-validator');
+const { calculateTeamScalar, getTeamScalar, getContributions } = require('../services/finalEvaluationService');
+
+const groupIdValidation = [
+  param('groupId').isUUID().withMessage('groupId must be a valid UUID'),
+];
+
+function scalarResponse(ts) {
+  return {
+    groupId: ts.groupId,
+    scalar: ts.scalar,
+    advisorFinalScore: ts.advisorFinalScore,
+    committeeFinalScore: ts.committeeFinalScore,
+    weightConfigId: ts.weightConfigId,
+    calculatedAt: ts.calculatedAt,
+  };
+}
+
+async function postTeamScalar(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const result = await calculateTeamScalar(req.params.groupId);
+>>>>>>> 163acc7 (feat: add advisor grade endpoint, service, and validation (PR #366 requirements, conflict-free))
     return res.status(200).json({
       code: 'SUCCESS',
       message: 'Team scalar calculated and stored',
@@ -490,10 +561,14 @@ const submitCommitteeGrade = async (req, res, next) => {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 163acc7 (feat: add advisor grade endpoint, service, and validation (PR #366 requirements, conflict-free))
 async function getTeamScalarHandler(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+<<<<<<< HEAD
 =======
 /**
  * Validation middleware for POST /api/v1/final-evaluation/groups/:groupId/advisor-grade
@@ -691,6 +766,12 @@ async function postAdvisorGrade(req, res, next) {
 
     // Return 200 with updated grade
 >>>>>>> f902514 (fix: Add VALIDATION_ERROR envelope to all validation responses)
+=======
+  }
+
+  try {
+    const result = await getTeamScalar(req.params.groupId);
+>>>>>>> 163acc7 (feat: add advisor grade endpoint, service, and validation (PR #366 requirements, conflict-free))
     return res.status(200).json({
       code: 'SUCCESS',
       message: 'Team scalar retrieved',
@@ -730,6 +811,7 @@ async function getContributionsHandler(req, res) {
   }
 }
 
+<<<<<<< HEAD
   submitCommitteeGrade,
   submitCommitteeGradeValidation,
   updateCommitteeGrade,
@@ -739,4 +821,11 @@ async function getContributionsHandler(req, res) {
   updateAdvisorGrade,
   updateAdvisorGradeValidation,
   getGradesForGroup,
+=======
+module.exports = {
+  groupIdValidation,
+  postTeamScalar,
+  getTeamScalarHandler,
+  getContributionsHandler,
+>>>>>>> 163acc7 (feat: add advisor grade endpoint, service, and validation (PR #366 requirements, conflict-free))
 };
