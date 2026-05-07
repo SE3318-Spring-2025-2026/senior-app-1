@@ -124,10 +124,7 @@ async function postAdvisorGrade(req, res) {
     return res.status(201).json({
       code: 'SUCCESS',
       message: 'Advisor grade submitted',
-      data: {
-        ...grade.toJSON(),
-        deliverableId: req.body.deliverableId,
-      },
+      data: grade.toJSON(),
     });
   } catch (err) {
     if (err.code === 'INVALID_SCORES') {
@@ -164,10 +161,7 @@ async function postCommitteeGrade(req, res) {
     return res.status(201).json({
       code: 'SUCCESS',
       message: 'Committee grade submitted',
-      data: {
-        ...grade.toJSON(),
-        deliverableId: req.body.deliverableId,
-      },
+      data: grade.toJSON(),
     });
   } catch (err) {
     if (err.code === 'INVALID_SCORES') {
