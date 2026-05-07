@@ -32,6 +32,10 @@ const PrMetric = require('./PrMetric');
 const SprintPullRequest = require('./SprintPullRequest');
 const SprintStory = require('./SprintStory');
 const StoryMetric = require('./StoryMetric');
+const FinalEvaluationGrade = require('./FinalEvaluationGrade');
+const FinalEvaluationWeight = require('./FinalEvaluationWeight');
+const TeamScalar = require('./TeamScalar');
+const SprintMemberRecord = require('./SprintMemberRecord');
 
 module.exports = {
   User,
@@ -60,4 +64,8 @@ module.exports = {
   SprintPullRequest,
   SprintStory,
   StoryMetric,
+  FinalEvaluationGrade,
+  FinalEvaluationWeight,
+  TeamScalar,
+  SprintMemberRecord,
 };
