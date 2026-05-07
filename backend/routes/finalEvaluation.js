@@ -2,13 +2,7 @@
 
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
-const {
-  groupIdValidation,
-  postTeamScalar,
-  getTeamScalarHandler,
-  getContributionsHandler,
-  myGrade,
-} = require('../controllers/finalEvaluationController');
+const ctrl = require('../controllers/finalEvaluationController');
 
 const router = express.Router();
 
@@ -16,31 +10,47 @@ router.post(
   '/groups/:groupId/team-scalar',
   authenticate,
   authorize(['COORDINATOR']),
-  groupIdValidation,
-  postTeamScalar,
+  ctrl.groupIdValidation,
+  ctrl.postTeamScalar,
 );
 
 router.get(
   '/groups/:groupId/team-scalar',
   authenticate,
   authorize(['COORDINATOR', 'PROFESSOR']),
-  groupIdValidation,
-  getTeamScalarHandler,
+  ctrl.groupIdValidation,
+  ctrl.getTeamScalarHandler,
 );
 
 router.get(
   '/groups/:groupId/contributions',
   authenticate,
   authorize(['COORDINATOR', 'PROFESSOR', 'ADMIN']),
-  groupIdValidation,
-  getContributionsHandler,
+  ctrl.groupIdValidation,
+  ctrl.getContributionsHandler,
 );
 
 router.get(
   '/my-grade',
   authenticate,
   authorize(['STUDENT']),
-  myGrade,
+  ctrl.myGrade,
+);
+
+router.post(
+  '/groups/:groupId/finalize',
+  authenticate,
+  authorize(['COORDINATOR']),
+  ctrl.finalizeValidation,
+  ctrl.finalize,
+);
+
+router.get(
+  '/groups/:groupId/final-grades',
+  authenticate,
+  authorize(['COORDINATOR', 'PROFESSOR']),
+  ctrl.getGradesValidation,
+  ctrl.getGrades,
 );
 
 module.exports = router;

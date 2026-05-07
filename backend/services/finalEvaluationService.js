@@ -1,12 +1,29 @@
 'use strict';
 
-const { Group, FinalEvaluationGrade, FinalEvaluationWeight, TeamScalar, SprintMemberRecord, User, MemberFinalGrade } = require('../models');
+const sequelize = require('../db');
+const {
+  Group,
+  FinalEvaluationGrade,
+  FinalEvaluationWeight,
+  TeamScalar,
+  SprintMemberRecord,
+  User,
+  MemberFinalGrade,
+} = require('../models');
 const ApiError = require('../errors/apiError');
 
 function serviceError(code, message) {
   const err = new Error(message);
   err.code = code;
   return err;
+}
+
+function mapLetter(score) {
+  if (score >= 90) return 'A';
+  if (score >= 80) return 'B';
+  if (score >= 70) return 'C';
+  if (score >= 60) return 'D';
+  return 'F';
 }
 
 async function calculateTeamScalar(groupId) {
@@ -152,4 +169,99 @@ async function getMyGrade(user) {
   };
 }
 
-module.exports = { calculateTeamScalar, getTeamScalar, getContributions, getMyGrade };
+/**
+ * Finalize and persist per-member grades for a group.
+ *
+ * Uses getTeamScalar / getContributions by default, but allows DI for tests.
+ */
+async function finalize(groupId, deps = {}) {
+  if (!groupId) {
+    const err = new Error('groupId is required');
+    err.code = 'MISSING_GROUP_ID';
+    throw err;
+  }
+
+  const teamScalarFn = deps.getTeamScalar || _defaultGetTeamScalarValue;
+  const contributionsFn = deps.getContributions || _defaultGetContributionsArray;
+
+  const teamScalar = await teamScalarFn(groupId);
+
+  if (typeof teamScalar !== 'number' || Number.isNaN(teamScalar)) {
+    const err = new Error('Team scalar is unavailable for this group');
+    err.code = 'TEAM_SCALAR_UNAVAILABLE';
+    throw err;
+  }
+
+  const contributions = await contributionsFn(groupId);
+
+  if (!Array.isArray(contributions) || contributions.length === 0) {
+    const err = new Error('No contribution data found for this group');
+    err.code = 'CONTRIBUTIONS_UNAVAILABLE';
+    throw err;
+  }
+
+  const rows = contributions.map(({ userId, ratio }) => {
+    const finalScore = parseFloat(Math.min(100, teamScalar * ratio / 100).toFixed(2));
+    return {
+      groupId,
+      userId,
+      teamScalar,
+      contributionRatio: ratio,
+      finalScore,
+      letterGrade: mapLetter(finalScore),
+    };
+  });
+
+  return sequelize.transaction(async (t) => {
+    await MemberFinalGrade.destroy({ where: { groupId }, transaction: t });
+    return MemberFinalGrade.bulkCreate(rows, { transaction: t });
+  });
+}
+
+async function getFinalGrades(groupId) {
+  if (!groupId) {
+    const err = new Error('groupId is required');
+    err.code = 'MISSING_GROUP_ID';
+    throw err;
+  }
+
+  return MemberFinalGrade.findAll({
+    where: { groupId },
+    order: [['userId', 'ASC']],
+  });
+}
+
+async function _defaultGetTeamScalarValue(groupId) {
+  try {
+    const ts = await getTeamScalar(groupId);
+    return Number(ts.scalar);
+  } catch (err) {
+    const e = new Error('Team scalar is unavailable for this group');
+    e.code = 'TEAM_SCALAR_UNAVAILABLE';
+    throw e;
+  }
+}
+
+async function _defaultGetContributionsArray(groupId) {
+  try {
+    const result = await getContributions(groupId);
+    return result.members.map((m) => ({
+      userId: m.userId,
+      ratio: m.contributionRatio * 100,
+    }));
+  } catch (err) {
+    const e = new Error('No contribution data found for this group');
+    e.code = 'CONTRIBUTIONS_UNAVAILABLE';
+    throw e;
+  }
+}
+
+module.exports = {
+  calculateTeamScalar,
+  getTeamScalar,
+  getContributions,
+  getMyGrade,
+  finalize,
+  getFinalGrades,
+  mapLetter,
+};
