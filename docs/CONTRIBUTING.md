@@ -419,6 +419,7 @@ test: <short description>                      → for missing test coverage
 ## Dos & Don'ts
 
 ### Do
+- Get **team leader approval** before changing any existing API endpoint (URL, method, request/response shape). Open a PR and have a team leader merge it — don't merge API changes yourself.
 - Mount every new router in `app.js`.
 - Register every new model in `models/index.js`.
 - Add new test files to `backend/package.json` `"test"` script.
@@ -429,6 +430,7 @@ test: <short description>                      → for missing test coverage
 - Define unique constraints via the model `indexes` option.
 
 ### Don't
+- Don't change an existing API endpoint (path, HTTP method, request body, or response shape) without team leader review and merge.
 - Don't call `Model.addConstraint(...)` — it's not a function on Sequelize models and crashes module load.
 - Don't `import { v4: isUUID } from 'uuid'` — `v4` generates UUIDs, it doesn't validate them.
 - Don't `await` audit log writes inside request handlers.

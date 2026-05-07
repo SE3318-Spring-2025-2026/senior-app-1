@@ -25,7 +25,7 @@ export default function ProfessorCommitteeSubmissionsPage() {
   useEffect(() => {
     if (!token) {
       notify({ type: 'warning', title: 'Login required', message: 'Please sign in as a professor.' });
-      navigate('/professors/login', { replace: true });
+      navigate('/login', { replace: true });
       return;
     }
 
