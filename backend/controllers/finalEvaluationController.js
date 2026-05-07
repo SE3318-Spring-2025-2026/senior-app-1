@@ -1,7 +1,7 @@
 'use strict';
 
 const { param, validationResult } = require('express-validator');
-const { calculateTeamScalar, getTeamScalar, getContributions } = require('../services/finalEvaluationService');
+const { calculateTeamScalar, getTeamScalar, getContributions, getMyGrade } = require('../services/finalEvaluationService');
 
 const groupIdValidation = [
   param('groupId').isUUID().withMessage('groupId must be a valid UUID'),
@@ -93,9 +93,19 @@ async function getContributionsHandler(req, res) {
   }
 }
 
+async function myGrade(req, res, next) {
+  try {
+    const view = await getMyGrade(req.user);
+    return res.status(200).json(view);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   groupIdValidation,
   postTeamScalar,
   getTeamScalarHandler,
   getContributionsHandler,
+  myGrade,
 };

@@ -1,6 +1,7 @@
 'use strict';
 
-const { Group, FinalEvaluationGrade, FinalEvaluationWeight, TeamScalar, SprintMemberRecord, User } = require('../models');
+const { Group, FinalEvaluationGrade, FinalEvaluationWeight, TeamScalar, SprintMemberRecord, User, MemberFinalGrade } = require('../models');
+const ApiError = require('../errors/apiError');
 
 function serviceError(code, message) {
   const err = new Error(message);
@@ -119,4 +120,36 @@ async function getContributions(groupId) {
   };
 }
 
-module.exports = { calculateTeamScalar, getTeamScalar, getContributions };
+async function getMyGrade(user) {
+  const userId = String(user.id);
+
+  const groups = await Group.findAll({ attributes: ['id', 'memberIds'] });
+  const group = groups.find(
+    (g) => Array.isArray(g.memberIds) && g.memberIds.map(String).includes(userId),
+  );
+
+  if (!group) {
+    throw ApiError.notFound('GROUP_NOT_FOUND', 'No group found for this student');
+  }
+
+  const grade = await MemberFinalGrade.findOne({
+    where: { userId: user.id, groupId: group.id },
+  });
+
+  if (!grade) {
+    throw ApiError.notFound(
+      'GRADE_NOT_FOUND',
+      'Coordinator has not finalized grades for your group yet',
+    );
+  }
+
+  return {
+    userId: grade.userId,
+    groupId: grade.groupId,
+    finalScore: grade.finalScore,
+    letterGrade: grade.letterGrade,
+    finalizedAt: grade.finalizedAt,
+  };
+}
+
+module.exports = { calculateTeamScalar, getTeamScalar, getContributions, getMyGrade };

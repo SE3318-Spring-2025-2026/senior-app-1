@@ -36,6 +36,7 @@ const FinalEvaluationGrade = require('./FinalEvaluationGrade');
 const FinalEvaluationWeight = require('./FinalEvaluationWeight');
 const TeamScalar = require('./TeamScalar');
 const SprintMemberRecord = require('./SprintMemberRecord');
+const MemberFinalGrade = require('./MemberFinalGrade');
 
 module.exports = {
   User,
@@ -68,4 +69,5 @@ module.exports = {
   FinalEvaluationWeight,
   TeamScalar,
   SprintMemberRecord,
+  MemberFinalGrade,
 };

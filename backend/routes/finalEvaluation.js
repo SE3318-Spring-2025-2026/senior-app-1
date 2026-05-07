@@ -7,6 +7,7 @@ const {
   postTeamScalar,
   getTeamScalarHandler,
   getContributionsHandler,
+  myGrade,
 } = require('../controllers/finalEvaluationController');
 
 const router = express.Router();
@@ -33,6 +34,13 @@ router.get(
   authorize(['COORDINATOR', 'PROFESSOR', 'ADMIN']),
   groupIdValidation,
   getContributionsHandler,
+);
+
+router.get(
+  '/my-grade',
+  authenticate,
+  authorize(['STUDENT']),
+  myGrade,
 );
 
 module.exports = router;
