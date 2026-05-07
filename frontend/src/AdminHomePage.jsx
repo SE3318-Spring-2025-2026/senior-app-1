@@ -68,7 +68,7 @@ export default function AdminHomePage() {
       title: 'Admin login required',
       message: 'Please sign in before opening the admin workspace.',
     });
-    navigate('/admin/login', { replace: true });
+    navigate('/login', { replace: true });
   }, [navigate, notify, token]);
 
   return (
