@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 
 const {
   buildJiraAuthHeader,
+  buildJiraProjectOpenSprintIssuesRequest,
   buildJiraRequest,
   buildJiraSprintIssuesRequest,
   hasRealJiraApiConfig,
@@ -25,7 +26,7 @@ test('builds Jira basic auth headers from explicit credentials', async () => {
 
 test('builds configurable Jira requests with query params and JSON body', async () => {
   const request = buildJiraRequest({
-    path: '/rest/api/3/search',
+    path: '/rest/api/3/search/jql',
     method: 'post',
     query: {
       expand: 'names',
@@ -47,7 +48,7 @@ test('builds configurable Jira requests with query params and JSON body', async 
 
   const url = new URL(request.url);
   assert.equal(url.origin, 'https://acme.atlassian.net');
-  assert.equal(url.pathname, '/rest/api/3/search');
+  assert.equal(url.pathname, '/rest/api/3/search/jql');
   assert.deepEqual(url.searchParams.getAll('fields'), ['summary', 'status']);
   assert.equal(url.searchParams.get('expand'), 'names');
   assert.equal(url.searchParams.get('maxResults'), '50');
@@ -111,6 +112,30 @@ test('builds sprint issue requests in a configurable form that can be reused by 
   assert.equal(request.mock, false);
 });
 
+test('builds open sprint issue search requests from Jira project key for scheduled refresh', async () => {
+  const request = buildJiraProjectOpenSprintIssuesRequest({
+    projectKey: 'spm',
+    includeStatuses: ['To Do', 'In Progress'],
+  }, {
+    baseUrl: 'https://acme.atlassian.net',
+    email: 'jira-user@example.edu',
+    apiToken: 'secret-token',
+    fields: ['summary', 'status', 'customfield_10020'],
+    maxResults: 25,
+  });
+
+  assert.equal(request.url, 'https://acme.atlassian.net/rest/api/3/search/jql');
+  assert.equal(request.options.method, 'POST');
+  assert.equal(request.mock, false);
+
+  const body = JSON.parse(request.options.body);
+  assert.match(body.jql, /project = "SPM"/);
+  assert.match(body.jql, /sprint in openSprints\(\)/);
+  assert.match(body.jql, /status IN \("To Do", "In Progress"\)/);
+  assert.deepEqual(body.fields, ['summary', 'status', 'customfield_10020']);
+  assert.equal(body.maxResults, 25);
+});
+
 test('rejects invalid or unsafe builder input early', async () => {
   assert.throws(
     () => buildJiraRequest({}, {
@@ -147,4 +172,22 @@ test('rejects invalid or unsafe builder input early', async () => {
     }),
     /sprintId is required/,
   );
+
+  assert.throws(
+    () => buildJiraProjectOpenSprintIssuesRequest({
+      projectKey: 'spm"',
+      includeStatuses: ['Done'],
+    }),
+    /projectKey must contain only uppercase letters, numbers, underscores, or hyphens/,
+  );
+});
+
+test('escapes status values when building open sprint JQL', async () => {
+  const request = buildJiraProjectOpenSprintIssuesRequest({
+    projectKey: 'SPM',
+    includeStatuses: ['Needs "Review"', 'Done\\QA'],
+  });
+
+  const body = JSON.parse(request.options.body);
+  assert.match(body.jql, /status IN \("Needs \\"Review\\"", "Done\\\\QA"\)/);
 });

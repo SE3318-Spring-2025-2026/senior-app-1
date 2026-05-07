@@ -41,7 +41,7 @@ export default function CoordinatorAdvisorTransferPage() {
       title: 'Coordinator login required',
       message: 'Please sign in before opening advisor transfer.',
     });
-    navigate('/coordinator/login', { replace: true });
+    navigate('/login', { replace: true });
   }, [navigate, notify, token]);
 
   useEffect(() => {
