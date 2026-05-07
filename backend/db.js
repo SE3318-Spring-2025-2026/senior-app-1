@@ -1,6 +1,24 @@
-  const path = require('path');
-  const { Sequelize } = require('sequelize');
+'use strict';
 
+const path = require('path');
+const { Sequelize } = require('sequelize');
+
+require('dotenv').config();
+
+let sequelize;
+
+if (process.env.DATABASE_URL) {
+  sequelize = new Sequelize(process.env.DATABASE_URL, {
+    dialect: 'postgres',
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false,
+      },
+    },
+    logging: false,
+  });
+} else {
   const configuredStorage = process.env.SQLITE_STORAGE;
   const resolvedStorage = configuredStorage
     ? (
@@ -12,10 +30,11 @@
     )
     : path.join(__dirname, 'database.sqlite');
 
-  const sequelize = new Sequelize({
+  sequelize = new Sequelize({
     dialect: 'sqlite',
     storage: resolvedStorage,
     logging: false,
   });
+}
 
-  module.exports = sequelize;
+module.exports = sequelize;

@@ -1,29 +1,71 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext';
 import apiClient from './services/apiClient';
+import { getCurrentSprintMonitoringSnapshot } from './services/sprintMonitoring';
+
+const EMPTY_FORM = {
+  providerSet: ['GITHUB', 'JIRA'],
+  organizationName: '',
+  repositoryName: '',
+  jiraWorkspaceId: '',
+  jiraUserEmail: '',
+  jiraProjectKey: '',
+  defaultBranch: 'main',
+  githubTokenRef: '',
+  jiraTokenRef: '',
+};
 
 function buildProviderRows(configuration) {
-  const configuredProviders = new Set(configuration.providerSet || []);
+  const configuredProviders = new Set(configuration?.providerSet || []);
 
   return [
     {
       key: 'GITHUB',
       label: 'GitHub',
       configured: configuredProviders.has('GITHUB'),
-      connected: configuredProviders.has('GITHUB') && Boolean(configuration.githubTokenRef),
+      connected: configuredProviders.has('GITHUB') && Boolean(configuration?.hasGithubTokenRef),
     },
     {
       key: 'JIRA',
       label: 'JIRA',
       configured: configuredProviders.has('JIRA'),
-      connected: configuredProviders.has('JIRA') && Boolean(configuration.jiraTokenRef),
+      connected: configuredProviders.has('JIRA') && Boolean(configuration?.hasJiraTokenRef),
     },
   ];
+}
+
+function buildFormState(configuration) {
+  if (!configuration) {
+    return { ...EMPTY_FORM };
+  }
+
+  return {
+    providerSet: Array.isArray(configuration.providerSet) && configuration.providerSet.length > 0
+      ? configuration.providerSet
+      : EMPTY_FORM.providerSet,
+    organizationName: configuration.organizationName || '',
+    repositoryName: configuration.repositoryName || '',
+    jiraWorkspaceId: configuration.jiraWorkspaceId || '',
+    jiraUserEmail: configuration.jiraUserEmail || '',
+    jiraProjectKey: configuration.jiraProjectKey || '',
+    defaultBranch: configuration.defaultBranch || 'main',
+    githubTokenRef: '',
+    jiraTokenRef: '',
+  };
 }
 
 function getDisplayStatus(configuration) {
   if (!configuration) {
     return 'Not Connected';
+  }
+
+  if (configuration.status === 'INVALID') {
+    return 'Invalid';
+  }
+
+  if (configuration.status === 'PENDING_REAUTH') {
+    return 'Re-auth Required';
   }
 
   if (configuration.status === 'PARTIAL') {
@@ -33,12 +75,114 @@ function getDisplayStatus(configuration) {
   return 'Connected';
 }
 
+function getMonitoringWarnings(configuration) {
+  if (!configuration) {
+    return [];
+  }
+
+  if (configuration.status === 'PENDING_REAUTH') {
+    return ['Integration requires re-authentication.'];
+  }
+
+  if (configuration.status === 'INVALID') {
+    return ['Integration configuration looks invalid. Verify the repository, workspace, and project settings.'];
+  }
+
+  if (configuration.status !== 'PARTIAL') {
+    return [];
+  }
+
+  const warnings = [];
+
+  if (configuration.providerSet?.includes('JIRA') && !configuration.hasJiraTokenRef) {
+    warnings.push('JIRA token missing.');
+  }
+
+  if (configuration.providerSet?.includes('GITHUB') && !configuration.hasGithubTokenRef) {
+    warnings.push('GitHub token missing.');
+  }
+
+  if (!warnings.length) {
+    warnings.push('Integration is partially configured.');
+  }
+
+  return warnings;
+}
+
+function flattenLinkedPullRequests(stories = []) {
+  return stories.flatMap((story) => story.linkedPullRequests || []);
+}
+
+function buildMonitoringSummary(snapshot) {
+  if (!snapshot) {
+    return null;
+  }
+
+  const stories = Array.isArray(snapshot.stories) ? snapshot.stories : [];
+  const linkedPullRequests = flattenLinkedPullRequests(stories);
+  const unlinkedPullRequests = Array.isArray(snapshot.unlinkedPullRequests) ? snapshot.unlinkedPullRequests : [];
+  const allPullRequests = [...linkedPullRequests, ...unlinkedPullRequests];
+
+  const activeStories = stories.filter((story) => story.isActive !== false);
+  const activePullRequests = allPullRequests.filter((pullRequest) => pullRequest.isActive !== false);
+  const activeLinkedPullRequests = linkedPullRequests.filter((pullRequest) => pullRequest.isActive !== false);
+
+  const lastSeenValues = [
+    ...stories.map((story) => story.lastSeenAt).filter(Boolean),
+    ...allPullRequests.map((pullRequest) => pullRequest.lastSeenAt).filter(Boolean),
+  ];
+
+  const latestSeenAt = lastSeenValues.reduce((currentLatest, candidate) => {
+    if (!candidate) {
+      return currentLatest;
+    }
+
+    if (!currentLatest) {
+      return candidate;
+    }
+
+    return new Date(candidate).getTime() > new Date(currentLatest).getTime() ? candidate : currentLatest;
+  }, '');
+
+  return {
+    lastSyncTime: latestSeenAt || '',
+    activeStoryCount: activeStories.length,
+    activePullRequestCount: activePullRequests.length,
+    matchedPullRequestCount: activeLinkedPullRequests.length,
+    mergedPullRequestCount: activeLinkedPullRequests.filter((pullRequest) => String(pullRequest.mergeStatus || '').toLowerCase() === 'merged').length,
+    staleRecordCount: stories.filter((story) => story.isActive === false).length
+      + allPullRequests.filter((pullRequest) => pullRequest.isActive === false).length,
+  };
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return 'Not synced yet';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return 'Not synced yet';
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
 export default function IntegrationConfigurationPage() {
   const { teamId } = useParams();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [configuration, setConfiguration] = useState(null);
-  const [notConnected, setNotConnected] = useState(false);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [monitoringLoading, setMonitoringLoading] = useState(false);
+  const [monitoringSnapshot, setMonitoringSnapshot] = useState(null);
+  const [monitoringError, setMonitoringError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -47,7 +191,9 @@ export default function IntegrationConfigurationPage() {
       try {
         setLoading(true);
         setError('');
-        setNotConnected(false);
+        setSuccess('');
+        setConfiguration(null);
+        setForm({ ...EMPTY_FORM });
 
         const { data } = await apiClient.get(`/v1/teams/${teamId}/integrations`);
         if (!isMounted) {
@@ -55,6 +201,7 @@ export default function IntegrationConfigurationPage() {
         }
 
         setConfiguration(data);
+        setForm(buildFormState(data));
       } catch (loadError) {
         if (!isMounted) {
           return;
@@ -63,10 +210,12 @@ export default function IntegrationConfigurationPage() {
         const code = loadError.response?.data?.code;
         if (code === 'INTEGRATION_BINDING_NOT_FOUND') {
           setConfiguration(null);
-          setNotConnected(true);
+          setForm({ ...EMPTY_FORM });
           return;
         }
 
+        setConfiguration(null);
+        setForm({ ...EMPTY_FORM });
         setError(loadError.response?.data?.message || loadError.message || 'Failed to load integration configuration.');
       } finally {
         if (isMounted) {
@@ -82,6 +231,113 @@ export default function IntegrationConfigurationPage() {
     };
   }, [teamId]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadMonitoringSummary() {
+      if (loading) {
+        return;
+      }
+
+      if (!configuration) {
+        setMonitoringSnapshot(null);
+        setMonitoringError('');
+        setMonitoringLoading(false);
+        return;
+      }
+
+      try {
+        setMonitoringLoading(true);
+        setMonitoringError('');
+        const { data } = await getCurrentSprintMonitoringSnapshot(teamId, { includeStale: true });
+        if (!isMounted) {
+          return;
+        }
+
+        setMonitoringSnapshot(data);
+      } catch (loadError) {
+        if (!isMounted) {
+          return;
+        }
+
+        setMonitoringSnapshot(null);
+        setMonitoringError(loadError.response?.data?.message || loadError.message || 'Failed to load monitoring summary.');
+      } finally {
+        if (isMounted) {
+          setMonitoringLoading(false);
+        }
+      }
+    }
+
+    loadMonitoringSummary();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [teamId, loading, configuration]);
+
+  async function refreshMonitoringSummary() {
+    try {
+      setMonitoringLoading(true);
+      setMonitoringError('');
+      const { data } = await getCurrentSprintMonitoringSnapshot(teamId, { includeStale: true });
+      setMonitoringSnapshot(data);
+    } catch (loadError) {
+      setMonitoringSnapshot(null);
+      setMonitoringError(loadError.response?.data?.message || loadError.message || 'Failed to load monitoring summary.');
+    } finally {
+      setMonitoringLoading(false);
+    }
+  }
+
+  function updateField(name, value) {
+    setForm((current) => ({
+      ...current,
+      [name]: value,
+    }));
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!user?.id) {
+      setError('You must be signed in to update integration settings.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const payload = {
+        providerSet: form.providerSet,
+        organizationName: form.organizationName,
+        repositoryName: form.repositoryName,
+        jiraWorkspaceId: form.jiraWorkspaceId || undefined,
+        jiraUserEmail: form.jiraUserEmail || undefined,
+        jiraProjectKey: form.jiraProjectKey,
+        defaultBranch: form.defaultBranch || undefined,
+        githubTokenRef: form.githubTokenRef || undefined,
+        jiraTokenRef: form.jiraTokenRef || undefined,
+        initiatedBy: String(user.id),
+      };
+
+      const request = configuration
+        ? apiClient.put(`/v1/teams/${teamId}/integrations`, payload)
+        : apiClient.post(`/v1/teams/${teamId}/integrations`, payload);
+      const { data } = await request;
+      setConfiguration(data);
+      setForm(buildFormState(data));
+      setSuccess('Integration settings saved successfully.');
+      await refreshMonitoringSummary();
+    } catch (saveError) {
+      setError(saveError.response?.data?.message || saveError.message || 'Failed to save integration settings.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className="page page-group-view">
@@ -94,58 +350,21 @@ export default function IntegrationConfigurationPage() {
     );
   }
 
-  if (error) {
-    return (
-      <main className="page page-group-view">
-        <div className="feedback feedback-error">
-          <div className="feedback-label">error</div>
-          <h2>Integration configuration unavailable</h2>
-          <p>{error}</p>
-        </div>
-        <p className="back-link-wrap">
-          <Link className="back-link" to="/students/groups/manage">Back to Group Management</Link>
-        </p>
-      </main>
-    );
-  }
-
-  if (notConnected) {
-    return (
-      <main className="page page-group-view">
-        <section className="hero group-page-header">
-          <p className="eyebrow">Sprint Monitoring</p>
-          <h1>Integration Configuration</h1>
-          <p className="group-page-status">Team {teamId}</p>
-        </section>
-
-        <section className="group-details-card">
-          <div className="feedback feedback-warning">
-            <div className="feedback-label">not connected</div>
-            <h2>No integration configured</h2>
-            <p>This team does not have an active GitHub or JIRA integration binding yet.</p>
-          </div>
-        </section>
-
-        <p className="back-link-wrap">
-          <Link className="back-link" to="/students/groups/manage">Back to Group Management</Link>
-        </p>
-      </main>
-    );
-  }
-
   const providerRows = buildProviderRows(configuration);
-  const missingProviders = providerRows.filter((provider) => !provider.configured).map((provider) => provider.label);
-  const missingTokenProviders = providerRows
-    .filter((provider) => provider.configured && !provider.connected)
-    .map((provider) => provider.label);
   const displayStatus = getDisplayStatus(configuration);
+  const monitoringWarnings = getMonitoringWarnings(configuration);
+  const monitoringSummary = buildMonitoringSummary(monitoringSnapshot);
+  const hasMonitoringData = monitoringSummary
+    ? (monitoringSummary.activeStoryCount + monitoringSummary.activePullRequestCount + monitoringSummary.staleRecordCount) > 0
+    : false;
+  const resolvedSprintId = monitoringSnapshot?.resolvedSprint?.sprintId || monitoringSnapshot?.sprintId || '';
 
   return (
     <main className="page page-group-view">
       <section className="hero group-page-header">
         <p className="eyebrow">Sprint Monitoring</p>
         <h1>Integration Configuration</h1>
-        <p className="group-page-status">Team {configuration.teamId}</p>
+        <p className="group-page-status">Team {teamId}</p>
       </section>
 
       <section className="group-details-card">
@@ -158,42 +377,30 @@ export default function IntegrationConfigurationPage() {
             </div>
             <div className="group-summary-item">
               <span>Providers</span>
-              <strong>{(configuration.providerSet || []).join(', ') || 'None'}</strong>
+              <strong>{(configuration?.providerSet || []).join(', ') || 'Not configured'}</strong>
             </div>
             <div className="group-summary-item">
               <span>Organization</span>
-              <strong>{configuration.organizationName || 'Not configured'}</strong>
+              <strong>{configuration?.organizationName || 'Not configured'}</strong>
             </div>
             <div className="group-summary-item">
               <span>Repository</span>
-              <strong>{configuration.repositoryName || 'Not configured'}</strong>
+              <strong>{configuration?.repositoryName || 'Not configured'}</strong>
             </div>
             <div className="group-summary-item">
               <span>JIRA Project</span>
-              <strong>{configuration.jiraProjectKey || 'Not configured'}</strong>
+              <strong>{configuration?.jiraProjectKey || 'Not configured'}</strong>
+            </div>
+            <div className="group-summary-item">
+              <span>JIRA Email</span>
+              <strong>{configuration?.jiraUserEmail || 'Not configured'}</strong>
             </div>
             <div className="group-summary-item">
               <span>Default Branch</span>
-              <strong>{configuration.defaultBranch || 'Not configured'}</strong>
+              <strong>{configuration?.defaultBranch || 'Not configured'}</strong>
             </div>
           </div>
         </div>
-
-        {displayStatus === 'Partial' && (
-          <div className="group-callout group-callout-warning">
-            <strong>Partial integration detected.</strong>
-            <p className="integration-warning-copy">
-              {missingProviders.length > 0
-                ? `Missing provider setup: ${missingProviders.join(', ')}.`
-                : 'All providers are selected, but one or more token references are still missing.'}
-            </p>
-            {missingTokenProviders.length > 0 && (
-              <p className="integration-warning-copy">
-                Provider setup is incomplete for: {missingTokenProviders.join(', ')}.
-              </p>
-            )}
-          </div>
-        )}
 
         <div>
           <h3>Provider Status</h3>
@@ -210,7 +417,6 @@ export default function IntegrationConfigurationPage() {
                         : 'Configured but waiting for token reference'}
                   </span>
                 </div>
-
                 <div className="group-member-actions">
                   <span className="member-role-badge">
                     {!provider.configured ? 'Missing' : provider.connected ? 'Connected' : 'Partial'}
@@ -220,13 +426,184 @@ export default function IntegrationConfigurationPage() {
             ))}
           </div>
         </div>
+
+        <div className="group-details-summary">
+          <h3>Monitoring Status / Sync Summary</h3>
+
+          {monitoringWarnings.length > 0 && (
+            <div className="feedback feedback-error">
+              <div className="feedback-label">warning</div>
+              {monitoringWarnings.map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+          )}
+
+          {monitoringLoading && (
+            <div className="feedback feedback-loading">
+              <div className="feedback-label">loading</div>
+              <p>Fetching monitoring summary for this sprint.</p>
+            </div>
+          )}
+
+          {!monitoringLoading && monitoringError && (
+            <div className="feedback feedback-error">
+              <div className="feedback-label">error</div>
+              <p>{monitoringError}</p>
+            </div>
+          )}
+
+          {!monitoringLoading && !monitoringError && !hasMonitoringData && (
+            <div className="feedback">
+              <div className="feedback-label">empty</div>
+              <p>No monitoring data exists for the active sprint yet.</p>
+            </div>
+          )}
+
+          {!monitoringLoading && !monitoringError && hasMonitoringData && monitoringSummary && (
+            <div className="group-summary-grid">
+              <div className="group-summary-item">
+                <span>Active Sprint</span>
+                <strong>{resolvedSprintId || 'Not resolved'}</strong>
+              </div>
+              <div className="group-summary-item">
+                <span>Last Sync Time</span>
+                <strong>{formatDateTime(monitoringSummary.lastSyncTime)}</strong>
+              </div>
+              <div className="group-summary-item">
+                <span>Synced JIRA Stories</span>
+                <strong>{monitoringSummary.activeStoryCount}</strong>
+              </div>
+              <div className="group-summary-item">
+                <span>Synced GitHub PRs</span>
+                <strong>{monitoringSummary.activePullRequestCount}</strong>
+              </div>
+              <div className="group-summary-item">
+                <span>Matched PRs</span>
+                <strong>{monitoringSummary.matchedPullRequestCount}</strong>
+              </div>
+              <div className="group-summary-item">
+                <span>Merged PRs</span>
+                <strong>{monitoringSummary.mergedPullRequestCount}</strong>
+              </div>
+              {monitoringSummary.staleRecordCount > 0 && (
+                <div className="group-summary-item">
+                  <span>Stale Records</span>
+                  <strong>{monitoringSummary.staleRecordCount}</strong>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </section>
 
-      <div className="group-action-row">
-        <Link className="workspace-button workspace-button-primary" to={`/students/groups/${configuration.teamId}/sprints/evaluation`}>
-          Run Sprint Evaluation
-        </Link>
-      </div>
+      <section className="group-details-card">
+        <h3>{configuration ? 'Update integration settings' : 'Create integration settings'}</h3>
+        <p className="token-note">
+          Store secure token references only. Raw token values should never be entered here.
+        </p>
+
+        {error && (
+          <div className="feedback feedback-error">
+            <div className="feedback-label">error</div>
+            <p>{error}</p>
+          </div>
+        )}
+
+        {success && (
+          <div className="feedback feedback-success">
+            <div className="feedback-label">saved</div>
+            <p>{success}</p>
+          </div>
+        )}
+
+        <form className="form" onSubmit={handleSubmit}>
+          <div className="group-callout group-callout-warning">
+            <strong>GitHub and JIRA are both required.</strong>
+            <p className="integration-warning-copy">
+              This monitoring flow currently expects both providers to be configured together, so provider selection is fixed on this page.
+            </p>
+          </div>
+
+          <label className="field">
+            <span>GitHub organization</span>
+            <input
+              value={form.organizationName}
+              onChange={(event) => updateField('organizationName', event.target.value)}
+              placeholder="acme-org"
+            />
+          </label>
+
+          <label className="field">
+            <span>Repository</span>
+            <input
+              value={form.repositoryName}
+              onChange={(event) => updateField('repositoryName', event.target.value)}
+              placeholder="senior-app-1"
+            />
+          </label>
+
+          <label className="field">
+            <span>JIRA workspace</span>
+            <input
+              value={form.jiraWorkspaceId}
+              onChange={(event) => updateField('jiraWorkspaceId', event.target.value)}
+              placeholder="workspace-acme"
+            />
+          </label>
+
+          <label className="field">
+            <span>JIRA user email</span>
+            <input
+              value={form.jiraUserEmail}
+              onChange={(event) => updateField('jiraUserEmail', event.target.value)}
+              placeholder="student@example.edu"
+            />
+          </label>
+
+          <label className="field">
+            <span>JIRA project key</span>
+            <input
+              value={form.jiraProjectKey}
+              onChange={(event) => updateField('jiraProjectKey', event.target.value)}
+              placeholder="SPM"
+            />
+          </label>
+
+          <label className="field">
+            <span>Default branch</span>
+            <input
+              value={form.defaultBranch}
+              onChange={(event) => updateField('defaultBranch', event.target.value)}
+              placeholder="main"
+            />
+          </label>
+
+          <label className="field">
+            <span>GitHub token reference</span>
+            <input
+              value={form.githubTokenRef}
+              onChange={(event) => updateField('githubTokenRef', event.target.value)}
+              placeholder="vault://github/team-1"
+            />
+          </label>
+
+          <label className="field">
+            <span>JIRA token reference</span>
+            <input
+              value={form.jiraTokenRef}
+              onChange={(event) => updateField('jiraTokenRef', event.target.value)}
+              placeholder="vault://jira/team-1"
+            />
+          </label>
+
+          <div className="invite-form-actions">
+            <button type="submit" disabled={saving}>
+              {saving ? 'Saving...' : configuration ? 'Update Configuration' : 'Save Configuration'}
+            </button>
+          </div>
+        </form>
+      </section>
 
       <p className="back-link-wrap">
         <Link className="back-link" to="/students/groups/manage">Back to Group Management</Link>

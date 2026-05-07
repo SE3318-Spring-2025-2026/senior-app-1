@@ -1,8 +1,12 @@
 const { randomUUID } = require('crypto');
 const { body, validationResult } = require('express-validator');
-const { normalizePullRequestData } = require('../services/githubPrDataNormalizer');
+const { IntegrationBinding } = require('../models');
+const { ApiError } = require('../middleware/errorResponse');
+const {
+  hasProvider,
+  storeGitHubPullRequests,
+} = require('../services/sprintMonitoringPersistenceService');
 
-// Validation rules for batch GitHub PR ingestion endpoint.
 const receiveGitHubPrDataValidation = [
   body('teamId')
     .isString()
@@ -28,14 +32,18 @@ const receiveGitHubPrDataValidation = [
   body('pullRequests.*')
     .isObject()
     .withMessage('each pull request entry must be an object'),
+  body('pullRequests.*.prNumber')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('prNumber must be a positive integer'),
+  body('pullRequests.*.number')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('number must be a positive integer'),
 ];
 
-// Accept and process batch GitHub PR data.
-// Request body: {teamId, sprintId, receivedAt?, pullRequests: []}
-// Returns 201 with operation metadata and normalized PR data.
 async function receiveGitHubPrData(req, res) {
   try {
-    // Validate request body against validation rules.
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -48,17 +56,47 @@ async function receiveGitHubPrData(req, res) {
     const teamId = req.body.teamId.trim();
     const sprintId = req.body.sprintId.trim();
     const receivedAt = req.body.receivedAt || new Date().toISOString();
-    const normalizedPullRequests = req.body.pullRequests.map(normalizePullRequestData);
 
-    // Log the ingestion event for audit/monitoring.
-    console.info('GitHub PR ingestion event received', {
+    const binding = await IntegrationBinding.findOne({
+      where: { teamId },
+    });
+
+    if (!binding) {
+      return res.status(404).json({
+        code: 'INTEGRATION_BINDING_NOT_FOUND',
+        message: 'No integration binding exists for this team',
+      });
+    }
+
+    if (!hasProvider(binding, 'GITHUB')) {
+      return res.status(409).json({
+        code: 'GITHUB_PROVIDER_NOT_ENABLED',
+        message: 'This team is not bound to GitHub integration',
+      });
+    }
+
+    const persisted = await storeGitHubPullRequests({
+      teamId,
+      sprintId,
+      pullRequests: req.body.pullRequests,
+    });
+
+    const samplePullRequests = persisted.normalizedPullRequests.slice(0, 3).map((pullRequest) => ({
+      prNumber: pullRequest.prNumber,
+      issueKey: pullRequest.issueKey,
+      branchName: pullRequest.branchName,
+      prStatus: pullRequest.prStatus,
+      mergeStatus: pullRequest.mergeStatus,
+    }));
+
+    console.info('Received GitHub PR ingestion event', {
       teamId,
       sprintId,
       receivedAt,
-      pullRequestCount: normalizedPullRequests.length,
+      pullRequestCount: persisted.receivedCount,
+      samplePullRequests,
     });
 
-    // Return 201 CREATED with operation details and normalized PR data.
     return res.status(201).json({
       id: `op_${randomUUID()}`,
       status: 'ACCEPTED',
@@ -66,11 +104,18 @@ async function receiveGitHubPrData(req, res) {
       recordedAt: new Date().toISOString(),
       teamId,
       sprintId,
-      receivedCount: normalizedPullRequests.length,
-      pullRequests: normalizedPullRequests,
+      receivedCount: persisted.receivedCount,
+      storedPullRequestCount: persisted.storedPullRequestCount,
     });
   } catch (error) {
-    // Log unexpected errors for debugging.
+    if (error instanceof ApiError) {
+      return res.status(error.status).json({
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      });
+    }
+
     console.error('GitHub PR ingestion failed unexpectedly', {
       error: error.message,
       stack: error.stack,
