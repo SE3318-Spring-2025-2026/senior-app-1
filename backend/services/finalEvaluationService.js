@@ -899,7 +899,11 @@ module.exports.submitAdvisorGrade = submitAdvisorGrade;
 =======
 module.exports = {
   submitAdvisorGrade,
+  calculateTeamScalar,
+  getTeamScalar,
+  getContributions,
 };
+<<<<<<< HEAD
 >>>>>>> 65544e7 (refactor: remove legacy endpoints, keep only advisor grade logic (PR #366 clean))
 'use strict';
 
@@ -1024,3 +1028,5 @@ async function getContributions(groupId) {
 
 module.exports = { calculateTeamScalar, getTeamScalar, getContributions };
 >>>>>>> 163acc7 (feat: add advisor grade endpoint, service, and validation (PR #366 requirements, conflict-free))
+=======
+>>>>>>> 670c7a6 (fix: resolve merge conflict and duplicate exports in finalEvaluationService.js)
