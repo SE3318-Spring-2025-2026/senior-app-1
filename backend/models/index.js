@@ -1,4 +1,3 @@
-// FinalEvaluationGrade import sadece bir kez olmalı
 /**
  * models/index.js
  *
@@ -37,10 +36,9 @@ const FinalEvaluationGrade = require('./FinalEvaluationGrade');
 const FinalEvaluationWeight = require('./FinalEvaluationWeight');
 const TeamScalar = require('./TeamScalar');
 const SprintMemberRecord = require('./SprintMemberRecord');
-const AdvisorGrade = require('./AdvisorGrade');
+const MemberFinalGrade = require('./MemberFinalGrade');
 
 module.exports = {
-  FinalEvaluationGrade,
   User,
   Professor,
   ValidStudentId,
@@ -71,5 +69,5 @@ module.exports = {
   FinalEvaluationWeight,
   TeamScalar,
   SprintMemberRecord,
-  AdvisorGrade,
+  MemberFinalGrade,
 };

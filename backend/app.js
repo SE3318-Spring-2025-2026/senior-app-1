@@ -74,7 +74,6 @@ app.use('/internal/github', internalGithubRoutes);
 app.use('/internal/sprint-sync', internalSprintSyncRoutes);
 app.use('/api/v1/committee/submissions', submissionsRoutes);
 app.use('/api/v1/committee', committeeRoutes);
-<<<<<<< HEAD
 app.use('/api/v1/final-evaluation', finalEvaluationRoutes);
 
 app.use(notFoundHandler);
