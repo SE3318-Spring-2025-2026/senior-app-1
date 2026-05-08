@@ -157,8 +157,8 @@ async function putWeightConfiguration(req, res) {
 
   try {
     const config = await setWeightConfig(
-      Number(req.body.advisorWeight),
-      Number(req.body.committeeWeight),
+      req.body.advisorWeight,
+      req.body.committeeWeight,
       req.user.id,
     );
     return res.status(200).json({
