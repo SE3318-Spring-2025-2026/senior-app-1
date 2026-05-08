@@ -37,7 +37,7 @@
                 <mxCell id="AI" value="AI Service" style="whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="1210" y="855" width="140" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="G_SYS" value="5.0 Sprint Monitoring (4 Sub-Processes)" style="swimlane;whiteSpace=wrap;html=1;fontSize=14;fontStyle=1;startSize=30;strokeColor=#99CCFF;fillColor=default;gradientColor=#CCE5FF;swimlaneFillColor=#99CCFF;" parent="1" vertex="1">
+                <mxCell id="G_SYS" value="5.0 Sprint Monitoring (5 Sub-Processes)" style="swimlane;whiteSpace=wrap;html=1;fontSize=14;fontStyle=1;startSize=30;strokeColor=#99CCFF;fillColor=default;gradientColor=#CCE5FF;swimlaneFillColor=#99CCFF;" parent="1" vertex="1">
                     <mxGeometry x="280" y="140" width="870" height="830" as="geometry"/>
                 </mxCell>
                 <mxCell id="P51" value="5.1&#xa;Bind External Integrations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="G_SYS" vertex="1">

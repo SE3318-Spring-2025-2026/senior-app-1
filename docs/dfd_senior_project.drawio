@@ -1240,7 +1240,7 @@
                 <mxCell id="AI" value="AI Service" style="whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="1210" y="855" width="140" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="G_SYS" value="5.0 Sprint Monitoring (4 Sub-Processes)" style="swimlane;whiteSpace=wrap;html=1;fontSize=14;fontStyle=1;startSize=30;strokeColor=#99CCFF;fillColor=default;gradientColor=#CCE5FF;swimlaneFillColor=#99CCFF;" parent="1" vertex="1">
+                <mxCell id="G_SYS" value="5.0 Sprint Monitoring (5 Sub-Processes)" style="swimlane;whiteSpace=wrap;html=1;fontSize=14;fontStyle=1;startSize=30;strokeColor=#99CCFF;fillColor=default;gradientColor=#CCE5FF;swimlaneFillColor=#99CCFF;" parent="1" vertex="1">
                     <mxGeometry x="280" y="140" width="870" height="830" as="geometry"/>
                 </mxCell>
                 <mxCell id="P51" value="5.1&#xa;Bind External Integrations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="G_SYS" vertex="1">
@@ -1254,6 +1254,34 @@
                 </mxCell>
                 <mxCell id="P54" value="5.4&#xa;AI Implementation Validation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="G_SYS" vertex="1">
                     <mxGeometry x="590" y="700" width="210" height="75" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" style="edgeStyle=none;html=1;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="G_SYS" source="P52" target="2">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="30" y="745"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="9" value="story data" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];rounded=1;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=12;fontColor=default;fontStyle=1;fillColor=#dae8fc;" vertex="1" connectable="0" parent="3">
+                    <mxGeometry x="0.2794" y="-2" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="4" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;" edge="1" parent="G_SYS" source="P53" target="2">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" value="PR Data" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];rounded=1;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=12;fontColor=default;fontStyle=1;fillColor=#dae8fc;" vertex="1" connectable="0" parent="4">
+                    <mxGeometry x="-0.0488" y="2" relative="1" as="geometry">
+                        <mxPoint y="-1" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="8" value="Validation Result&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="edgeStyle=none;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=12;fontColor=default;fontStyle=1;" edge="1" parent="G_SYS" source="P54" target="2">
+                    <mxGeometry x="0.1081" y="-41" relative="1" as="geometry">
+                        <mxPoint x="1" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="2" value="5.5&lt;div&gt;Evaluate Sprint Performance &amp;amp; Grades&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" vertex="1" parent="G_SYS">
+                    <mxGeometry x="320" y="710" width="210" height="70" as="geometry"/>
                 </mxCell>
                 <mxCell id="f1" value="PATs, Workspaces, Orgs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" parent="G_SYS" edge="1">
                     <mxGeometry relative="1" as="geometry">
@@ -1383,6 +1411,33 @@
                             <mxPoint x="190" y="478"/>
                             <mxPoint x="190" y="1105"/>
                         </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="6" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="D4" target="2">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1610" y="1000"/>
+                            <mxPoint x="1130" y="1000"/>
+                            <mxPoint x="960" y="1000"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="11" value="Sprint Evaluation Metrics" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];rounded=1;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=12;fontColor=default;fontStyle=1;fillColor=#dae8fc;" vertex="1" connectable="0" parent="6">
+                    <mxGeometry x="-0.1223" y="-5" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="12" style="edgeStyle=none;html=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=12;fontColor=default;fontStyle=1;" edge="1" parent="1" source="2" target="D2">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1070" y="960"/>
+                            <mxPoint x="1340" y="960"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="13" value="results" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];rounded=1;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=12;fontColor=default;fontStyle=1;fillColor=#dae8fc;" vertex="1" connectable="0" parent="12">
+                    <mxGeometry x="0.7386" y="-6" relative="1" as="geometry">
+                        <mxPoint y="1" as="offset"/>
                     </mxGeometry>
                 </mxCell>
             </root>
