@@ -6,7 +6,6 @@
  * a single location and so `sequelize.sync()` / migrations see all tables.
  */
 
-
 const User = require('./User');
 const Professor = require('./Professor');
 const ValidStudentId = require('./ValidStudentId');
