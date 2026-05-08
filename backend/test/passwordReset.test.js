@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 const sequelize = require('../db');
 const app = require('../app');
 const { User, PasswordResetToken } = require('../models');
-const { hashToken } = require('../services/passwordResetService');
+const { hashToken, resetPassword } = require('../services/passwordResetService');
 
 let server;
 let baseUrl;
@@ -259,6 +259,55 @@ test('concurrent reset attempts with the same token only allow one success', asy
 
   assert.equal(successCount, 1);
   assert.equal(usedCount, 1);
+});
+
+test('token consume rolls back if password update fails', async () => {
+  const admin = await createUser({
+    email: 'admin-rollback@example.edu',
+    fullName: 'Rollback Admin',
+    role: 'ADMIN',
+  });
+  const target = await createUser({
+    email: 'target-rollback@example.edu',
+    fullName: 'Rollback Target',
+    role: 'PROFESSOR',
+  });
+
+  const generated = await request(`/api/v1/admin/users/${target.id}/password-reset-link`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaderFor(admin),
+    },
+  });
+  const token = new URL(generated.json.resetLink).searchParams.get('token');
+  const tokenHash = hashToken(token);
+
+  const originalUpdate = User.prototype.update;
+  User.prototype.update = async function failTargetPasswordUpdate(values, options) {
+    if (this.id === target.id && values.password) {
+      throw new Error('SIMULATED_PASSWORD_UPDATE_FAILURE');
+    }
+    return originalUpdate.call(this, values, options);
+  };
+
+  try {
+    await assert.rejects(
+      () => resetPassword({ token, newPassword: 'NewPassword123.' }),
+      /SIMULATED_PASSWORD_UPDATE_FAILURE/,
+    );
+  } finally {
+    User.prototype.update = originalUpdate;
+  }
+
+  const afterFailure = await PasswordResetToken.findOne({ where: { tokenHash } });
+  assert.ok(afterFailure);
+  assert.equal(afterFailure.usedAt, null);
+
+  await resetPassword({ token, newPassword: 'NewPassword123.' });
+
+  const afterSuccess = await PasswordResetToken.findOne({ where: { tokenHash } });
+  assert.ok(afterSuccess.usedAt);
 });
 
 test('expired reset token is rejected', async () => {

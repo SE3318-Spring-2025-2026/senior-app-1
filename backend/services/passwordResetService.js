@@ -6,6 +6,7 @@ const { PasswordResetToken, User } = require('../models');
 const studentService = require('./studentService');
 
 const DEFAULT_TOKEN_TTL_MINUTES = 60;
+const tokenLocks = new Map();
 
 function serviceError(status, code, message) {
   const error = new Error(message);
@@ -52,6 +53,26 @@ function assertValidPassword(newPassword) {
       'WEAK_PASSWORD',
       'Password must be at least 8 characters and include uppercase, lowercase, number, and special character.',
     );
+  }
+}
+
+async function withTokenLock(tokenHash, work) {
+  const previous = tokenLocks.get(tokenHash) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.then(() => current);
+  tokenLocks.set(tokenHash, queued);
+
+  await previous;
+  try {
+    return await work();
+  } finally {
+    release();
+    if (tokenLocks.get(tokenHash) === queued) {
+      tokenLocks.delete(tokenHash);
+    }
   }
 }
 
@@ -115,68 +136,77 @@ async function resetPassword({ token, newPassword }) {
 
   const tokenHash = hashToken(token.trim());
   const now = new Date();
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-  const [consumedCount] = await PasswordResetToken.update(
-    { usedAt: now },
-    {
-      where: {
-        tokenHash,
-        usedAt: null,
-        invalidatedAt: null,
-        expiresAt: { [Op.gt]: now },
+  return withTokenLock(tokenHash, () => sequelize.transaction(async (transaction) => {
+    const [consumedCount] = await PasswordResetToken.update(
+      { usedAt: now },
+      {
+        where: {
+          tokenHash,
+          usedAt: null,
+          invalidatedAt: null,
+          expiresAt: { [Op.gt]: now },
+        },
+        transaction,
       },
-    },
-  );
+    );
 
-  if (consumedCount !== 1) {
-    const failedToken = await PasswordResetToken.findOne({
+    if (consumedCount !== 1) {
+      const failedToken = await PasswordResetToken.findOne({
+        where: { tokenHash },
+        transaction,
+      });
+
+      if (failedToken?.usedAt) {
+        throw serviceError(400, 'RESET_TOKEN_USED', 'Password reset token has already been used.');
+      }
+
+      if (failedToken?.expiresAt && failedToken.expiresAt <= now) {
+        throw serviceError(400, 'RESET_TOKEN_EXPIRED', 'Password reset token has expired.');
+      }
+
+      throw serviceError(400, 'RESET_TOKEN_INVALID', 'Password reset token is invalid.');
+    }
+
+    const resetToken = await PasswordResetToken.findOne({
       where: { tokenHash },
+      transaction,
     });
 
-    if (failedToken?.usedAt) {
-      throw serviceError(400, 'RESET_TOKEN_USED', 'Password reset token has already been used.');
+    const user = await User.findByPk(resetToken.userId, { transaction });
+    if (!user) {
+      throw serviceError(400, 'RESET_TOKEN_INVALID', 'Password reset token is invalid.');
     }
 
-    if (failedToken?.expiresAt && failedToken.expiresAt <= now) {
-      throw serviceError(400, 'RESET_TOKEN_EXPIRED', 'Password reset token has expired.');
-    }
-
-    throw serviceError(400, 'RESET_TOKEN_INVALID', 'Password reset token is invalid.');
-  }
-
-  const resetToken = await PasswordResetToken.findOne({
-    where: { tokenHash },
-  });
-
-  const user = await User.findByPk(resetToken.userId);
-  if (!user) {
-    throw serviceError(400, 'RESET_TOKEN_INVALID', 'Password reset token is invalid.');
-  }
-
-  const hashedPassword = await bcrypt.hash(newPassword, 10);
-  await user.update({
-    password: hashedPassword,
-    passwordHash: hashedPassword,
-    status: 'ACTIVE',
-    sessionVersion: Number(user.sessionVersion || 0) + 1,
-  });
-
-  await PasswordResetToken.update(
-    { invalidatedAt: now },
-    {
-      where: {
-        userId: user.id,
-        id: { [Op.ne]: resetToken.id },
-        usedAt: null,
-        invalidatedAt: null,
+    await user.update(
+      {
+        password: hashedPassword,
+        passwordHash: hashedPassword,
+        status: 'ACTIVE',
+        sessionVersion: Number(user.sessionVersion || 0) + 1,
       },
-    },
-  );
+      { transaction },
+    );
 
-  return {
-    userId: user.id,
-    role: user.role,
-  };
+    await PasswordResetToken.update(
+      { invalidatedAt: now },
+      {
+        where: {
+          userId: user.id,
+          id: { [Op.ne]: resetToken.id },
+          usedAt: null,
+          invalidatedAt: null,
+        },
+        transaction,
+      },
+    );
+
+    return {
+      userId: user.id,
+      role: user.role,
+    };
+  }));
 }
 
 module.exports = {
