@@ -7,6 +7,50 @@ const ctrl = require('../controllers/finalEvaluationController');
 const router = express.Router();
 
 router.post(
+  '/groups/:groupId/advisor-grade',
+  authenticate,
+  authorize(['PROFESSOR']),
+  ctrl.groupIdValidation,
+  ctrl.gradeBodyValidation,
+  ctrl.postAdvisorGrade,
+);
+
+router.put(
+  '/groups/:groupId/advisor-grade',
+  authenticate,
+  authorize(['PROFESSOR']),
+  ctrl.groupIdValidation,
+  ctrl.gradeBodyValidation,
+  ctrl.putAdvisorGrade,
+);
+
+router.post(
+  '/groups/:groupId/committee-grade',
+  authenticate,
+  authorize(['PROFESSOR']),
+  ctrl.groupIdValidation,
+  ctrl.gradeBodyValidation,
+  ctrl.postCommitteeGrade,
+);
+
+router.put(
+  '/groups/:groupId/committee-grade',
+  authenticate,
+  authorize(['PROFESSOR']),
+  ctrl.groupIdValidation,
+  ctrl.gradeBodyValidation,
+  ctrl.putCommitteeGrade,
+);
+
+router.get(
+  '/groups/:groupId/grades',
+  authenticate,
+  authorize(['COORDINATOR', 'PROFESSOR']),
+  ctrl.groupIdValidation,
+  ctrl.getRawGrades,
+);
+
+router.post(
   '/groups/:groupId/team-scalar',
   authenticate,
   authorize(['COORDINATOR']),

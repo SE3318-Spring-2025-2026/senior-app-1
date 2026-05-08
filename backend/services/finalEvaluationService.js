@@ -5,10 +5,13 @@ const {
   Group,
   FinalEvaluationGrade,
   FinalEvaluationWeight,
+  Deliverable,
   TeamScalar,
   SprintMemberRecord,
   User,
   MemberFinalGrade,
+  GroupAdvisorAssignment,
+  AuditLog,
 } = require('../models');
 const ApiError = require('../errors/apiError');
 
@@ -16,6 +19,26 @@ function serviceError(code, message) {
   const err = new Error(message);
   err.code = code;
   return err;
+}
+
+function computeFinalScore(scores) {
+  if (!Array.isArray(scores) || scores.length === 0) {
+    throw serviceError('VALIDATION_ERROR', 'scores must be a non-empty array');
+  }
+
+  let sum = 0;
+  for (const s of scores) {
+    const value = Number(s?.value);
+    if (!s?.criterionId) {
+      throw serviceError('VALIDATION_ERROR', 'each score must have a criterionId');
+    }
+    if (Number.isNaN(value) || value < 0 || value > 1) {
+      throw serviceError('VALIDATION_ERROR', 'score value must be between 0 and 1');
+    }
+    sum += value;
+  }
+
+  return Number((sum / scores.length).toFixed(2));
 }
 
 function mapLetter(score) {
@@ -26,12 +49,170 @@ function mapLetter(score) {
   return 'F';
 }
 
+async function assertGroupExistsAndUnlocked(groupId) {
+  const group = await assertGroupExists(groupId);
+  if (group.status === 'FINALIZED') {
+    throw serviceError('FINALIZATION_LOCK_ERROR', 'Cannot submit/update grades after finalization');
+  }
+  const p64Lock = await MemberFinalGrade.findOne({
+    where: { groupId },
+    attributes: ['id'],
+  });
+  if (p64Lock) {
+    throw serviceError(
+      'FINALIZATION_LOCK_ERROR',
+      'Cannot submit/update grades after per-member grades have been finalized',
+    );
+  }
+  return group;
+}
+
+async function assertGroupExists(groupId) {
+  const group = await Group.findByPk(groupId);
+  if (!group) throw serviceError('GROUP_NOT_FOUND', 'Group not found');
+  return group;
+}
+
+async function logGradeSubmitted({ actorId, grade }) {
+  try {
+    await AuditLog.create({
+      action: 'GRADE_SUBMITTED',
+      actorId,
+      targetType: 'FINAL_EVALUATION_GRADE',
+      targetId: grade.id,
+      metadata: {
+        groupId: grade.groupId,
+        deliverableId: grade.deliverableId,
+        gradeType: grade.gradeType,
+      },
+    });
+  } catch {
+    // Logging must never break the grade submission.
+  }
+}
+
+async function submitAdvisorGrade({ groupId, deliverableId, advisorUser, scores, comments }) {
+  const group = await assertGroupExistsAndUnlocked(groupId);
+
+  const assignment = await GroupAdvisorAssignment.findOne({
+    where: { groupId, advisorUserId: advisorUser.id },
+  });
+  if (!assignment) {
+    throw serviceError('FORBIDDEN', 'Only assigned advisor can submit advisor grade');
+  }
+
+  const deliverable = await Deliverable.findByPk(deliverableId);
+  if (!deliverable || deliverable.groupId !== groupId) {
+    throw serviceError('DELIVERABLE_NOT_FOUND', 'Deliverable not found');
+  }
+
+  const existing = await FinalEvaluationGrade.findOne({
+    where: { groupId, deliverableId, gradeType: 'ADVISOR', gradedBy: advisorUser.id },
+  });
+  if (existing) throw serviceError('ADVISOR_GRADE_EXISTS', 'Advisor grade already exists');
+
+  const finalScore = computeFinalScore(scores);
+  const grade = await FinalEvaluationGrade.create({
+    groupId,
+    deliverableId,
+    gradeType: 'ADVISOR',
+    gradedBy: advisorUser.id,
+    scores,
+    finalScore,
+    comments: comments ?? null,
+  });
+  await logGradeSubmitted({ actorId: advisorUser.id, grade });
+  return grade;
+}
+
+async function updateAdvisorGrade({ groupId, deliverableId, advisorUser, scores, comments }) {
+  const group = await assertGroupExistsAndUnlocked(groupId);
+
+  const assignment = await GroupAdvisorAssignment.findOne({
+    where: { groupId, advisorUserId: advisorUser.id },
+  });
+  if (!assignment) {
+    throw serviceError('FORBIDDEN', 'Only assigned advisor can update advisor grade');
+  }
+
+  const existing = await FinalEvaluationGrade.findOne({
+    where: { groupId, deliverableId, gradeType: 'ADVISOR', gradedBy: advisorUser.id },
+  });
+  if (!existing) throw serviceError('GRADE_NOT_FOUND', 'Advisor grade not found');
+
+  const finalScore = computeFinalScore(scores);
+  const updated = await existing.update({
+    scores,
+    finalScore,
+    comments: comments ?? null,
+  });
+  return updated;
+}
+
+async function submitCommitteeGrade({ groupId, deliverableId, professorUser, scores, comments }) {
+  await assertGroupExistsAndUnlocked(groupId);
+
+  const deliverable = await Deliverable.findByPk(deliverableId);
+  if (!deliverable || deliverable.groupId !== groupId) {
+    throw serviceError('DELIVERABLE_NOT_FOUND', 'Deliverable not found');
+  }
+
+  const existing = await FinalEvaluationGrade.findOne({
+    where: { groupId, deliverableId, gradeType: 'COMMITTEE', gradedBy: professorUser.id },
+  });
+  if (existing) throw serviceError('COMMITTEE_GRADE_EXISTS', 'Committee grade already exists');
+
+  const finalScore = computeFinalScore(scores);
+  const grade = await FinalEvaluationGrade.create({
+    groupId,
+    deliverableId,
+    gradeType: 'COMMITTEE',
+    gradedBy: professorUser.id,
+    scores,
+    finalScore,
+    comments: comments ?? null,
+  });
+  await logGradeSubmitted({ actorId: professorUser.id, grade });
+  return grade;
+}
+
+async function updateCommitteeGrade({ groupId, deliverableId, professorUser, scores, comments }) {
+  await assertGroupExistsAndUnlocked(groupId);
+
+  const deliverable = await Deliverable.findByPk(deliverableId);
+  if (!deliverable || deliverable.groupId !== groupId) {
+    throw serviceError('DELIVERABLE_NOT_FOUND', 'Deliverable not found');
+  }
+
+  const existing = await FinalEvaluationGrade.findOne({
+    where: { groupId, deliverableId, gradeType: 'COMMITTEE', gradedBy: professorUser.id },
+  });
+  if (existing) {
+    const finalScore = computeFinalScore(scores);
+    return existing.update({
+      scores,
+      finalScore,
+      comments: comments ?? null,
+    });
+  }
+
+  const anyForDeliverable = await FinalEvaluationGrade.findOne({
+    where: { groupId, deliverableId, gradeType: 'COMMITTEE' },
+  });
+  if (anyForDeliverable) {
+    throw serviceError('FORBIDDEN', 'Only the original reviewer can update this committee grade');
+  }
+
+  throw serviceError('GRADE_NOT_FOUND', 'Committee grade not found');
+}
+
 async function calculateTeamScalar(groupId) {
   const group = await Group.findByPk(groupId);
   if (!group) throw serviceError('GROUP_NOT_FOUND', 'Group not found');
 
   const advisorGrade = await FinalEvaluationGrade.findOne({
     where: { groupId, gradeType: 'ADVISOR' },
+    order: [['createdAt', 'DESC']],
   });
   if (!advisorGrade) {
     throw serviceError('GRADES_INCOMPLETE', 'Advisor grade has not been submitted for this group');
@@ -39,6 +220,7 @@ async function calculateTeamScalar(groupId) {
 
   const committeeGrades = await FinalEvaluationGrade.findAll({
     where: { groupId, gradeType: 'COMMITTEE' },
+    order: [['createdAt', 'DESC']],
   });
   if (!committeeGrades.length) {
     throw serviceError('GRADES_INCOMPLETE', 'No committee grades exist for this group');
@@ -169,6 +351,26 @@ async function getMyGrade(user) {
   };
 }
 
+async function getRawGrades(groupId) {
+  await assertGroupExists(groupId);
+
+  const advisorGrade = await FinalEvaluationGrade.findOne({
+    where: { groupId, gradeType: 'ADVISOR' },
+    order: [['createdAt', 'DESC']],
+  });
+
+  const committeeGrades = await FinalEvaluationGrade.findAll({
+    where: { groupId, gradeType: 'COMMITTEE' },
+    order: [['createdAt', 'DESC']],
+  });
+
+  return {
+    groupId,
+    advisorGrade,
+    committeeGrades,
+  };
+}
+
 /**
  * Finalize and persist per-member grades for a group.
  *
@@ -257,10 +459,15 @@ async function _defaultGetContributionsArray(groupId) {
 }
 
 module.exports = {
+  submitAdvisorGrade,
+  updateAdvisorGrade,
+  submitCommitteeGrade,
+  updateCommitteeGrade,
   calculateTeamScalar,
   getTeamScalar,
   getContributions,
   getMyGrade,
+  getRawGrades,
   finalize,
   getFinalGrades,
   mapLetter,
