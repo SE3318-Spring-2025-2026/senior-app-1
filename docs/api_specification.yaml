@@ -27,6 +27,10 @@ components:
       type: apiKey
       in: cookie
       name: next-auth.session-token
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
     githubOAuth:
       type: oauth2
       flows:
@@ -53,6 +57,44 @@ components:
       properties:
         message: { type: string }
         code: { type: string }
+
+    PasswordResetLinkResponse:
+      type: object
+      required: [message, resetLink, expiresAt, user]
+      properties:
+        message: { type: string, example: Password reset link generated successfully }
+        resetLink:
+          type: string
+          format: uri
+          example: http://localhost:5173/reset-password?token=plain-one-time-token
+        expiresAt: { type: string, format: date-time }
+        user:
+          type: object
+          properties:
+            id: { type: integer, example: 12 }
+            email: { type: string, format: email, example: student@example.edu }
+            fullName: { type: string, example: Student User }
+            role: { type: string, enum: [STUDENT, PROFESSOR, COORDINATOR, ADMIN] }
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          description: Plain token from the reset link. Only its SHA-256 hash is stored server-side.
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+          description: Must include uppercase, lowercase, number, and special character.
+
+    PasswordResetSuccessResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: PASSWORD_RESET_SUCCESS }
+        message: { type: string, example: Password reset successful }
 
     Group:
       type: object
@@ -247,20 +289,49 @@ paths:
         201: { description: Professor registered, one-time link generated }
         409: { description: Professor email already exists }
 
-  /admin/reset-link:
+  /api/v1/admin/users/{userId}/password-reset-link:
     post:
       tags: ["1.0 User Registration"]
-      summary: Generate one-time-use password reset link
-      security: [{ cookieAuth: [] }]
+      summary: Admin generates a one-time-use password reset link
+      description: Admin-only endpoint for creating a password reset link for any registered student, professor, coordinator, or admin user. The plain token is returned only in this response, while the server stores a hash, expires the token, and invalidates older active reset links for the same user.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
       responses:
         201:
           description: Reset link generated
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  resetLink: { type: string }
+                $ref: '#/components/schemas/PasswordResetLinkResponse'
+        400: { description: Invalid userId }
+        401: { description: Authentication required }
+        403: { description: Admin role required }
+        404: { description: User not found }
+
+  /api/v1/auth/reset-password:
+    post:
+      tags: ["1.0 User Registration"]
+      summary: Reset password using a one-time token
+      description: Public token-based password reset endpoint. The backend validates the token hash, expiry, and unused state, atomically consumes the token with the password update, invalidates sibling reset links, and increments the user's sessionVersion to invalidate older JWTs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        200:
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetSuccessResponse'
+        400:
+          description: Missing token/password, weak password, invalid token, expired token, or already-used token
 
   /api/v1/professors/password-setup:
     post:

@@ -35,7 +35,7 @@ The admin manages the system and performs administrative operations.
 * The coordinator can assign committees and manage jury assignments.
 * The coordinator can set per-sprint story point requirements for each student.
 * The system supports markdown editing with WYSIWYG support and image insertion for deliverable documents.
-* The system provides a password reset mechanism for admins, generating one-time-use reset links.
+* The system provides an admin-generated, one-time-use password reset mechanism for registered users.
 * The system allows professors to be manually registered by the admin, with a forced password change on first login.
 * The system supports notification features for group invitations, advisor requests, and committee assignments.
 * The coordinator can upload valid student IDs for registration eligibility.
@@ -95,6 +95,59 @@ The admin manages the system and performs administrative operations.
 | Student connects GitHub | Frontend + NextAuth.js | GitHub OAuth Tokens, Username |
 | Admin registers as Professor | Admin Panel + Backend | Professor Name, Email |
 | Professor changes password | Frontend + Backend | One-time reset link, New Password |
+| Admin generates password reset link | Admin Panel + Backend | Target user ID, Admin JWT |
+| User resets password | Frontend + Backend | One-time reset token, New password |
+
+#### Password Reset Flow
+
+Admins can generate a one-time password reset link for any registered user from the admin workspace.
+
+Backend endpoints:
+
+| METHOD | ENDPOINT | AUTHORIZATION | PURPOSE |
+| :--- | :--- | :--- | :--- |
+| POST | `/api/v1/admin/users/{userId}/password-reset-link` | Admin only | Generate a reset link for the target user |
+| POST | `/api/v1/auth/reset-password` | Public token-based | Set a new password using a valid reset token |
+
+Frontend routes:
+
+| ROUTE | PURPOSE |
+| :--- | :--- |
+| `/admin/password-reset-links` | Admin tool for generating password reset links |
+| `/reset-password?token=...` | Public reset form for setting a new password |
+
+Security behavior:
+
+* Reset tokens are generated with crypto-secure randomness.
+* Plain reset tokens are never stored in the database; only token hashes are stored.
+* Generating a new reset link invalidates older active reset links for the same user.
+* Reset tokens expire after a configurable lifetime.
+* Token consume, password update, session-version update, and sibling-token invalidation happen in one transaction.
+* Previously issued JWT sessions for the reset user are invalidated by incrementing the user's session version.
+* Frontend login clears stale role-specific sessions from local storage before saving the new session.
+
+Configuration:
+
+| ENV VARIABLE | DEFAULT | PURPOSE |
+| :--- | :--- | :--- |
+| `FRONTEND_URL` | `http://localhost:5173` | Base URL used when building reset links |
+| `PASSWORD_RESET_TOKEN_TTL_MINUTES` | `60` | Reset token lifetime in minutes |
+
+Targeted checks:
+
+```bash
+# backend password reset flow
+cd backend
+JWT_SECRET=test-backend-jwt-not-for-production node --test --test-concurrency=1 test/passwordReset.test.js
+
+# frontend stale-session/login regression
+cd frontend
+npm test -- issue315-LoginPage.test.jsx
+
+# frontend production build
+cd frontend
+npm run build
+```
 
 ### 2. Group Formation
 | PROCESS STEP | SYSTEM COMPONENT | DATA REQUIRED |
