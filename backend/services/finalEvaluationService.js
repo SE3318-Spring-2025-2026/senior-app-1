@@ -73,22 +73,20 @@ async function assertGroupExists(groupId) {
   return group;
 }
 
-async function logGradeSubmitted({ actorId, grade }) {
-  try {
-    await AuditLog.create({
-      action: 'GRADE_SUBMITTED',
-      actorId,
-      targetType: 'FINAL_EVALUATION_GRADE',
-      targetId: grade.id,
-      metadata: {
-        groupId: grade.groupId,
-        deliverableId: grade.deliverableId,
-        gradeType: grade.gradeType,
-      },
-    });
-  } catch {
-    // Logging must never break the grade submission.
-  }
+async function _logGradingEvent({ actorId, gradeId, groupId, deliverableId, graderRole, gradeType }) {
+  return AuditLog.create({
+    action: 'GRADE_SUBMITTED',
+    actorId,
+    targetType: 'GRADE',
+    targetId: gradeId,
+    metadata: {
+      groupId,
+      deliverableId,
+      graderRole,
+      gradeType,
+      timestamp: new Date().toISOString(),
+    },
+  });
 }
 
 async function submitAdvisorGrade({ groupId, deliverableId, advisorUser, scores, comments }) {
@@ -121,7 +119,16 @@ async function submitAdvisorGrade({ groupId, deliverableId, advisorUser, scores,
     finalScore,
     comments: comments ?? null,
   });
-  await logGradeSubmitted({ actorId: advisorUser.id, grade });
+  _logGradingEvent({
+    actorId: advisorUser.id,
+    gradeId: grade.id,
+    groupId: grade.groupId,
+    deliverableId: grade.deliverableId,
+    graderRole: 'ADVISOR',
+    gradeType: grade.gradeType,
+  }).catch((err) => {
+    console.error('[finalEvaluationService] audit log failed:', err);
+  });
   return grade;
 }
 
@@ -172,7 +179,16 @@ async function submitCommitteeGrade({ groupId, deliverableId, professorUser, sco
     finalScore,
     comments: comments ?? null,
   });
-  await logGradeSubmitted({ actorId: professorUser.id, grade });
+  _logGradingEvent({
+    actorId: professorUser.id,
+    gradeId: grade.id,
+    groupId: grade.groupId,
+    deliverableId: grade.deliverableId,
+    graderRole: 'PROFESSOR',
+    gradeType: grade.gradeType,
+  }).catch((err) => {
+    console.error('[finalEvaluationService] audit log failed:', err);
+  });
   return grade;
 }
 

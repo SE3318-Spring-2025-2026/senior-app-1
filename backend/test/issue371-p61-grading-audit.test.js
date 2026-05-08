@@ -76,6 +76,16 @@ function skipIfRouteMissing(t, response, json) {
   return false;
 }
 
+async function waitForAuditRows(expectedCount, where = {}) {
+  const maxAttempts = 20;
+  for (let i = 0; i < maxAttempts; i++) {
+    const count = await AuditLog.count({ where });
+    if (count >= expectedCount) return count;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return AuditLog.count({ where });
+}
+
 async function createProfessor(suffix) {
   return User.create({
     email: `prof371-${suffix}@example.edu`,
@@ -108,13 +118,13 @@ async function seedAdvisorContext() {
     studentUserId: student.id,
     advisorUserId: advisor.id,
   });
-  await Deliverable.create({
+  const deliverable = await Deliverable.create({
     groupId: group.id,
     type: 'PROPOSAL',
     content: 'P371 advisor audit seed',
     status: 'SUBMITTED',
   });
-  return { groupId: group.id, advisor };
+  return { groupId: group.id, advisor, deliverableId: deliverable.id };
 }
 
 async function seedCommitteeContext() {
@@ -133,17 +143,17 @@ async function seedCommitteeContext() {
     memberIds: [String(student.id)],
     status: 'FORMATION',
   });
-  await Deliverable.create({
+  const deliverable = await Deliverable.create({
     groupId: group.id,
     type: 'PROPOSAL',
     content: 'P371 committee audit seed',
     status: 'SUBMITTED',
   });
-  return { groupId: group.id, professor };
+  return { groupId: group.id, professor, deliverableId: deliverable.id };
 }
 
 function scoresBody() {
-  return { scores: [{ criterionId: 'audit-criterion', value: 84 }] };
+  return { scores: [{ criterionId: 'audit-criterion', value: 0.84 }] };
 }
 
 runAfterEach(() => {
@@ -178,7 +188,7 @@ test.beforeEach(async () => {
 });
 
 test('after POST /advisor-grade succeeds, AuditLog count increases by 1 with action GRADE_SUBMITTED', async (t) => {
-  const { groupId, advisor } = await seedAdvisorContext();
+  const { groupId, advisor, deliverableId } = await seedAdvisorContext();
   const before = await AuditLog.count();
 
   const { response, json } = await request(advisorGradeUrl(groupId), {
@@ -187,12 +197,12 @@ test('after POST /advisor-grade succeeds, AuditLog count increases by 1 with act
       'Content-Type': 'application/json',
       ...authHeaderFor(advisor),
     },
-    body: JSON.stringify(scoresBody()),
+    body: JSON.stringify({ deliverableId, ...scoresBody() }),
   });
   if (skipIfRouteMissing(t, response, json)) return;
   assert.equal(response.status, 201, JSON.stringify(json));
 
-  const after = await AuditLog.count();
+  const after = await waitForAuditRows(before + 1);
   assert.equal(after, before + 1, 'expected exactly one new audit row');
 
   const latest = await AuditLog.findOne({
@@ -200,10 +210,14 @@ test('after POST /advisor-grade succeeds, AuditLog count increases by 1 with act
   });
   assert.ok(latest, 'audit row should exist');
   assert.equal(latest.action, 'GRADE_SUBMITTED', latest.action);
+  assert.equal(latest.targetType, 'GRADE');
+  assert.equal(latest.metadata.deliverableId, deliverableId);
+  assert.equal(latest.metadata.graderRole, 'ADVISOR');
+  assert.equal(latest.metadata.gradeType, 'ADVISOR');
 });
 
 test('after POST /committee-grade succeeds, AuditLog count increases by 1 with action GRADE_SUBMITTED', async (t) => {
-  const { groupId, professor } = await seedCommitteeContext();
+  const { groupId, professor, deliverableId } = await seedCommitteeContext();
   const before = await AuditLog.count();
 
   const { response, json } = await request(committeeGradeUrl(groupId), {
@@ -212,12 +226,12 @@ test('after POST /committee-grade succeeds, AuditLog count increases by 1 with a
       'Content-Type': 'application/json',
       ...authHeaderFor(professor),
     },
-    body: JSON.stringify(scoresBody()),
+    body: JSON.stringify({ deliverableId, ...scoresBody() }),
   });
   if (skipIfRouteMissing(t, response, json)) return;
   assert.equal(response.status, 201, JSON.stringify(json));
 
-  const after = await AuditLog.count();
+  const after = await waitForAuditRows(before + 1);
   assert.equal(after, before + 1);
 
   const latest = await AuditLog.findOne({
@@ -225,10 +239,14 @@ test('after POST /committee-grade succeeds, AuditLog count increases by 1 with a
   });
   assert.ok(latest);
   assert.equal(latest.action, 'GRADE_SUBMITTED');
+  assert.equal(latest.targetType, 'GRADE');
+  assert.equal(latest.metadata.deliverableId, deliverableId);
+  assert.equal(latest.metadata.graderRole, 'PROFESSOR');
+  assert.equal(latest.metadata.gradeType, 'COMMITTEE');
 });
 
 test('when AuditLog.create throws, POST /advisor-grade still returns 201', async (t) => {
-  const { groupId, advisor } = await seedAdvisorContext();
+  const { groupId, advisor, deliverableId } = await seedAdvisorContext();
 
   mock.method(AuditLog, 'create', async () => {
     throw new Error('simulated D6 failure after advisor grade');
@@ -240,7 +258,7 @@ test('when AuditLog.create throws, POST /advisor-grade still returns 201', async
       'Content-Type': 'application/json',
       ...authHeaderFor(advisor),
     },
-    body: JSON.stringify(scoresBody()),
+    body: JSON.stringify({ deliverableId, ...scoresBody() }),
   });
   if (skipIfRouteMissing(t, response, json)) return;
 
@@ -252,7 +270,7 @@ test('when AuditLog.create throws, POST /advisor-grade still returns 201', async
 });
 
 test('when AuditLog.create throws, POST /committee-grade still returns 201', async (t) => {
-  const { groupId, professor } = await seedCommitteeContext();
+  const { groupId, professor, deliverableId } = await seedCommitteeContext();
 
   mock.method(AuditLog, 'create', async () => {
     throw new Error('simulated D6 failure after committee grade');
@@ -264,7 +282,7 @@ test('when AuditLog.create throws, POST /committee-grade still returns 201', asy
       'Content-Type': 'application/json',
       ...authHeaderFor(professor),
     },
-    body: JSON.stringify(scoresBody()),
+    body: JSON.stringify({ deliverableId, ...scoresBody() }),
   });
   if (skipIfRouteMissing(t, response, json)) return;
 
