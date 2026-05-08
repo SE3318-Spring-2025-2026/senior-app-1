@@ -42,6 +42,14 @@ router.put(
   ctrl.putCommitteeGrade,
 );
 
+router.get(
+  '/groups/:groupId/grades',
+  authenticate,
+  authorize(['COORDINATOR', 'PROFESSOR']),
+  ctrl.groupIdValidation,
+  ctrl.getRawGrades,
+);
+
 router.post(
   '/groups/:groupId/team-scalar',
   authenticate,

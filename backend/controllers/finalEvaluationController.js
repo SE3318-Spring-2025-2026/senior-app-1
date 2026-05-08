@@ -19,12 +19,17 @@ const groupIdValidation = [
 ];
 
 const gradeBodyValidation = [
+  body('deliverableId').isUUID().withMessage('deliverableId must be a valid UUID'),
   body('scores').isArray({ min: 1 }).withMessage('scores must be a non-empty array'),
   body('scores.*.criterionId').notEmpty().withMessage('Each score must have a criterionId'),
   body('scores.*.value')
-    .isFloat({ min: 0, max: 100 })
-    .withMessage('Score value must be between 0 and 100'),
-  body('comments').optional().isString(),
+    .isFloat({ min: 0, max: 1 })
+    .withMessage('Score value must be between 0 and 1'),
+  body('comments')
+    .optional()
+    .isString()
+    .isLength({ max: 2000 })
+    .withMessage('Comments must be 2000 characters or less'),
 ];
 
 const finalizeValidation = [
@@ -136,7 +141,11 @@ async function myGrade(req, res, next) {
 
 function handleGradeError(err, res) {
   if (err.code === 'VALIDATION_ERROR') {
-    return res.status(400).json({ code: 'VALIDATION_ERROR', message: err.message });
+    return res.status(400).json({
+      code: 'VALIDATION_ERROR',
+      message: err.message,
+      errors: err.errors || [],
+    });
   }
   if (err.code === 'FORBIDDEN' || err.code === 'FINALIZATION_LOCK_ERROR') {
     return res.status(403).json({ code: err.code, message: err.message });
@@ -163,6 +172,7 @@ async function postAdvisorGrade(req, res) {
   try {
     const result = await submitAdvisorGrade({
       groupId: req.params.groupId,
+      deliverableId: req.body.deliverableId,
       advisorUser: req.user,
       scores: req.body.scores,
       comments: req.body.comments,
@@ -182,6 +192,7 @@ async function putAdvisorGrade(req, res) {
   try {
     const result = await updateAdvisorGrade({
       groupId: req.params.groupId,
+      deliverableId: req.body.deliverableId,
       advisorUser: req.user,
       scores: req.body.scores,
       comments: req.body.comments,
@@ -201,6 +212,7 @@ async function postCommitteeGrade(req, res) {
   try {
     const result = await submitCommitteeGrade({
       groupId: req.params.groupId,
+      deliverableId: req.body.deliverableId,
       professorUser: req.user,
       scores: req.body.scores,
       comments: req.body.comments,
@@ -220,6 +232,7 @@ async function putCommitteeGrade(req, res) {
   try {
     const result = await updateCommitteeGrade({
       groupId: req.params.groupId,
+      deliverableId: req.body.deliverableId,
       professorUser: req.user,
       scores: req.body.scores,
       comments: req.body.comments,
@@ -295,6 +308,28 @@ async function getGrades(req, res) {
   }
 }
 
+async function getRawGrades(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const result = await finalEvaluationService.getRawGrades(req.params.groupId);
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Raw grades retrieved',
+      data: {
+        groupId: result.groupId,
+        advisorGrade: result.advisorGrade,
+        committeeGrades: result.committeeGrades,
+      },
+    });
+  } catch (err) {
+    return handleGradeError(err, res);
+  }
+}
+
 module.exports = {
   groupIdValidation,
   gradeBodyValidation,
@@ -308,6 +343,7 @@ module.exports = {
   putAdvisorGrade,
   postCommitteeGrade,
   putCommitteeGrade,
+  getRawGrades,
   finalize,
   getGrades,
 };

@@ -13,6 +13,14 @@ const FinalEvaluationGrade = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    deliverableId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'Deliverables',
+        key: 'id',
+      },
+    },
     gradeType: {
       type: DataTypes.ENUM('ADVISOR', 'COMMITTEE'),
       allowNull: false,
@@ -41,7 +49,7 @@ const FinalEvaluationGrade = sequelize.define(
     indexes: [
       {
         unique: true,
-        fields: ['groupId', 'gradeType', 'gradedBy'],
+        fields: ['groupId', 'deliverableId', 'gradeType', 'gradedBy'],
       },
     ],
   }
