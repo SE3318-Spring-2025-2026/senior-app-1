@@ -42,6 +42,30 @@ const updateAdvisorGradeValidation = [
   body("comments").optional().isString(),
 ];
 
+"use strict";
+
+const { param, body, validationResult } = require("express-validator");
+const FinalEvaluationService = require("../services/finalEvaluationService");
+
+// Advisor grade validation (0-100 scale)
+const submitAdvisorGradeValidation = [
+  param("groupId").isUUID().withMessage("Group ID must be a valid UUID"),
+  body("deliverableId").isUUID().withMessage("Deliverable ID must be a valid UUID"),
+  body("scores").isArray({ min: 1 }).withMessage("At least one score is required"),
+  body("scores.*.criterionId").notEmpty().withMessage("Each score must have a criterionId"),
+  body("scores.*.value").isFloat({ min: 0, max: 100 }).withMessage("Score value must be between 0 and 100"),
+  body("comments").optional().isString(),
+];
+
+const updateAdvisorGradeValidation = [
+  param("groupId").isUUID().withMessage("Group ID must be a valid UUID"),
+  body("deliverableId").isUUID().withMessage("Deliverable ID must be a valid UUID"),
+  body("scores").isArray({ min: 1 }).withMessage("At least one score is required"),
+  body("scores.*.criterionId").notEmpty().withMessage("Each score must have a criterionId"),
+  body("scores.*.value").isFloat({ min: 0, max: 100 }).withMessage("Score value must be between 0 and 100"),
+  body("comments").optional().isString(),
+];
+
 async function submitAdvisorGrade(req, res, next) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
