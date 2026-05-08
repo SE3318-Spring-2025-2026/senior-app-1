@@ -3,14 +3,23 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const ctrl = require('../controllers/finalEvaluationController');
-const {
-  groupIdValidation,
-  gradePayloadValidation,
-  postAdvisorGrade,
-  postCommitteeGrade,
-} = ctrl;
 
 const router = express.Router();
+
+router.put(
+  '/weight-configuration',
+  authenticate,
+  authorize(['COORDINATOR']),
+  ctrl.weightConfigBodyValidation,
+  ctrl.putWeightConfiguration,
+);
+
+router.get(
+  '/weight-configuration',
+  authenticate,
+  authorize(['COORDINATOR', 'PROFESSOR', 'ADVISOR']),
+  ctrl.getWeightConfiguration,
+);
 
 router.post(
   '/groups/:groupId/advisor-grade',

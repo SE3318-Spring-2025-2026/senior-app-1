@@ -5,15 +5,15 @@ const { validate: isUUID } = require('uuid');
 const finalEvaluationService = require('../services/finalEvaluationService');
 const {
   submitAdvisorGrade,
+  updateAdvisorGrade,
   submitCommitteeGrade,
+  updateCommitteeGrade,
   calculateTeamScalar,
   getTeamScalar,
   getContributions,
   getMyGrade,
-  submitAdvisorGrade,
-  updateAdvisorGrade,
-  submitCommitteeGrade,
-  updateCommitteeGrade,
+  setWeightConfig,
+  getWeightConfig,
 } = finalEvaluationService;
 
 const groupIdValidation = [
@@ -32,6 +32,19 @@ const gradeBodyValidation = [
     .isString()
     .isLength({ max: 2000 })
     .withMessage('Comments must be 2000 characters or less'),
+];
+
+const weightConfigBodyValidation = [
+  body('advisorWeight')
+    .notEmpty()
+    .withMessage('advisorWeight is required')
+    .isFloat({ min: 0, max: 1 })
+    .withMessage('advisorWeight must be a float between 0 and 1'),
+  body('committeeWeight')
+    .notEmpty()
+    .withMessage('committeeWeight is required')
+    .isFloat({ min: 0, max: 1 })
+    .withMessage('committeeWeight must be a float between 0 and 1'),
 ];
 
 const finalizeValidation = [
@@ -132,73 +145,63 @@ async function getContributionsHandler(req, res) {
   }
 }
 
-async function postAdvisorGrade(req, res) {
+async function putWeightConfiguration(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+    return res.status(400).json({
+      code: 'VALIDATION_ERROR',
+      message: errors.array()[0]?.msg || 'Invalid request',
+      errors: errors.array(),
+    });
   }
 
   try {
-    const grade = await submitAdvisorGrade({
-      groupId: req.params.groupId,
-      deliverableId: req.body.deliverableId,
-      scores: req.body.scores,
-      comments: req.body.comments,
-      gradedBy: req.user.id,
-    });
-    return res.status(201).json({
+    const config = await setWeightConfig(
+      req.body.advisorWeight,
+      req.body.committeeWeight,
+      req.user.id,
+    );
+    return res.status(200).json({
       code: 'SUCCESS',
-      message: 'Advisor grade submitted',
-      data: grade.toJSON(),
+      message: 'Weight configuration updated',
+      data: {
+        advisorWeight: config.advisorWeight,
+        committeeWeight: config.committeeWeight,
+        updatedBy: config.updatedBy,
+        updatedAt: config.updatedAt,
+      },
     });
   } catch (err) {
-    if (err.code === 'INVALID_SCORES') {
+    if (err.code === 'WEIGHTS_MUST_SUM_TO_ONE' || err.code === 'VALIDATION_ERROR') {
       return res.status(400).json({ code: err.code, message: err.message });
     }
-    if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND') {
-      return res.status(404).json({ code: err.code, message: err.message });
-    }
-    if (err.code === 'NOT_ASSIGNED_ADVISOR') {
-      return res.status(403).json({ code: err.code, message: err.message });
-    }
-    if (err.code === 'GRADE_ALREADY_SUBMITTED') {
-      return res.status(409).json({ code: err.code, message: err.message });
-    }
-    console.error('submitAdvisorGrade error:', err);
+    console.error('[finalEvaluationController]', err);
     return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 }
 
-async function postCommitteeGrade(req, res) {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
-  }
-
+async function getWeightConfiguration(req, res) {
   try {
-    const grade = await submitCommitteeGrade({
-      groupId: req.params.groupId,
-      deliverableId: req.body.deliverableId,
-      scores: req.body.scores,
-      comments: req.body.comments,
-      gradedBy: req.user.id,
-    });
-    return res.status(201).json({
+    const config = await getWeightConfig();
+    if (!config) {
+      return res.status(404).json({
+        code: 'WEIGHT_CONFIG_NOT_FOUND',
+        message: 'No weight configuration has been set yet.',
+      });
+    }
+
+    return res.status(200).json({
       code: 'SUCCESS',
-      message: 'Committee grade submitted',
-      data: grade.toJSON(),
+      message: 'Weight configuration retrieved',
+      data: {
+        advisorWeight: config.advisorWeight,
+        committeeWeight: config.committeeWeight,
+        updatedBy: config.updatedBy,
+        updatedAt: config.updatedAt,
+      },
     });
   } catch (err) {
-    if (err.code === 'INVALID_SCORES') {
-      return res.status(400).json({ code: err.code, message: err.message });
-    }
-    if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND') {
-      return res.status(404).json({ code: err.code, message: err.message });
-    }
-    if (err.code === 'GRADE_ALREADY_SUBMITTED') {
-      return res.status(409).json({ code: err.code, message: err.message });
-    }
-    console.error('submitCommitteeGrade error:', err);
+    console.error('[finalEvaluationController]', err);
     return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 }
@@ -453,15 +456,16 @@ async function getRawGrades(req, res) {
 module.exports = {
   groupIdValidation,
   gradeBodyValidation,
+  weightConfigBodyValidation,
   finalizeValidation,
   getGradesValidation,
   postAdvisorGrade,
-  postCommitteeGrade,
   postTeamScalar,
   getTeamScalarHandler,
   getContributionsHandler,
+  putWeightConfiguration,
+  getWeightConfiguration,
   myGrade,
-  postAdvisorGrade,
   putAdvisorGrade,
   postCommitteeGrade,
   putCommitteeGrade,
