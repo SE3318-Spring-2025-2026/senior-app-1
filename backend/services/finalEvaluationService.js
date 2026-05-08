@@ -9,11 +9,9 @@ const {
   TeamScalar,
   SprintMemberRecord,
   User,
-  Deliverable,
   AuditLog,
   MemberFinalGrade,
   GroupAdvisorAssignment,
-  AuditLog,
 } = require('../models');
 const ApiError = require('../errors/apiError');
 

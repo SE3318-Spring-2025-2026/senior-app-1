@@ -10,9 +10,7 @@ const {
   getTeamScalar,
   getContributions,
   getMyGrade,
-  submitAdvisorGrade,
   updateAdvisorGrade,
-  submitCommitteeGrade,
   updateCommitteeGrade,
 } = finalEvaluationService;
 
@@ -461,9 +459,7 @@ module.exports = {
   getTeamScalarHandler,
   getContributionsHandler,
   myGrade,
-  postAdvisorGrade,
   putAdvisorGrade,
-  postCommitteeGrade,
   putCommitteeGrade,
   getRawGrades,
   finalize,
