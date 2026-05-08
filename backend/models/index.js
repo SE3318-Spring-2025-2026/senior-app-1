@@ -1,3 +1,4 @@
+// FinalEvaluationGrade import sadece bir kez olmalı
 /**
  * models/index.js
  *
@@ -39,6 +40,7 @@ const SprintMemberRecord = require('./SprintMemberRecord');
 const AdvisorGrade = require('./AdvisorGrade');
 
 module.exports = {
+  FinalEvaluationGrade,
   User,
   Professor,
   ValidStudentId,

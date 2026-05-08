@@ -1,37 +1,30 @@
-const { submitAdvisorGradeValidation, postAdvisorGrade } = require('../controllers/finalEvaluationController');
-
-const router = express.Router();
-router.post('/advisor/:groupId', submitAdvisorGradeValidation, postAdvisorGrade);
-
-module.exports = router;
-'use strict';
-
 const express = require('express');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
 const {
-  groupIdValidation,
-  postTeamScalar,
-  getTeamScalarHandler,
-  getContributionsHandler,
+  advisorGradeValidation,
+  submitAdvisorGrade,
+  updateAdvisorGrade,
+  getAdvisorGrades,
+  committeeGradeValidation,
+  submitCommitteeGrade,
+  updateCommitteeGrade,
 } = require('../controllers/finalEvaluationController');
 
 const router = express.Router();
 
-router.post(
-  '/groups/:groupId/team-scalar',
-  authenticate,
-  authorize(['COORDINATOR']),
-  groupIdValidation,
-  postTeamScalar,
-);
+// Committee member submits grade (POST)
+router.post('/groups/:groupId/committee-grade', authenticate, committeeGradeValidation, submitCommitteeGrade);
+// Committee member updates grade (PUT)
+router.put('/groups/:groupId/committee-grade', authenticate, committeeGradeValidation, updateCommitteeGrade);
 
-router.get(
-  '/groups/:groupId/team-scalar',
-  authenticate,
-  authorize(['COORDINATOR', 'PROFESSOR']),
-  groupIdValidation,
-  getTeamScalarHandler,
-);
+// Advisor submits grade (POST)
+router.post('/groups/:groupId/advisor-grade', authenticate, advisorGradeValidation, submitAdvisorGrade);
+// Advisor updates grade (PUT)
+router.put('/groups/:groupId/advisor-grade', authenticate, advisorGradeValidation, updateAdvisorGrade);
+// Coordinator/Professor gets all grades (GET)
+router.get('/groups/:groupId/grades', authenticate, getAdvisorGrades);
+
+module.exports = router;
 
 router.get(
   '/groups/:groupId/contributions',

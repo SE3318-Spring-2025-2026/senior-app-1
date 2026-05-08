@@ -1,37 +1,187 @@
-
-const { validationResult, body, param } = require('express-validator');
-const FinalEvaluationService = require('../services/finalEvaluationService');
-const { validate: isUUID } = require('uuid');
-
-// Committee grade validation (0-100 scale)
-const submitCommitteeGradeValidation = [
-  param('groupId').custom((value) => isUUID(value)).withMessage('Group ID must be a valid UUID'),
-  body('deliverableId').custom((value) => isUUID(value)).withMessage('Deliverable ID must be a valid UUID'),
-  body('scores').isArray({ min: 1 }).withMessage('At least one score is required'),
-  body('scores.*.criterionId').notEmpty().withMessage('Each score must have a criterionId'),
-  body('scores.*.value').isFloat({ min: 0, max: 100 }).withMessage('Score value must be between 0 and 100'),
-  body('comments').optional().trim().isLength({ max: 2000 }).withMessage('Comments must be 2000 characters or less'),
-];
-
-const updateCommitteeGradeValidation = [
-  param('groupId').custom((value) => isUUID(value)).withMessage('Group ID must be a valid UUID'),
-  body('deliverableId').custom((value) => isUUID(value)).withMessage('Deliverable ID must be a valid UUID'),
-  body('scores').isArray({ min: 1 }).withMessage('At least one score is required'),
-  body('scores.*.criterionId').notEmpty().withMessage('Each score must have a criterionId'),
-  body('scores.*.value').isFloat({ min: 0, max: 100 }).withMessage('Score value must be between 0 and 100'),
-  body('comments').optional().trim().isLength({ max: 2000 }).withMessage('Comments must be 2000 characters or less'),
-];
-
-// Advisor grade validation (0-100 scale)
-const submitAdvisorGradeValidation = [
-  param('groupId').isUUID().withMessage('Group ID must be a valid UUID'),
-  body('deliverableId').isUUID().withMessage('Deliverable ID must be a valid UUID'),
-  body('scores').isArray({ min: 1 }).withMessage('At least one score is required'),
+// Committee grade validation (0-100 float, required fields)
+const committeeGradeValidation = [
+  param('groupId').isUUID().withMessage('groupId must be a valid UUID'),
+  body('deliverableId').isUUID().withMessage('deliverableId must be a valid UUID'),
+  body('scores').isArray({ min: 1 }).withMessage('scores must be a non-empty array'),
   body('scores.*.criterionId').notEmpty().withMessage('Each score must have a criterionId'),
   body('scores.*.value').isFloat({ min: 0, max: 100 }).withMessage('Score value must be between 0 and 100'),
   body('comments').optional().isString(),
 ];
 
+// Committee grade POST
+async function submitCommitteeGrade(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json(validationErrorEnvelope(errors.array()));
+  }
+  try {
+    const { body, param, validationResult } = require('express-validator');
+    const FinalEvaluationService = require('../services/finalEvaluationService');
+
+    // Committee grade validation (0-100 float, required fields)
+    const committeeGradeValidation = [
+      param('groupId').isUUID().withMessage('groupId must be a valid UUID'),
+      body('deliverableId').isUUID().withMessage('deliverableId must be a valid UUID'),
+      body('scores').isArray({ min: 1 }).withMessage('scores must be a non-empty array'),
+      body('scores.*.criterionId').notEmpty().withMessage('Each score must have a criterionId'),
+      body('scores.*.value').isFloat({ min: 0, max: 100 }).withMessage('Score value must be between 0 and 100'),
+      body('comments').optional().isString(),
+    ];
+
+    // Committee grade POST
+    async function submitCommitteeGrade(req, res, next) {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json(validationErrorEnvelope(errors.array()));
+      }
+      try {
+        if (req.user.role !== 'PROFESSOR') {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only PROFESSOR can submit committee grade' });
+        }
+        const groupId = req.params.groupId;
+        const professorId = req.user.id;
+        const { deliverableId, scores, comments } = req.body;
+        const grade = await FinalEvaluationService.submitCommitteeGrade({ groupId, deliverableId, professorId, scores, comments });
+        return res.status(201).json(grade);
+      } catch (err) {
+        if (err.code === 'VALIDATION_ERROR') {
+          return res.status(400).json(validationErrorEnvelope(err.errors || [{ msg: err.message }]));
+        }
+        if (err.code === 'FORBIDDEN') {
+          return res.status(403).json({ code: 'FORBIDDEN', message: err.message });
+        }
+        if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND') {
+          return res.status(404).json({ code: err.code, message: err.message });
+        }
+        if (err.code === 'COMMITTEE_GRADE_EXISTS') {
+          return res.status(409).json({ code: 'COMMITTEE_GRADE_EXISTS', message: err.message });
+        }
+        return next(err);
+      }
+    }
+
+    // Committee grade PUT
+    async function updateCommitteeGrade(req, res, next) {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json(validationErrorEnvelope(errors.array()));
+      }
+      try {
+        if (req.user.role !== 'PROFESSOR') {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only PROFESSOR can update committee grade' });
+        }
+        const groupId = req.params.groupId;
+        const professorId = req.user.id;
+        const { deliverableId, scores, comments } = req.body;
+        const grade = await FinalEvaluationService.updateCommitteeGrade({ groupId, deliverableId, professorId, scores, comments });
+        return res.status(200).json(grade);
+      } catch (err) {
+        if (err.code === 'VALIDATION_ERROR') {
+          return res.status(400).json(validationErrorEnvelope(err.errors || [{ msg: err.message }]));
+        }
+        if (err.code === 'FORBIDDEN') {
+          return res.status(403).json({ code: 'FORBIDDEN', message: err.message });
+        }
+        if (err.code === 'FINALIZATION_LOCK_ERROR') {
+          return res.status(403).json({ code: 'FINALIZATION_LOCK_ERROR', message: err.message });
+        }
+        if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND' || err.code === 'GRADE_NOT_FOUND') {
+          return res.status(404).json({ code: err.code, message: err.message });
+        }
+        return next(err);
+      }
+    }
+
+    // Advisor grade validation (0-1 float, required fields)
+    const advisorGradeValidation = [
+      param('groupId').isUUID().withMessage('groupId must be a valid UUID'),
+      body('deliverableId').isUUID().withMessage('deliverableId must be a valid UUID'),
+      body('scores').isArray({ min: 1 }).withMessage('scores must be a non-empty array'),
+      body('scores.*.criterionId').notEmpty().withMessage('Each score must have a criterionId'),
+      body('scores.*.value').isFloat({ min: 0, max: 1 }).withMessage('Score value must be between 0 and 1'),
+      body('comments').optional().isString(),
+    ];
+
+    function validationErrorEnvelope(errors) {
+      return { code: 'VALIDATION_ERROR', message: 'Invalid request', errors };
+    }
+
+    async function submitAdvisorGrade(req, res, next) {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json(validationErrorEnvelope(errors.array()));
+      }
+      try {
+        const groupId = req.params.groupId;
+        const advisorId = req.user.id;
+        const { deliverableId, scores, comments } = req.body;
+        const grade = await FinalEvaluationService.submitAdvisorGrade({ groupId, deliverableId, advisorId, scores, comments });
+        return res.status(201).json(grade);
+      } catch (err) {
+        if (err.code === 'VALIDATION_ERROR') {
+          return res.status(400).json(validationErrorEnvelope(err.errors || [{ msg: err.message }]));
+        }
+        if (err.code === 'FORBIDDEN') {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only assigned advisor can submit grade' });
+        }
+        if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND') {
+          return res.status(404).json({ code: err.code, message: err.message });
+        }
+        if (err.code === 'ADVISOR_GRADE_EXISTS') {
+          return res.status(409).json({ code: 'ADVISOR_GRADE_EXISTS', message: err.message });
+        }
+        return next(err);
+      }
+    }
+
+    async function updateAdvisorGrade(req, res, next) {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json(validationErrorEnvelope(errors.array()));
+      }
+      try {
+        const groupId = req.params.groupId;
+        const advisorId = req.user.id;
+        const { deliverableId, scores, comments } = req.body;
+        const grade = await FinalEvaluationService.updateAdvisorGrade({ groupId, deliverableId, advisorId, scores, comments });
+        return res.status(200).json(grade);
+      } catch (err) {
+        if (err.code === 'VALIDATION_ERROR') {
+          return res.status(400).json(validationErrorEnvelope(err.errors || [{ msg: err.message }]));
+        }
+        if (err.code === 'FORBIDDEN') {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only assigned advisor can update grade' });
+        }
+        if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND' || err.code === 'GRADE_NOT_FOUND') {
+          return res.status(404).json({ code: err.code, message: err.message });
+        }
+        return next(err);
+      }
+    }
+
+    async function getAdvisorGrades(req, res, next) {
+      try {
+        // Only COORDINATOR or PROFESSOR can access
+        if (!['COORDINATOR', 'PROFESSOR'].includes(req.user.role)) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Not authorized' });
+        }
+        const groupId = req.params.groupId;
+        const grades = await FinalEvaluationService.getRawGrades(groupId);
+        return res.status(200).json(grades);
+      } catch (err) {
+        return next(err);
+      }
+    }
+
+    module.exports = {
+      advisorGradeValidation,
+      submitAdvisorGrade,
+      updateAdvisorGrade,
+      getAdvisorGrades,
+      committeeGradeValidation,
+      submitCommitteeGrade,
+      updateCommitteeGrade,
+    };
 const updateAdvisorGradeValidation = [
   param('groupId').isUUID().withMessage('Group ID must be a valid UUID'),
   body('deliverableId').isUUID().withMessage('Deliverable ID must be a valid UUID'),
