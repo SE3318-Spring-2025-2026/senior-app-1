@@ -54,6 +54,16 @@ async function assertGroupExistsAndUnlocked(groupId) {
   if (group.status === 'FINALIZED') {
     throw serviceError('FINALIZATION_LOCK_ERROR', 'Cannot submit/update grades after finalization');
   }
+  const p64Lock = await MemberFinalGrade.findOne({
+    where: { groupId },
+    attributes: ['id'],
+  });
+  if (p64Lock) {
+    throw serviceError(
+      'FINALIZATION_LOCK_ERROR',
+      'Cannot submit/update grades after per-member grades have been finalized',
+    );
+  }
   return group;
 }
 
@@ -177,15 +187,23 @@ async function updateCommitteeGrade({ groupId, deliverableId, professorUser, sco
   const existing = await FinalEvaluationGrade.findOne({
     where: { groupId, deliverableId, gradeType: 'COMMITTEE', gradedBy: professorUser.id },
   });
-  if (!existing) throw serviceError('GRADE_NOT_FOUND', 'Committee grade not found');
+  if (existing) {
+    const finalScore = computeFinalScore(scores);
+    return existing.update({
+      scores,
+      finalScore,
+      comments: comments ?? null,
+    });
+  }
 
-  const finalScore = computeFinalScore(scores);
-  const updated = await existing.update({
-    scores,
-    finalScore,
-    comments: comments ?? null,
+  const anyForDeliverable = await FinalEvaluationGrade.findOne({
+    where: { groupId, deliverableId, gradeType: 'COMMITTEE' },
   });
-  return updated;
+  if (anyForDeliverable) {
+    throw serviceError('FORBIDDEN', 'Only the original reviewer can update this committee grade');
+  }
+
+  throw serviceError('GRADE_NOT_FOUND', 'Committee grade not found');
 }
 
 async function calculateTeamScalar(groupId) {
