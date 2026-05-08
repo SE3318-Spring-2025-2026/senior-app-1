@@ -5,8 +5,16 @@ const { requireNonEmptyBody } = require('../middleware/requestValidation');
 const {
   createIntegrationBindingValidation,
   createIntegrationBinding,
+  updateIntegrationBinding,
 } = require('../controllers/integrationBindingController');
 const { getIntegrationConfiguration } = require('../controllers/integrationConfigurationController');
+const {
+  getSprintMonitoringSnapshotValidation,
+  getSprintMonitoringSnapshot,
+  getCurrentSprintMonitoringSnapshotValidation,
+  getCurrentSprintMonitoringSnapshot,
+} = require('../controllers/sprintMonitoringController');
+const { triggerSprintEvaluationHandler } = require('../controllers/sprintEvaluationController');
 const {
   triggerJiraSyncValidation,
   triggerJiraSync,
@@ -16,26 +24,57 @@ const {
   triggerAiValidation,
   provideSprintHistoryValidation,
   provideSprintHistory,
-  storeSprintEvaluationResultsValidation,
-  storeSprintEvaluationResults,
-} = require('../controllers/sprintMonitoringController');
+} = require('../controllers/sprintMonitoringFlowController');
 
 const router = express.Router();
 
 router.post(
   '/:teamId/integrations',
   authenticate,
-  authorize(['STUDENT']),
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
   requireNonEmptyBody,
   createIntegrationBindingValidation,
-  createIntegrationBinding,
+  createIntegrationBinding
+);
+
+router.put(
+  '/:teamId/integrations',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  requireNonEmptyBody,
+  createIntegrationBindingValidation,
+  updateIntegrationBinding
 );
 
 router.get(
   '/:teamId/integrations',
   authenticate,
-  authorize(['STUDENT']),
-  getIntegrationConfiguration,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  getIntegrationConfiguration
+);
+
+router.get(
+  '/:teamId/sprints/:sprintId/monitoring',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  getSprintMonitoringSnapshotValidation,
+  getSprintMonitoringSnapshot
+);
+
+router.get(
+  '/:teamId/monitoring/current',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  getCurrentSprintMonitoringSnapshotValidation,
+  getCurrentSprintMonitoringSnapshot
+);
+
+// Trigger sprint evaluation (no metrics in payload)
+router.post(
+  '/:teamId/sprints/:sprintId/evaluations',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  triggerSprintEvaluationHandler
 );
 
 /**
@@ -46,7 +85,7 @@ router.post(
   '/:teamId/sprints/:sprintId/github-verifications',
   authenticate,
   githubVerificationController.triggerGitHubVerificationValidation,
-  githubVerificationController.triggerGitHubVerification,
+  githubVerificationController.triggerGitHubVerification
 );
 
 router.post(
@@ -55,40 +94,31 @@ router.post(
   authorize(['STUDENT']),
   requireNonEmptyBody,
   triggerJiraSyncValidation,
-  triggerJiraSync,
+  triggerJiraSync
 );
 
 router.post(
   '/:teamId/sprints/:sprintId/ai-validations',
   authenticate,
-  authorize(['STUDENT']),
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
   requireNonEmptyBody,
   triggerAiValidationValidation,
-  triggerAiValidation,
+  triggerAiValidation
 );
 
 router.get(
   '/:teamId/sprints/:sprintId/history',
   authenticate,
-  authorize(['STUDENT']),
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
   provideSprintHistoryValidation,
-  provideSprintHistory,
-);
-
-router.post(
-  '/:teamId/sprints/:sprintId/evaluations',
-  authenticate,
-  authorize(['STUDENT']),
-  requireNonEmptyBody,
-  storeSprintEvaluationResultsValidation,
-  storeSprintEvaluationResults,
+  provideSprintHistory
 );
 
 router.get(
   '/:teamId/integrations/config',
   authenticate,
-  authorize(['STUDENT']),
-  getIntegrationConfiguration,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN']),
+  getIntegrationConfiguration
 );
 
 module.exports = router;

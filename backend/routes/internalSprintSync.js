@@ -13,7 +13,7 @@ const {
   storeAiValidationResult,
   storeSprintEvaluationMetricsValidation,
   storeSprintEvaluationMetrics,
-} = require('../controllers/sprintMonitoringController');
+} = require('../controllers/sprintMonitoringFlowController');
 
 const router = express.Router();
 

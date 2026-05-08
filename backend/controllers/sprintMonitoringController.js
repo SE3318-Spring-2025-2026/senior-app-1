@@ -1,293 +1,306 @@
-const { body, param, validationResult } = require('express-validator');
+const { param, query, validationResult } = require('express-validator');
+const {
+  Group,
+  IntegrationBinding,
+  IntegrationTokenReference,
+  SprintStory,
+  SprintPullRequest,
+} = require('../models');
+const {
+  buildIntegrationResponse,
+  canManageIntegrations,
+} = require('./integrationBindingController');
+const { fetchJiraSprintIssues } = require('../services/jiraSprintSyncService');
+const { normalizeJiraIssue } = require('../services/jiraIssueNormalizer');
 
-function validationFailed(res, errors, code = 'VALIDATION_ERROR', status = 400) {
-  return res.status(status).json({
-    code,
-    message: 'Request validation failed.',
-    details: errors.array(),
-  });
+const getSprintMonitoringSnapshotValidation = [
+  param('teamId').isString().trim().notEmpty().withMessage('teamId is required'),
+  param('sprintId').isString().trim().notEmpty().withMessage('sprintId is required'),
+  query('includeStale')
+    .optional()
+    .isBoolean()
+    .withMessage('includeStale must be a boolean'),
+];
+
+const getCurrentSprintMonitoringSnapshotValidation = [
+  param('teamId').isString().trim().notEmpty().withMessage('teamId is required'),
+  query('includeStale')
+    .optional()
+    .isBoolean()
+    .withMessage('includeStale must be a boolean'),
+];
+
+function parseIncludeStaleQuery(req) {
+  return String(req.query.includeStale || '').toLowerCase() === 'true';
 }
 
-function actionResponse({
-  id,
-  status,
-  message,
-  data,
-}, resStatus = 202) {
+async function loadAuthorizedMonitoringContext(teamId, user) {
+  const group = await Group.findByPk(teamId);
+  if (!group) {
+    return {
+      error: {
+        status: 404,
+        body: {
+          code: 'GROUP_NOT_FOUND',
+          message: 'Group not found',
+        },
+      },
+    };
+  }
+
+  if (!canManageIntegrations(group, user)) {
+    return {
+      error: {
+        status: 403,
+        body: {
+          code: 'FORBIDDEN',
+          message: 'Only the team leader or authorized staff can view sprint monitoring data',
+        },
+      },
+    };
+  }
+
+  const binding = await IntegrationBinding.findOne({
+    where: { teamId },
+  });
+  if (!binding) {
+    return {
+      error: {
+        status: 404,
+        body: {
+          code: 'INTEGRATION_BINDING_NOT_FOUND',
+          message: 'No integration binding exists for this team',
+        },
+      },
+    };
+  }
+
+  const tokenReference = await IntegrationTokenReference.findByPk(teamId);
+  return { group, binding, tokenReference };
+}
+
+function pickCurrentSprintIdFromIssues(rawIssues) {
+  const sprintSummaries = new Map();
+
+  for (const issue of rawIssues) {
+    const normalized = normalizeJiraIssue(issue);
+    if (!normalized.sprintId) {
+      continue;
+    }
+
+    const existing = sprintSummaries.get(normalized.sprintId) || {
+      sprintId: normalized.sprintId,
+      issueCount: 0,
+      latestUpdatedAt: '',
+    };
+
+    existing.issueCount += 1;
+    if (normalized.sourceUpdatedAt && (!existing.latestUpdatedAt
+      || new Date(normalized.sourceUpdatedAt).getTime() > new Date(existing.latestUpdatedAt).getTime())) {
+      existing.latestUpdatedAt = normalized.sourceUpdatedAt;
+    }
+
+    sprintSummaries.set(normalized.sprintId, existing);
+  }
+
+  const ordered = [...sprintSummaries.values()].sort((left, right) => {
+    if (right.issueCount !== left.issueCount) {
+      return right.issueCount - left.issueCount;
+    }
+
+    const leftUpdatedAt = left.latestUpdatedAt ? new Date(left.latestUpdatedAt).getTime() : 0;
+    const rightUpdatedAt = right.latestUpdatedAt ? new Date(right.latestUpdatedAt).getTime() : 0;
+    if (rightUpdatedAt !== leftUpdatedAt) {
+      return rightUpdatedAt - leftUpdatedAt;
+    }
+
+    return String(left.sprintId).localeCompare(String(right.sprintId));
+  });
+
+  return ordered[0] || null;
+}
+
+async function buildSprintMonitoringSnapshotResponse({ teamId, sprintId, includeStale, binding, tokenReference }) {
+  const [stories, pullRequests] = await Promise.all([
+    SprintStory.findAll({
+      where: {
+        teamId,
+        sprintId,
+        ...(includeStale ? {} : { isActive: true }),
+      },
+      order: [['issueKey', 'ASC']],
+    }),
+    SprintPullRequest.findAll({
+      where: {
+        teamId,
+        sprintId,
+        ...(includeStale ? {} : { isActive: true }),
+      },
+      order: [['prNumber', 'ASC']],
+    }),
+  ]);
+
+  const prsByIssueKey = new Map();
+  for (const pullRequest of pullRequests) {
+    const issueKey = pullRequest.relatedIssueKey || null;
+    if (!issueKey) {
+      continue;
+    }
+    const existing = prsByIssueKey.get(issueKey) || [];
+    existing.push({
+      prNumber: pullRequest.prNumber,
+      branchName: pullRequest.branchName,
+      title: pullRequest.title,
+      prStatus: pullRequest.prStatus,
+      mergeStatus: pullRequest.mergeStatus,
+      isActive: pullRequest.isActive,
+      lastSeenAt: pullRequest.lastSeenAt,
+      staleAt: pullRequest.staleAt,
+      url: pullRequest.url,
+    });
+    prsByIssueKey.set(issueKey, existing);
+  }
+
   return {
-    statusCode: resStatus,
-    payload: {
-      id,
-      status,
-      message,
-      recordedAt: new Date().toISOString(),
-      ...(data ? { data } : {}),
-    },
+    teamId,
+    sprintId,
+    integration: buildIntegrationResponse(binding, tokenReference),
+    stories: stories.map((story) => ({
+      issueKey: story.issueKey,
+      title: story.title,
+      description: story.description,
+      assigneeId: story.assigneeId,
+      reporterId: story.reporterId,
+      status: story.status,
+      storyPoints: story.storyPoints,
+      isActive: story.isActive,
+      lastSeenAt: story.lastSeenAt,
+      staleAt: story.staleAt,
+      sourceCreatedAt: story.sourceCreatedAt,
+      sourceUpdatedAt: story.sourceUpdatedAt,
+      linkedPullRequests: prsByIssueKey.get(story.issueKey) || [],
+    })),
+    unlinkedPullRequests: pullRequests
+      .filter((pullRequest) => !pullRequest.relatedIssueKey)
+      .map((pullRequest) => ({
+        prNumber: pullRequest.prNumber,
+        branchName: pullRequest.branchName,
+        title: pullRequest.title,
+        prStatus: pullRequest.prStatus,
+        mergeStatus: pullRequest.mergeStatus,
+        isActive: pullRequest.isActive,
+        lastSeenAt: pullRequest.lastSeenAt,
+        staleAt: pullRequest.staleAt,
+        changedFiles: pullRequest.changedFiles,
+        diffSummary: pullRequest.diffSummary,
+        sourceCreatedAt: pullRequest.sourceCreatedAt,
+        sourceUpdatedAt: pullRequest.sourceUpdatedAt,
+        sourceMergedAt: pullRequest.sourceMergedAt,
+        url: pullRequest.url,
+      })),
   };
 }
 
-const teamSprintParamValidation = [
-  param('teamId').trim().notEmpty().withMessage('teamId is required'),
-  param('sprintId').trim().notEmpty().withMessage('sprintId is required'),
-];
-
-const triggerAiValidationValidation = [
-  ...teamSprintParamValidation,
-  body('requestedBy').trim().notEmpty().withMessage('requestedBy is required'),
-  body('issueSet').isArray({ min: 1 }).withMessage('issueSet must be a non-empty array'),
-];
-
-async function triggerAiValidation(req, res) {
+async function getSprintMonitoringSnapshot(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return validationFailed(res, errors);
+    return res.status(400).json({
+      code: 'VALIDATION_ERROR',
+      message: 'Validation failed',
+      errors: errors.array(),
+    });
   }
 
-  const response = actionResponse(
-    {
-      id: `ai_val_${Date.now()}`,
-      status: 'ACCEPTED',
-      message: 'AI validation request accepted.',
-    },
-    202,
-  );
+  try {
+    const teamId = req.params.teamId.trim();
+    const sprintId = req.params.sprintId.trim();
+    const includeStale = parseIncludeStaleQuery(req);
 
-  return res.status(response.statusCode).json(response.payload);
+    const context = await loadAuthorizedMonitoringContext(teamId, req.user);
+    if (context.error) {
+      return res.status(context.error.status).json(context.error.body);
+    }
+
+    const snapshot = await buildSprintMonitoringSnapshotResponse({
+      teamId,
+      sprintId,
+      includeStale,
+      binding: context.binding,
+      tokenReference: context.tokenReference,
+    });
+
+    return res.status(200).json(snapshot);
+  } catch (error) {
+    console.error('Error in getSprintMonitoringSnapshot:', error);
+    return res.status(500).json({
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to load sprint monitoring snapshot',
+    });
+  }
 }
 
-const provideSprintHistoryValidation = [...teamSprintParamValidation];
-
-async function provideSprintHistory(req, res) {
+async function getCurrentSprintMonitoringSnapshot(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return validationFailed(res, errors);
+    return res.status(400).json({
+      code: 'VALIDATION_ERROR',
+      message: 'Validation failed',
+      errors: errors.array(),
+    });
   }
 
-  return res.status(200).json({
-    teamId: req.params.teamId,
-    sprintId: req.params.sprintId,
-    storyMetrics: [],
-    prMetrics: [],
-    aiValidations: [],
-    generatedAt: new Date().toISOString(),
-  });
-}
+  try {
+    const teamId = req.params.teamId.trim();
+    const includeStale = parseIncludeStaleQuery(req);
 
-const storeSprintEvaluationResultsValidation = [
-  ...teamSprintParamValidation,
-  body('requestedBy').trim().notEmpty().withMessage('requestedBy is required'),
-];
+    const context = await loadAuthorizedMonitoringContext(teamId, req.user);
+    if (context.error) {
+      return res.status(context.error.status).json(context.error.body);
+    }
 
-async function storeSprintEvaluationResults(req, res) {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return validationFailed(res, errors);
+    const rawIssues = await fetchJiraSprintIssues({
+      binding: context.binding,
+      tokenReference: context.tokenReference,
+      projectKey: context.binding.jiraProjectKey,
+    });
+    const currentSprint = pickCurrentSprintIdFromIssues(rawIssues);
+
+    if (!currentSprint) {
+      return res.status(404).json({
+        code: 'ACTIVE_SPRINT_NOT_FOUND',
+        message: 'No active Jira sprint could be resolved for this team',
+      });
+    }
+
+    const snapshot = await buildSprintMonitoringSnapshotResponse({
+      teamId,
+      sprintId: currentSprint.sprintId,
+      includeStale,
+      binding: context.binding,
+      tokenReference: context.tokenReference,
+    });
+
+    return res.status(200).json({
+      ...snapshot,
+      resolvedSprint: {
+        sprintId: currentSprint.sprintId,
+        issueCount: currentSprint.issueCount,
+        latestUpdatedAt: currentSprint.latestUpdatedAt || null,
+      },
+    });
+  } catch (error) {
+    console.error('Error in getCurrentSprintMonitoringSnapshot:', error);
+    return res.status(500).json({
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to load current sprint monitoring snapshot',
+    });
   }
-
-  const response = actionResponse(
-    {
-      id: `eval_res_${Date.now()}`,
-      status: 'STORED',
-      message: 'Sprint evaluation results stored successfully.',
-    },
-    201,
-  );
-
-  return res.status(response.statusCode).json(response.payload);
-}
-
-const forwardPrDataForEvaluationValidation = [
-  body('teamId').trim().notEmpty().withMessage('teamId is required'),
-  body('sprintId').trim().notEmpty().withMessage('sprintId is required'),
-  body('receivedAt').isISO8601().withMessage('receivedAt must be a valid ISO8601 datetime'),
-  body('pullRequests').isArray({ min: 1 }).withMessage('pullRequests must be a non-empty array'),
-];
-
-async function forwardPrDataForEvaluation(req, res) {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return validationFailed(res, errors);
-  }
-
-  const response = actionResponse(
-    {
-      id: `eval_pr_${Date.now()}`,
-      status: 'ACCEPTED',
-      message: 'PR data forwarded for evaluation.',
-    },
-    202,
-  );
-
-  return res.status(response.statusCode).json(response.payload);
-}
-
-const forwardStoryDataForEvaluationValidation = [
-  body('teamId').trim().notEmpty().withMessage('teamId is required'),
-  body('sprintId').trim().notEmpty().withMessage('sprintId is required'),
-  body('receivedAt').isISO8601().withMessage('receivedAt must be a valid ISO8601 datetime'),
-  body('issues').isArray({ min: 1 }).withMessage('issues must be a non-empty array'),
-];
-
-async function forwardStoryDataForEvaluation(req, res) {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return validationFailed(res, errors);
-  }
-
-  const response = actionResponse(
-    {
-      id: `eval_story_${Date.now()}`,
-      status: 'ACCEPTED',
-      message: 'Story data forwarded for evaluation.',
-    },
-    202,
-  );
-
-  return res.status(response.statusCode).json(response.payload);
-}
-
-const returnValidationResultsForEvaluationValidation = [
-  body('teamId').trim().notEmpty().withMessage('teamId is required'),
-  body('sprintId').trim().notEmpty().withMessage('sprintId is required'),
-  body('results').isArray({ min: 1 }).withMessage('results must be a non-empty array'),
-  body('receivedAt').isISO8601().withMessage('receivedAt must be a valid ISO8601 datetime'),
-];
-
-async function returnValidationResultsForEvaluation(req, res) {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return validationFailed(res, errors);
-  }
-
-  const response = actionResponse(
-    {
-      id: `eval_ai_${Date.now()}`,
-      status: 'ACCEPTED',
-      message: 'AI validation results received for evaluation.',
-    },
-    202,
-  );
-
-  return res.status(response.statusCode).json(response.payload);
-}
-
-const storeAiValidationResultValidation = [
-  body('teamId').trim().notEmpty().withMessage('teamId is required'),
-  body('sprintId').trim().notEmpty().withMessage('sprintId is required'),
-  body('results').isArray({ min: 1 }).withMessage('results must be a non-empty array'),
-  body('receivedAt').isISO8601().withMessage('receivedAt must be a valid ISO8601 datetime'),
-];
-
-async function storeAiValidationResult(req, res) {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return validationFailed(res, errors);
-  }
-
-  const response = actionResponse(
-    {
-      id: `sync_ai_${Date.now()}`,
-      status: 'STORED',
-      message: 'AI validation metrics stored successfully.',
-    },
-    201,
-  );
-
-  return res.status(response.statusCode).json(response.payload);
-}
-
-const storeSprintEvaluationMetricsValidation = [
-  body('teamId').trim().notEmpty().withMessage('teamId is required'),
-  body('sprintId').trim().notEmpty().withMessage('sprintId is required'),
-  body('metrics').isArray({ min: 1 }).withMessage('metrics must be a non-empty array'),
-  body('computedAt').isISO8601().withMessage('computedAt must be a valid ISO8601 datetime'),
-];
-
-async function storeSprintEvaluationMetrics(req, res) {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return validationFailed(res, errors);
-  }
-
-  const response = actionResponse(
-    {
-      id: `sync_eval_${Date.now()}`,
-      status: 'STORED',
-      message: 'Sprint evaluation metrics stored successfully.',
-    },
-    201,
-  );
-
-  return res.status(response.statusCode).json(response.payload);
-}
-
-const logIntegrationActivityValidation = [
-  body('eventType').trim().notEmpty().withMessage('eventType is required'),
-  body('actorId').trim().notEmpty().withMessage('actorId is required'),
-  body('actorType').trim().notEmpty().withMessage('actorType is required'),
-];
-
-async function logIntegrationActivity(req, res) {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return validationFailed(res, errors);
-  }
-
-  const response = actionResponse(
-    {
-      id: `audit_int_${Date.now()}`,
-      status: 'RECORDED',
-      message: 'Integration activity log recorded.',
-    },
-    201,
-  );
-
-  return res.status(response.statusCode).json(response.payload);
-}
-
-const logSyncAndEvaluationEventsValidation = [
-  body('eventType').trim().notEmpty().withMessage('eventType is required'),
-  body('actorId').trim().notEmpty().withMessage('actorId is required'),
-  body('actorType').trim().notEmpty().withMessage('actorType is required'),
-];
-
-async function logSyncAndEvaluationEvents(req, res) {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return validationFailed(res, errors);
-  }
-
-  const response = actionResponse(
-    {
-      id: `audit_eval_${Date.now()}`,
-      status: 'RECORDED',
-      message: 'Sync/evaluation event log recorded.',
-    },
-    201,
-  );
-
-  return res.status(response.statusCode).json(response.payload);
 }
 
 module.exports = {
-  triggerAiValidationValidation,
-  triggerAiValidation,
-  provideSprintHistoryValidation,
-  provideSprintHistory,
-  storeSprintEvaluationResultsValidation,
-  storeSprintEvaluationResults,
-  forwardPrDataForEvaluationValidation,
-  forwardPrDataForEvaluation,
-  forwardStoryDataForEvaluationValidation,
-  forwardStoryDataForEvaluation,
-  returnValidationResultsForEvaluationValidation,
-  returnValidationResultsForEvaluation,
-  storeAiValidationResultValidation,
-  storeAiValidationResult,
-  storeSprintEvaluationMetricsValidation,
-  storeSprintEvaluationMetrics,
-  logIntegrationActivityValidation,
-  logIntegrationActivity,
-  logSyncAndEvaluationEventsValidation,
-  logSyncAndEvaluationEvents,
+  getSprintMonitoringSnapshotValidation,
+  getSprintMonitoringSnapshot,
+  getCurrentSprintMonitoringSnapshotValidation,
+  getCurrentSprintMonitoringSnapshot,
+  pickCurrentSprintIdFromIssues,
 };

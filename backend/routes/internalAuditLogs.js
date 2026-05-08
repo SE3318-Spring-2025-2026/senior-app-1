@@ -5,7 +5,7 @@ const {
   logIntegrationActivity,
   logSyncAndEvaluationEventsValidation,
   logSyncAndEvaluationEvents,
-} = require('../controllers/sprintMonitoringController');
+} = require('../controllers/sprintMonitoringFlowController');
 
 const router = express.Router();
 

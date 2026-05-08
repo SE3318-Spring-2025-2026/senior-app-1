@@ -1,4 +1,8 @@
 const { Group, IntegrationBinding, IntegrationTokenReference } = require('../models');
+const {
+  buildIntegrationResponse,
+  canManageIntegrations,
+} = require('./integrationBindingController');
 
 async function getIntegrationConfiguration(req, res) {
   try {
@@ -12,10 +16,10 @@ async function getIntegrationConfiguration(req, res) {
       });
     }
 
-    if (String(group.leaderId || '') !== String(req.user?.id)) {
+    if (!canManageIntegrations(group, req.user)) {
       return res.status(403).json({
         code: 'FORBIDDEN',
-        message: 'Only the team leader can view integrations for this team',
+        message: 'Only the team leader or authorized staff can view integrations for this team',
       });
     }
 
@@ -31,34 +35,8 @@ async function getIntegrationConfiguration(req, res) {
     }
 
     const tokenReference = await IntegrationTokenReference.findByPk(normalizedTeamId);
-    const hasGithubProvider = binding.providerSet.includes('GITHUB');
-    const hasJiraProvider = binding.providerSet.includes('JIRA');
-    const hasGithubTokenRef = Boolean(tokenReference?.githubTokenRef);
-    const hasJiraTokenRef = Boolean(tokenReference?.jiraTokenRef);
 
-    let integrationStatus = binding.status;
-    if (
-      (hasGithubProvider && !hasGithubTokenRef)
-      || (hasJiraProvider && !hasJiraTokenRef)
-    ) {
-      integrationStatus = 'PARTIAL';
-    }
-
-    return res.status(200).json({
-      bindingId: binding.bindingId,
-      teamId: binding.teamId,
-      providerSet: binding.providerSet,
-      organizationName: binding.organizationName,
-      repositoryName: binding.repositoryName,
-      jiraProjectKey: binding.jiraProjectKey,
-      jiraWorkspaceId: binding.jiraWorkspaceId,
-      defaultBranch: binding.defaultBranch,
-      status: integrationStatus,
-      githubTokenRef: tokenReference?.githubTokenRef ?? null,
-      jiraTokenRef: tokenReference?.jiraTokenRef ?? null,
-      createdAt: binding.createdAt,
-      lastUpdatedAt: tokenReference?.updatedAt ?? binding.updatedAt,
-    });
+    return res.status(200).json(buildIntegrationResponse(binding, tokenReference));
   } catch (error) {
     console.error('Error in getIntegrationConfiguration:', error);
     return res.status(500).json({

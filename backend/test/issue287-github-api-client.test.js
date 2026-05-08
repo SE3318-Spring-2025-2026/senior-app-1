@@ -97,3 +97,17 @@ test('GitHub API Client - functions are exported', () => {
   assert.strictEqual(typeof getCompletePullRequestData, 'function');
   assert.strictEqual(typeof verifyToken, 'function');
 });
+
+test('GitHub API Client - requires global fetch support', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = undefined;
+
+  try {
+    await assert.rejects(
+      () => getPullRequestsByBranch('token', 'acme-org', 'senior-app-1', 'feature/test-branch'),
+      /Node\.js 18 or newer is required/,
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
