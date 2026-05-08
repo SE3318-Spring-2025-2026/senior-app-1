@@ -18,12 +18,119 @@ function serviceError(code, message) {
   return err;
 }
 
+function computeFinalScore(scores) {
+  if (!Array.isArray(scores) || scores.length === 0) {
+    throw serviceError('VALIDATION_ERROR', 'scores must be a non-empty array');
+  }
+
+  let sum = 0;
+  for (const s of scores) {
+    const value = Number(s?.value);
+    if (!s?.criterionId) {
+      throw serviceError('VALIDATION_ERROR', 'each score must have a criterionId');
+    }
+    if (Number.isNaN(value) || value < 0 || value > 100) {
+      throw serviceError('VALIDATION_ERROR', 'score value must be between 0 and 100');
+    }
+    sum += value;
+  }
+
+  return Number((sum / scores.length).toFixed(2));
+}
+
 function mapLetter(score) {
   if (score >= 90) return 'A';
   if (score >= 80) return 'B';
   if (score >= 70) return 'C';
   if (score >= 60) return 'D';
   return 'F';
+}
+
+async function assertGroupExistsAndUnlocked(groupId) {
+  const group = await Group.findByPk(groupId);
+  if (!group) throw serviceError('GROUP_NOT_FOUND', 'Group not found');
+  if (group.status === 'FINALIZED') {
+    throw serviceError('FINALIZATION_LOCK_ERROR', 'Cannot submit/update grades after finalization');
+  }
+  return group;
+}
+
+async function submitAdvisorGrade({ groupId, advisorUser, scores, comments }) {
+  const group = await assertGroupExistsAndUnlocked(groupId);
+
+  if (!group.advisorId || String(group.advisorId) !== String(advisorUser.id)) {
+    throw serviceError('FORBIDDEN', 'Only assigned advisor can submit advisor grade');
+  }
+
+  const existing = await FinalEvaluationGrade.findOne({
+    where: { groupId, gradeType: 'ADVISOR', gradedBy: advisorUser.id },
+  });
+  if (existing) throw serviceError('ADVISOR_GRADE_EXISTS', 'Advisor grade already exists');
+
+  const finalScore = computeFinalScore(scores);
+  return FinalEvaluationGrade.create({
+    groupId,
+    gradeType: 'ADVISOR',
+    gradedBy: advisorUser.id,
+    scores,
+    finalScore,
+    comments: comments ?? null,
+  });
+}
+
+async function updateAdvisorGrade({ groupId, advisorUser, scores, comments }) {
+  const group = await assertGroupExistsAndUnlocked(groupId);
+
+  if (!group.advisorId || String(group.advisorId) !== String(advisorUser.id)) {
+    throw serviceError('FORBIDDEN', 'Only assigned advisor can update advisor grade');
+  }
+
+  const existing = await FinalEvaluationGrade.findOne({
+    where: { groupId, gradeType: 'ADVISOR', gradedBy: advisorUser.id },
+  });
+  if (!existing) throw serviceError('GRADE_NOT_FOUND', 'Advisor grade not found');
+
+  const finalScore = computeFinalScore(scores);
+  return existing.update({
+    scores,
+    finalScore,
+    comments: comments ?? null,
+  });
+}
+
+async function submitCommitteeGrade({ groupId, professorUser, scores, comments }) {
+  await assertGroupExistsAndUnlocked(groupId);
+
+  const existing = await FinalEvaluationGrade.findOne({
+    where: { groupId, gradeType: 'COMMITTEE', gradedBy: professorUser.id },
+  });
+  if (existing) throw serviceError('COMMITTEE_GRADE_EXISTS', 'Committee grade already exists');
+
+  const finalScore = computeFinalScore(scores);
+  return FinalEvaluationGrade.create({
+    groupId,
+    gradeType: 'COMMITTEE',
+    gradedBy: professorUser.id,
+    scores,
+    finalScore,
+    comments: comments ?? null,
+  });
+}
+
+async function updateCommitteeGrade({ groupId, professorUser, scores, comments }) {
+  await assertGroupExistsAndUnlocked(groupId);
+
+  const existing = await FinalEvaluationGrade.findOne({
+    where: { groupId, gradeType: 'COMMITTEE', gradedBy: professorUser.id },
+  });
+  if (!existing) throw serviceError('GRADE_NOT_FOUND', 'Committee grade not found');
+
+  const finalScore = computeFinalScore(scores);
+  return existing.update({
+    scores,
+    finalScore,
+    comments: comments ?? null,
+  });
 }
 
 async function calculateTeamScalar(groupId) {
@@ -257,6 +364,10 @@ async function _defaultGetContributionsArray(groupId) {
 }
 
 module.exports = {
+  submitAdvisorGrade,
+  updateAdvisorGrade,
+  submitCommitteeGrade,
+  updateCommitteeGrade,
   calculateTeamScalar,
   getTeamScalar,
   getContributions,

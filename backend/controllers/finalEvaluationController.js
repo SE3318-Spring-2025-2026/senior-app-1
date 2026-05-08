@@ -1,6 +1,6 @@
 'use strict';
 
-const { param, validationResult } = require('express-validator');
+const { param, body, validationResult } = require('express-validator');
 const { validate: isUUID } = require('uuid');
 const finalEvaluationService = require('../services/finalEvaluationService');
 const {
@@ -8,10 +8,23 @@ const {
   getTeamScalar,
   getContributions,
   getMyGrade,
+  submitAdvisorGrade,
+  updateAdvisorGrade,
+  submitCommitteeGrade,
+  updateCommitteeGrade,
 } = finalEvaluationService;
 
 const groupIdValidation = [
   param('groupId').isUUID().withMessage('groupId must be a valid UUID'),
+];
+
+const gradeBodyValidation = [
+  body('scores').isArray({ min: 1 }).withMessage('scores must be a non-empty array'),
+  body('scores.*.criterionId').notEmpty().withMessage('Each score must have a criterionId'),
+  body('scores.*.value')
+    .isFloat({ min: 0, max: 100 })
+    .withMessage('Score value must be between 0 and 100'),
+  body('comments').optional().isString(),
 ];
 
 const finalizeValidation = [
@@ -121,6 +134,102 @@ async function myGrade(req, res, next) {
   }
 }
 
+function handleGradeError(err, res) {
+  if (err.code === 'VALIDATION_ERROR') {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: err.message });
+  }
+  if (err.code === 'FORBIDDEN' || err.code === 'FINALIZATION_LOCK_ERROR') {
+    return res.status(403).json({ code: err.code, message: err.message });
+  }
+  if (err.code === 'GROUP_NOT_FOUND') {
+    return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: err.message });
+  }
+  if (err.code === 'GRADE_NOT_FOUND') {
+    return res.status(404).json({ code: 'GRADE_NOT_FOUND', message: err.message });
+  }
+  if (err.code === 'ADVISOR_GRADE_EXISTS' || err.code === 'COMMITTEE_GRADE_EXISTS') {
+    return res.status(409).json({ code: err.code, message: err.message });
+  }
+  console.error('[finalEvaluationController]', err);
+  return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+}
+
+async function postAdvisorGrade(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const result = await submitAdvisorGrade({
+      groupId: req.params.groupId,
+      advisorUser: req.user,
+      scores: req.body.scores,
+      comments: req.body.comments,
+    });
+    return res.status(201).json({ code: 'SUCCESS', message: 'Advisor grade submitted', data: result });
+  } catch (err) {
+    return handleGradeError(err, res);
+  }
+}
+
+async function putAdvisorGrade(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const result = await updateAdvisorGrade({
+      groupId: req.params.groupId,
+      advisorUser: req.user,
+      scores: req.body.scores,
+      comments: req.body.comments,
+    });
+    return res.status(200).json({ code: 'SUCCESS', message: 'Advisor grade updated', data: result });
+  } catch (err) {
+    return handleGradeError(err, res);
+  }
+}
+
+async function postCommitteeGrade(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const result = await submitCommitteeGrade({
+      groupId: req.params.groupId,
+      professorUser: req.user,
+      scores: req.body.scores,
+      comments: req.body.comments,
+    });
+    return res.status(201).json({ code: 'SUCCESS', message: 'Committee grade submitted', data: result });
+  } catch (err) {
+    return handleGradeError(err, res);
+  }
+}
+
+async function putCommitteeGrade(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const result = await updateCommitteeGrade({
+      groupId: req.params.groupId,
+      professorUser: req.user,
+      scores: req.body.scores,
+      comments: req.body.comments,
+    });
+    return res.status(200).json({ code: 'SUCCESS', message: 'Committee grade updated', data: result });
+  } catch (err) {
+    return handleGradeError(err, res);
+  }
+}
+
 function serializeFinal(g) {
   return {
     id: g.id,
@@ -188,12 +297,17 @@ async function getGrades(req, res) {
 
 module.exports = {
   groupIdValidation,
+  gradeBodyValidation,
   finalizeValidation,
   getGradesValidation,
   postTeamScalar,
   getTeamScalarHandler,
   getContributionsHandler,
   myGrade,
+  postAdvisorGrade,
+  putAdvisorGrade,
+  postCommitteeGrade,
+  putCommitteeGrade,
   finalize,
   getGrades,
 };
