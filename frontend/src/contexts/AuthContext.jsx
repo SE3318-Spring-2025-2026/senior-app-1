@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from 'react';
+import { clearAuthStorage } from '../services/sessionStorage';
 
 const AuthContext = createContext();
 
@@ -37,7 +38,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem('authToken');
+    clearAuthStorage();
   };
 
   const isAuthenticated = !!token;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import NotificationViewport from './NotificationViewport';
+import { clearAuthStorage } from '../services/sessionStorage';
 
 const roleMenuSections = {
   Student: [
@@ -134,15 +135,7 @@ export default function AppShell() {
   const menuSections = isAuthenticated ? (roleMenuSections[authenticatedUser.role] || []) : [];
 
   function handleSignOut() {
-    const keys = [
-      'authToken',
-      'adminToken', 'adminUser',
-      'coordinatorToken', 'coordinatorUser',
-      'professorToken', 'professorUser',
-      'studentToken', 'studentUser',
-    ];
-
-    keys.forEach((key) => window.localStorage.removeItem(key));
+    clearAuthStorage();
     window.location.assign('/home');
   }
 

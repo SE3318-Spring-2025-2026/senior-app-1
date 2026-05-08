@@ -98,6 +98,33 @@ describe('Unified login page (issue #315)', () => {
     expect(window.localStorage.getItem('authToken')).toBe('student-token');
   });
 
+  test('student login clears a stale admin session from localStorage', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem('adminToken', 'old-admin-token');
+    window.localStorage.setItem('adminUser', JSON.stringify({ role: 'ADMIN', email: 'admin@example.edu' }));
+    window.localStorage.setItem('authToken', 'old-admin-token');
+    apiClient.post.mockResolvedValueOnce({
+      data: {
+        token: 'student-token',
+        user: { role: 'STUDENT', studentId: '11070001000', fullName: 'Ada Lovelace' },
+        message: 'Welcome',
+      },
+    });
+
+    renderLoginPage();
+    await user.type(screen.getByLabelText(/Student ID or Email/i), '11070001000');
+    await user.type(screen.getByLabelText(/Password/i), 'pw-secret');
+    await user.click(screen.getByRole('button', { name: /^login$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Student Home')).toBeInTheDocument();
+    });
+    expect(window.localStorage.getItem('adminToken')).toBeNull();
+    expect(window.localStorage.getItem('adminUser')).toBeNull();
+    expect(window.localStorage.getItem('studentToken')).toBe('student-token');
+    expect(window.localStorage.getItem('authToken')).toBe('student-token');
+  });
+
   test('email input dispatches to professor endpoint first and redirects to /professors on success', async () => {
     const user = userEvent.setup();
     apiClient.post.mockResolvedValueOnce({
