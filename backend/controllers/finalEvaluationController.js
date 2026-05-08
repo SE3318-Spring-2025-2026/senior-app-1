@@ -153,6 +153,9 @@ function handleGradeError(err, res) {
   if (err.code === 'GROUP_NOT_FOUND') {
     return res.status(404).json({ code: 'GROUP_NOT_FOUND', message: err.message });
   }
+  if (err.code === 'DELIVERABLE_NOT_FOUND') {
+    return res.status(404).json({ code: 'DELIVERABLE_NOT_FOUND', message: err.message });
+  }
   if (err.code === 'GRADE_NOT_FOUND') {
     return res.status(404).json({ code: 'GRADE_NOT_FOUND', message: err.message });
   }
@@ -177,7 +180,11 @@ async function postAdvisorGrade(req, res) {
       scores: req.body.scores,
       comments: req.body.comments,
     });
-    return res.status(201).json({ code: 'SUCCESS', message: 'Advisor grade submitted', data: result });
+    return res.status(201).json({
+      code: 'SUCCESS',
+      message: 'Advisor grade submitted',
+      data: serializeAdvisorGrade(result),
+    });
   } catch (err) {
     return handleGradeError(err, res);
   }
@@ -197,7 +204,11 @@ async function putAdvisorGrade(req, res) {
       scores: req.body.scores,
       comments: req.body.comments,
     });
-    return res.status(200).json({ code: 'SUCCESS', message: 'Advisor grade updated', data: result });
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Advisor grade updated',
+      data: serializeAdvisorGrade(result),
+    });
   } catch (err) {
     return handleGradeError(err, res);
   }
@@ -217,7 +228,11 @@ async function postCommitteeGrade(req, res) {
       scores: req.body.scores,
       comments: req.body.comments,
     });
-    return res.status(201).json({ code: 'SUCCESS', message: 'Committee grade submitted', data: result });
+    return res.status(201).json({
+      code: 'SUCCESS',
+      message: 'Committee grade submitted',
+      data: serializeCommitteeGrade(result),
+    });
   } catch (err) {
     return handleGradeError(err, res);
   }
@@ -237,10 +252,42 @@ async function putCommitteeGrade(req, res) {
       scores: req.body.scores,
       comments: req.body.comments,
     });
-    return res.status(200).json({ code: 'SUCCESS', message: 'Committee grade updated', data: result });
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Committee grade updated',
+      data: serializeCommitteeGrade(result),
+    });
   } catch (err) {
     return handleGradeError(err, res);
   }
+}
+
+function serializeAdvisorGrade(grade) {
+  if (!grade) return null;
+  return {
+    id: grade.id,
+    groupId: grade.groupId,
+    deliverableId: grade.deliverableId,
+    gradedBy: grade.gradedBy,
+    scores: grade.scores,
+    finalScore: grade.finalScore,
+    comments: grade.comments ?? undefined,
+    gradedAt: grade.createdAt,
+  };
+}
+
+function serializeCommitteeGrade(grade) {
+  if (!grade) return null;
+  return {
+    id: grade.id,
+    groupId: grade.groupId,
+    deliverableId: grade.deliverableId,
+    reviewerId: grade.gradedBy,
+    scores: grade.scores,
+    finalScore: grade.finalScore,
+    comments: grade.comments ?? undefined,
+    gradedAt: grade.createdAt,
+  };
 }
 
 function serializeFinal(g) {
@@ -321,8 +368,8 @@ async function getRawGrades(req, res) {
       message: 'Raw grades retrieved',
       data: {
         groupId: result.groupId,
-        advisorGrade: result.advisorGrade,
-        committeeGrades: result.committeeGrades,
+        advisorGrade: serializeAdvisorGrade(result.advisorGrade),
+        committeeGrades: (result.committeeGrades || []).map(serializeCommitteeGrade),
       },
     });
   } catch (err) {
