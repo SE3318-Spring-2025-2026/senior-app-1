@@ -4,6 +4,8 @@ const { param, body, validationResult } = require('express-validator');
 const { validate: isUUID } = require('uuid');
 const finalEvaluationService = require('../services/finalEvaluationService');
 const {
+  submitAdvisorGrade,
+  submitCommitteeGrade,
   calculateTeamScalar,
   getTeamScalar,
   getContributions,
@@ -126,6 +128,77 @@ async function getContributionsHandler(req, res) {
       return res.status(422).json({ code: 'NO_SPRINT_SYNC_DATA', message: err.message });
     }
     console.error('getContributions error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+}
+
+async function postAdvisorGrade(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const grade = await submitAdvisorGrade({
+      groupId: req.params.groupId,
+      deliverableId: req.body.deliverableId,
+      scores: req.body.scores,
+      comments: req.body.comments,
+      gradedBy: req.user.id,
+    });
+    return res.status(201).json({
+      code: 'SUCCESS',
+      message: 'Advisor grade submitted',
+      data: grade.toJSON(),
+    });
+  } catch (err) {
+    if (err.code === 'INVALID_SCORES') {
+      return res.status(400).json({ code: err.code, message: err.message });
+    }
+    if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND') {
+      return res.status(404).json({ code: err.code, message: err.message });
+    }
+    if (err.code === 'NOT_ASSIGNED_ADVISOR') {
+      return res.status(403).json({ code: err.code, message: err.message });
+    }
+    if (err.code === 'GRADE_ALREADY_SUBMITTED') {
+      return res.status(409).json({ code: err.code, message: err.message });
+    }
+    console.error('submitAdvisorGrade error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+}
+
+async function postCommitteeGrade(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const grade = await submitCommitteeGrade({
+      groupId: req.params.groupId,
+      deliverableId: req.body.deliverableId,
+      scores: req.body.scores,
+      comments: req.body.comments,
+      gradedBy: req.user.id,
+    });
+    return res.status(201).json({
+      code: 'SUCCESS',
+      message: 'Committee grade submitted',
+      data: grade.toJSON(),
+    });
+  } catch (err) {
+    if (err.code === 'INVALID_SCORES') {
+      return res.status(400).json({ code: err.code, message: err.message });
+    }
+    if (err.code === 'GROUP_NOT_FOUND' || err.code === 'DELIVERABLE_NOT_FOUND') {
+      return res.status(404).json({ code: err.code, message: err.message });
+    }
+    if (err.code === 'GRADE_ALREADY_SUBMITTED') {
+      return res.status(409).json({ code: err.code, message: err.message });
+    }
+    console.error('submitCommitteeGrade error:', err);
     return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 }
@@ -382,6 +455,8 @@ module.exports = {
   gradeBodyValidation,
   finalizeValidation,
   getGradesValidation,
+  postAdvisorGrade,
+  postCommitteeGrade,
   postTeamScalar,
   getTeamScalarHandler,
   getContributionsHandler,
