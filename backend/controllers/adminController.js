@@ -24,7 +24,7 @@ function buildRoleLoginHandler(role, successMessage, invalidMessage, failureCode
       });
 
       if (!user || !user.password) {
-        await logUserEvent(req, {
+        logUserEvent(req, {
           action: 'USER_LOGIN_FAILED',
           targetType: 'USER',
           metadata: { attemptedEmail: email, attemptedRole: role, reason: 'USER_NOT_FOUND' },
@@ -38,7 +38,7 @@ function buildRoleLoginHandler(role, successMessage, invalidMessage, failureCode
       const passwordMatches = await bcrypt.compare(password, user.password);
 
       if (!passwordMatches) {
-        await logUserEvent(req, {
+        logUserEvent(req, {
           action: 'USER_LOGIN_FAILED',
           targetType: 'USER',
           targetId: user.id,
@@ -59,7 +59,7 @@ function buildRoleLoginHandler(role, successMessage, invalidMessage, failureCode
 
       const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET);
 
-      await logUserEvent(req, {
+      logUserEvent(req, {
         action: 'USER_LOGIN_SUCCESS',
         actorId: user.id,
         targetType: 'USER',

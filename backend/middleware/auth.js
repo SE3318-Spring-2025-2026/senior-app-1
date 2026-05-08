@@ -10,7 +10,7 @@ const authenticate = async (req, res, next) => {
     : null;
 
   if (!token) {
-    await logUserEvent(req, {
+    logUserEvent(req, {
       action: 'AUTH_TOKEN_MISSING',
       targetType: 'ENDPOINT',
       targetId: req.path,
@@ -24,7 +24,7 @@ const authenticate = async (req, res, next) => {
     const user = await User.findByPk(decoded.id);
 
     if (!user) {
-      await logUserEvent(req, {
+      logUserEvent(req, {
         action: 'AUTH_TOKEN_INVALID',
         targetType: 'ENDPOINT',
         targetId: req.path,
@@ -36,7 +36,7 @@ const authenticate = async (req, res, next) => {
     req.user = user;
     return next();
   } catch (err) {
-    await logUserEvent(req, {
+    logUserEvent(req, {
       action: 'AUTH_TOKEN_INVALID',
       targetType: 'ENDPOINT',
       targetId: req.path,
@@ -52,7 +52,7 @@ const authorize = (roles) => async (req, _res, next) => {
   }
 
   if (!roles.includes(req.user.role)) {
-    await logUserEvent(req, {
+    logUserEvent(req, {
       action: 'AUTH_FORBIDDEN',
       actorId: req.user.id,
       targetType: 'ENDPOINT',

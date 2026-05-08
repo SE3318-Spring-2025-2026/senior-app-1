@@ -5,6 +5,7 @@ const Group = require('./models/Group');
 const IntegrationBinding = require('./models/IntegrationBinding');
 const SprintPullRequest = require('./models/SprintPullRequest');
 const SprintStory = require('./models/SprintStory');
+const AuditLog = require('./models/AuditLog');
 const app = require('./app');
 require('./models');
 const { ensureValidStudentRegistry } = require('./services/studentService');
@@ -125,6 +126,20 @@ const ensureSqliteColumns = async () => {
         type: attribute.type,
         allowNull: attribute.allowNull,
         defaultValue: attribute.defaultValue,
+      });
+    }
+  }
+
+  // Relax NOT NULL constraints on AuditLog columns that must accept unauthenticated events.
+  // sync({ alter }) would do this automatically but is too destructive for production,
+  // so we handle it here as a one-time idempotent migration.
+  const auditLogTable = await queryInterface.describeTable('AuditLogs');
+  const auditLogAttributes = AuditLog.getAttributes();
+  for (const columnName of ['actorId', 'targetType', 'targetId']) {
+    if (auditLogTable[columnName] && auditLogTable[columnName].allowNull === false) {
+      await queryInterface.changeColumn('AuditLogs', columnName, {
+        type: auditLogAttributes[columnName].type,
+        allowNull: true,
       });
     }
   }

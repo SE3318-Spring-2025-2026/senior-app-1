@@ -155,7 +155,7 @@ const loginStudent = [
     const { studentId, password } = req.body;
 
     if (!(await studentService.isStudentIdEligible(studentId))) {
-      await logUserEvent(req, {
+      logUserEvent(req, {
         action: 'STUDENT_LOGIN_INELIGIBLE',
         targetType: 'USER',
         metadata: { attemptedStudentId: studentId, reason: 'STUDENT_ID_NOT_ELIGIBLE' },
@@ -168,7 +168,7 @@ const loginStudent = [
 
     const student = await studentService.getStudentByStudentId(studentId);
     if (!student || student.status !== 'ACTIVE' || !student.passwordHash) {
-      await logUserEvent(req, {
+      logUserEvent(req, {
         action: 'USER_LOGIN_FAILED',
         targetType: 'USER',
         metadata: { attemptedStudentId: studentId, attemptedRole: 'STUDENT', reason: 'USER_NOT_FOUND' },
@@ -181,7 +181,7 @@ const loginStudent = [
 
     const passwordMatches = await bcrypt.compare(password, student.passwordHash);
     if (!passwordMatches) {
-      await logUserEvent(req, {
+      logUserEvent(req, {
         action: 'USER_LOGIN_FAILED',
         targetType: 'USER',
         targetId: student.id,
@@ -200,7 +200,7 @@ const loginStudent = [
       });
     }
 
-    await logUserEvent(req, {
+    logUserEvent(req, {
       action: 'USER_LOGIN_SUCCESS',
       actorId: student.id,
       targetType: 'USER',

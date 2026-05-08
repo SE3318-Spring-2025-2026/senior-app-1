@@ -31,7 +31,7 @@ const loginProfessor = [
     });
 
     if (!user || user.status !== 'ACTIVE' || !user.password) {
-      await logUserEvent(req, {
+      logUserEvent(req, {
         action: 'USER_LOGIN_FAILED',
         targetType: 'USER',
         metadata: { attemptedEmail: email, attemptedRole: 'PROFESSOR', reason: 'USER_NOT_FOUND' },
@@ -43,7 +43,7 @@ const loginProfessor = [
 
     const passwordMatches = await bcrypt.compare(password, user.password);
     if (!passwordMatches) {
-      await logUserEvent(req, {
+      logUserEvent(req, {
         action: 'USER_LOGIN_FAILED',
         targetType: 'USER',
         targetId: user.id,
@@ -62,7 +62,7 @@ const loginProfessor = [
 
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET);
 
-    await logUserEvent(req, {
+    logUserEvent(req, {
       action: 'USER_LOGIN_SUCCESS',
       actorId: user.id,
       targetType: 'USER',
@@ -111,7 +111,7 @@ const setupProfessorPassword = [
         ? await professorService.setInitialPassword(setupToken, newPassword)
         : await professorService.setInitialPasswordByEmail(email, newPassword);
 
-      await logUserEvent(req, {
+      logUserEvent(req, {
         action: 'PROFESSOR_PASSWORD_SETUP_SUCCESS',
         actorId: result.userId || null,
         targetType: 'USER',
@@ -122,7 +122,7 @@ const setupProfessorPassword = [
       return res.status(200).json(result);
     } catch (error) {
       if (error.message === 'INVALID_SETUP_TOKEN') {
-        await logUserEvent(req, {
+        logUserEvent(req, {
           action: 'PROFESSOR_PASSWORD_SETUP_FAILED',
           targetType: 'USER',
           metadata: { reason: 'INVALID_SETUP_TOKEN' },
@@ -136,7 +136,7 @@ const setupProfessorPassword = [
       }
 
       if (error.message === 'PROFESSOR_SETUP_ALREADY_COMPLETED') {
-        await logUserEvent(req, {
+        logUserEvent(req, {
           action: 'PROFESSOR_PASSWORD_SETUP_FAILED',
           targetType: 'USER',
           metadata: { attemptedEmail: email || null, reason: 'PROFESSOR_SETUP_ALREADY_COMPLETED' },
@@ -150,7 +150,7 @@ const setupProfessorPassword = [
       }
 
       if (error.message === 'INVALID_PASSWORD_POLICY') {
-        await logUserEvent(req, {
+        logUserEvent(req, {
           action: 'PROFESSOR_PASSWORD_SETUP_FAILED',
           targetType: 'USER',
           metadata: { attemptedEmail: email || null, reason: 'INVALID_PASSWORD_POLICY' },
@@ -164,7 +164,7 @@ const setupProfessorPassword = [
       }
 
       if (error.message === 'PROFESSOR_SETUP_NOT_FOUND' || error.message === 'INVALID_PROFESSOR_EMAIL') {
-        await logUserEvent(req, {
+        logUserEvent(req, {
           action: 'PROFESSOR_PASSWORD_SETUP_FAILED',
           targetType: 'USER',
           metadata: { attemptedEmail: email || null, reason: error.message },
