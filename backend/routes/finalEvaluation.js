@@ -6,6 +6,21 @@ const ctrl = require('../controllers/finalEvaluationController');
 
 const router = express.Router();
 
+router.put(
+  '/weight-configuration',
+  authenticate,
+  authorize(['COORDINATOR']),
+  ctrl.weightConfigBodyValidation,
+  ctrl.putWeightConfiguration,
+);
+
+router.get(
+  '/weight-configuration',
+  authenticate,
+  authorize(['COORDINATOR', 'PROFESSOR', 'ADVISOR']),
+  ctrl.getWeightConfiguration,
+);
+
 router.post(
   '/groups/:groupId/advisor-grade',
   authenticate,

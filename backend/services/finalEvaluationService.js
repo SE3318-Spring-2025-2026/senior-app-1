@@ -14,6 +14,7 @@ const {
   GroupAdvisorAssignment,
 } = require('../models');
 const ApiError = require('../errors/apiError');
+const WEIGHT_TOLERANCE = 0.001;
 
 function serviceError(code, message) {
   const err = new Error(message);
@@ -371,6 +372,45 @@ async function getRawGrades(groupId) {
   };
 }
 
+async function setWeightConfig(advisorWeight, committeeWeight, updatedBy) {
+  const advisor = Number(advisorWeight);
+  const committee = Number(committeeWeight);
+
+  if (Number.isNaN(advisor) || Number.isNaN(committee)) {
+    throw serviceError('VALIDATION_ERROR', 'advisorWeight and committeeWeight must be numbers');
+  }
+  if (advisor < 0 || advisor > 1 || committee < 0 || committee > 1) {
+    throw serviceError('VALIDATION_ERROR', 'advisorWeight and committeeWeight must be between 0 and 1');
+  }
+  if (Math.abs(advisor + committee - 1) > WEIGHT_TOLERANCE) {
+    throw serviceError('WEIGHTS_MUST_SUM_TO_ONE', 'advisorWeight and committeeWeight must sum to 1.0');
+  }
+
+  return sequelize.transaction(async (t) => {
+    await FinalEvaluationWeight.update(
+      { isActive: false },
+      { where: { isActive: true }, transaction: t },
+    );
+
+    return FinalEvaluationWeight.create(
+      {
+        advisorWeight: advisor,
+        committeeWeight: committee,
+        updatedBy: updatedBy || null,
+        isActive: true,
+      },
+      { transaction: t },
+    );
+  });
+}
+
+async function getWeightConfig() {
+  return FinalEvaluationWeight.findOne({
+    where: { isActive: true },
+    order: [['createdAt', 'DESC']],
+  });
+}
+
 /**
  * Finalize and persist per-member grades for a group.
  *
@@ -468,6 +508,8 @@ module.exports = {
   getContributions,
   getMyGrade,
   getRawGrades,
+  setWeightConfig,
+  getWeightConfig,
   finalize,
   getFinalGrades,
   mapLetter,

@@ -5,13 +5,15 @@ const { validate: isUUID } = require('uuid');
 const finalEvaluationService = require('../services/finalEvaluationService');
 const {
   submitAdvisorGrade,
+  updateAdvisorGrade,
   submitCommitteeGrade,
+  updateCommitteeGrade,
   calculateTeamScalar,
   getTeamScalar,
   getContributions,
   getMyGrade,
-  updateAdvisorGrade,
-  updateCommitteeGrade,
+  setWeightConfig,
+  getWeightConfig,
 } = finalEvaluationService;
 
 const groupIdValidation = [
@@ -30,6 +32,19 @@ const gradeBodyValidation = [
     .isString()
     .isLength({ max: 2000 })
     .withMessage('Comments must be 2000 characters or less'),
+];
+
+const weightConfigBodyValidation = [
+  body('advisorWeight')
+    .notEmpty()
+    .withMessage('advisorWeight is required')
+    .isFloat({ min: 0, max: 1 })
+    .withMessage('advisorWeight must be a float between 0 and 1'),
+  body('committeeWeight')
+    .notEmpty()
+    .withMessage('committeeWeight is required')
+    .isFloat({ min: 0, max: 1 })
+    .withMessage('committeeWeight must be a float between 0 and 1'),
 ];
 
 const finalizeValidation = [
@@ -126,6 +141,67 @@ async function getContributionsHandler(req, res) {
       return res.status(422).json({ code: 'NO_SPRINT_SYNC_DATA', message: err.message });
     }
     console.error('getContributions error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+}
+
+async function putWeightConfiguration(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      code: 'VALIDATION_ERROR',
+      message: errors.array()[0]?.msg || 'Invalid request',
+      errors: errors.array(),
+    });
+  }
+
+  try {
+    const config = await setWeightConfig(
+      req.body.advisorWeight,
+      req.body.committeeWeight,
+      req.user.id,
+    );
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Weight configuration updated',
+      data: {
+        advisorWeight: config.advisorWeight,
+        committeeWeight: config.committeeWeight,
+        updatedBy: config.updatedBy,
+        updatedAt: config.updatedAt,
+      },
+    });
+  } catch (err) {
+    if (err.code === 'WEIGHTS_MUST_SUM_TO_ONE' || err.code === 'VALIDATION_ERROR') {
+      return res.status(400).json({ code: err.code, message: err.message });
+    }
+    console.error('[finalEvaluationController]', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+}
+
+async function getWeightConfiguration(req, res) {
+  try {
+    const config = await getWeightConfig();
+    if (!config) {
+      return res.status(404).json({
+        code: 'WEIGHT_CONFIG_NOT_FOUND',
+        message: 'No weight configuration has been set yet.',
+      });
+    }
+
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Weight configuration retrieved',
+      data: {
+        advisorWeight: config.advisorWeight,
+        committeeWeight: config.committeeWeight,
+        updatedBy: config.updatedBy,
+        updatedAt: config.updatedAt,
+      },
+    });
+  } catch (err) {
+    console.error('[finalEvaluationController]', err);
     return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 }
@@ -380,6 +456,7 @@ async function getRawGrades(req, res) {
 module.exports = {
   groupIdValidation,
   gradeBodyValidation,
+  weightConfigBodyValidation,
   finalizeValidation,
   getGradesValidation,
   postAdvisorGrade,
@@ -387,6 +464,8 @@ module.exports = {
   postTeamScalar,
   getTeamScalarHandler,
   getContributionsHandler,
+  putWeightConfiguration,
+  getWeightConfiguration,
   myGrade,
   putAdvisorGrade,
   putCommitteeGrade,
