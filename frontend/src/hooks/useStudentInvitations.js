@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import apiClient from '../services/apiClient';
 
 function mapResponseError(err) {
   const status = err.response?.status;
@@ -22,21 +23,10 @@ export function useStudentInvitations() {
     setLoadError(null);
 
     try {
-      const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
-      const response = await fetch('/api/v1/invitations/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.message || 'Could not load invitations.');
-      }
-
+      const { data: payload } = await apiClient.get('/v1/invitations/me');
       setInvitations(payload.invitations || []);
     } catch (error) {
-      setLoadError(error.message || 'Could not load your invitations. Please refresh and try again.');
+      setLoadError(error.response?.data?.message || error.message || 'Could not load your invitations. Please refresh and try again.');
     } finally {
       setLoading(false);
     }
@@ -52,23 +42,7 @@ export function useStudentInvitations() {
     });
 
     try {
-      const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
-      const httpResponse = await fetch(`/api/v1/invitations/${invitationId}/response`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ response }),
-      });
-
-      const payload = await httpResponse.json().catch(() => ({}));
-      if (!httpResponse.ok) {
-        const err = new Error(payload.message || 'Failed to update invitation response');
-        err.response = { status: httpResponse.status, data: payload };
-        throw err;
-      }
-
+      await apiClient.patch(`/v1/invitations/${invitationId}/response`, { response });
       setInvitations((prev) => prev.filter((inv) => inv.id !== invitationId));
     } catch (err) {
       setResponseErrors((prev) => ({ ...prev, [invitationId]: mapResponseError(err) }));

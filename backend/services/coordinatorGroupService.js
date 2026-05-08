@@ -69,7 +69,7 @@ async function updateGroupMembershipByCoordinator({ groupId, action, studentId, 
     throw createServiceError(400, 'INVALID_MEMBERSHIP_ACTION', 'Action must be ADD or REMOVE.');
   }
 
-  return sequelize.transaction(async (transaction) => {
+  const result = await sequelize.transaction(async (transaction) => {
     const student = await User.findOne({
       where: {
         studentId,
@@ -130,36 +130,36 @@ async function updateGroupMembershipByCoordinator({ groupId, action, studentId, 
     group.memberIds = updatedMemberIds;
     await group.save({ transaction });
 
-    const auditPayload = {
-      actorId: actor.id,
-      action: getAuditAction(normalizedAction),
-      targetType: 'GROUP',
-      targetId: group.id,
-      metadata: {
-        groupId: group.id,
-        targetUserId: student.id,
-        studentId,
-        membershipAction: normalizedAction,
-        previousMemberIds,
-        updatedMemberIds,
+    return {
+      group,
+      auditPayload: {
+        actorId: actor.id,
+        action: getAuditAction(normalizedAction),
+        targetType: 'GROUP',
+        targetId: group.id,
+        metadata: {
+          groupId: group.id,
+          targetUserId: student.id,
+          studentId,
+          membershipAction: normalizedAction,
+          previousMemberIds,
+          updatedMemberIds,
+        },
       },
     };
-
-    try {
-      await AuditLog.create(auditPayload, { transaction });
-    } catch (error) {
-      console.error('Coordinator group edit audit write failed.', {
-        groupId,
-        actorId: actor.id,
-        action: normalizedAction,
-        studentId,
-        error: error.message,
-      });
-      throw createServiceError(500, 'AUDIT_LOG_WRITE_FAILED', 'Audit log write failed for coordinator membership update.');
-    }
-
-    return group;
   });
+
+  AuditLog.create(result.auditPayload).catch((error) => {
+    console.error('Coordinator group edit audit write failed.', {
+      groupId,
+      actorId: actor.id,
+      action: normalizedAction,
+      studentId,
+      error: error.message,
+    });
+  });
+
+  return result.group;
 }
 
 module.exports = {

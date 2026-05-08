@@ -1,5 +1,6 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireNonEmptyBody } = require('../middleware/requestValidation');
 const committeeController = require('../controllers/committeeController');
 
 const router = express.Router();
@@ -22,6 +23,7 @@ router.post(
   '/submissions/:submissionId/grade',
   authenticate,
   authorize(['PROFESSOR']),
+  requireNonEmptyBody,
   committeeController.submitReviewValidation,
   committeeController.submitReview,
 );

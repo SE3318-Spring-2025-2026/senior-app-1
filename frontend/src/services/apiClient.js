@@ -63,11 +63,11 @@ const apiClient = {
   post(path, body) {
     return request('POST', path, body);
   },
-  patch(path, body) {
-    return request('PATCH', path, body);
-  },
   put(path, body) {
     return request('PUT', path, body);
+  },
+  patch(path, body) {
+    return request('PATCH', path, body);
   },
   delete(path) {
     return request('DELETE', path);

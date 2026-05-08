@@ -180,7 +180,7 @@ async function transferAdvisorByCoordinator({ groupId, newAdvisorId, actorId = n
     });
 
     if (actorId) {
-      await AuditLog.create({
+      AuditLog.create({
         action: 'ADVISOR_TRANSFER',
         actorId,
         targetType: 'GROUP',
@@ -191,7 +191,7 @@ async function transferAdvisorByCoordinator({ groupId, newAdvisorId, actorId = n
           previousAdvisorId,
           newAdvisorId: assignment.advisorId,
         },
-      }, { transaction });
+      }).catch((err) => console.error('Audit log failed (ADVISOR_TRANSFER):', err));
     }
 
     return {
@@ -257,7 +257,7 @@ async function removeAdvisorAssignmentFromGroup({ groupId, actorId = null }) {
     await group.save({ transaction });
 
     if (actorId) {
-      await AuditLog.create({
+      AuditLog.create({
         action: 'ADVISOR_RELEASE',
         actorId,
         targetType: 'GROUP',
@@ -267,7 +267,7 @@ async function removeAdvisorAssignmentFromGroup({ groupId, actorId = null }) {
           groupName: group.name || null,
           previousAdvisorId: previousAdvisorId || null,
         },
-      }, { transaction });
+      }).catch((err) => console.error('Audit log failed (ADVISOR_RELEASE):', err));
     }
 
     return {

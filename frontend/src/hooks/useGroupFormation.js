@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import apiClient from '../services/apiClient';
 
 export function useGroupFormation() {
   const [pending, setPending] = useState(false);
@@ -34,28 +35,7 @@ export function useGroupFormation() {
         throw authError;
       }
 
-      const response = await fetch('/api/v1/groups', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          groupName,
-          maxMembers,
-        }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const requestError = new Error(payload.message || 'Failed to create group.');
-        requestError.response = {
-          status: response.status,
-          data: payload,
-        };
-        throw requestError;
-      }
-
+      const { data: payload } = await apiClient.post('/v1/groups', { groupName, maxMembers });
       const data = payload.data || payload;
       const normalized = normalizeGroup({ ...data, groupName, maxMembers });
 
@@ -83,26 +63,7 @@ export function useGroupFormation() {
     setInviteError(null);
 
     try {
-      const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
-      const response = await fetch(`/api/v1/groups/${groupId}/invitations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ studentIds }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const err = new Error(payload.message || 'Invitation dispatch failed.');
-        err.response = {
-          status: response.status,
-          data: payload,
-        };
-        throw err;
-      }
-
+      const { data: payload } = await apiClient.post(`/v1/groups/${groupId}/invitations`, { studentIds });
       const created = payload.created || [];
       setInvitations((prev) => [...prev, ...created]);
       return created;
@@ -138,25 +99,18 @@ export function useGroupFormation() {
       return null;
     }
 
-    const response = await fetch('/api/v1/groups/mine', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.status === 404) {
-      setGroup(null);
-      return null;
+    try {
+      const { data: payload } = await apiClient.get('/v1/groups/mine');
+      const normalized = normalizeGroup(payload.data || payload);
+      setGroup(normalized);
+      return normalized;
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setGroup(null);
+        return null;
+      }
+      throw new Error(err.response?.data?.message || err.message || 'Could not load current group.');
     }
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(payload.message || 'Could not load current group.');
-    }
-
-    const normalized = normalizeGroup(payload.data || payload);
-    setGroup(normalized);
-    return normalized;
   }
 
   return {

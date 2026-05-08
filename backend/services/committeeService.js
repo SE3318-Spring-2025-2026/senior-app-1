@@ -1,6 +1,6 @@
 const { Op } = require('sequelize');
 const sequelize = require('../db');
-const { DeliverableSubmission, RubricCriterion, CommitteeReview } = require('../models');
+const { GradingRubric, Deliverable, CommitteeReview, Group } = require('../models');
 
 function calculateFinalScore(scores, criteriaMap) {
   let weightedSum = 0;
@@ -8,6 +8,7 @@ function calculateFinalScore(scores, criteriaMap) {
 
   for (const score of scores) {
     const criterion = criteriaMap.get(score.criterionId);
+    if (!criterion) continue;
     weightedSum += (score.value / criterion.maxPoints) * criterion.weight;
     totalWeight += criterion.weight;
   }
@@ -17,7 +18,7 @@ function calculateFinalScore(scores, criteriaMap) {
 }
 
 async function submitReview({ submissionId, reviewerId, scores, comments }) {
-  const submission = await DeliverableSubmission.findByPk(submissionId);
+  const submission = await Deliverable.findByPk(submissionId);
   if (!submission) {
     const err = new Error('Submission not found');
     err.code = 'SUBMISSION_NOT_FOUND';
@@ -32,20 +33,20 @@ async function submitReview({ submissionId, reviewerId, scores, comments }) {
     throw err;
   }
 
-  const criteria = await RubricCriterion.findAll({
-    where: { id: criterionIds, deliverableType: submission.type },
+  const rubric = await GradingRubric.findOne({
+    where: { deliverableType: submission.type },
+    order: [['createdAt', 'DESC']],
   });
+  const criteriaList = rubric?.criteria || [];
+  const criteriaMap = new Map(criteriaList.map((c) => [c.id, c]));
 
-  if (criteria.length !== criterionIds.length) {
-    const foundIds = new Set(criteria.map((c) => c.id));
-    const missing = criterionIds.filter((id) => !foundIds.has(id));
+  const missing = criterionIds.filter((id) => !criteriaMap.has(id));
+  if (missing.length > 0) {
     const err = new Error(`Invalid criterion IDs: ${missing.join(', ')}`);
     err.code = 'INVALID_CRITERION_ID';
     err.details = missing;
     throw err;
   }
-
-  const criteriaMap = new Map(criteria.map((c) => [c.id, c]));
 
   for (const score of scores) {
     const criterion = criteriaMap.get(score.criterionId);
@@ -68,7 +69,7 @@ async function submitReview({ submissionId, reviewerId, scores, comments }) {
       { transaction }
     );
 
-    await DeliverableSubmission.update(
+    await Deliverable.update(
       { status: 'GRADED' },
       { where: { id: submissionId }, transaction }
     );
@@ -83,15 +84,21 @@ async function submitReview({ submissionId, reviewerId, scores, comments }) {
 
 async function listRubricCriteria({ deliverableType } = {}) {
   if (deliverableType) {
-    return RubricCriterion.findAll({ where: { deliverableType } });
+    const rubric = await GradingRubric.findOne({
+      where: { deliverableType },
+      order: [['createdAt', 'DESC']],
+    });
+    return rubric?.criteria || [];
   }
-  return RubricCriterion.findAll();
+  const rubrics = await GradingRubric.findAll({ order: [['createdAt', 'DESC']] });
+  return rubrics.flatMap((r) => r.criteria || []);
 }
 
 async function listPendingSubmissions() {
-  return DeliverableSubmission.findAll({
+  return Deliverable.findAll({
     where: { status: { [Op.ne]: 'GRADED' } },
-    order: [['submittedAt', 'DESC']],
+    include: [{ model: Group, as: 'group', attributes: ['id', 'name'] }],
+    order: [['createdAt', 'DESC']],
   });
 }
 

@@ -8,5 +8,9 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
     "test": "npm --prefix backend test"
+  },
+  "dependencies": {
+    "react-markdown": "^10.1.0",
+    "rehype-sanitize": "^6.0.0"
   }
 }

@@ -1,5 +1,6 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireNonEmptyBody } = require('../middleware/requestValidation');
 const {
   deleteOrphanGroup,
   transferInGroupDatabase,
@@ -12,6 +13,7 @@ router.patch(
   '/groups/:groupId/advisor-transfer',
   authenticate,
   authorize(['COORDINATOR']),
+  requireNonEmptyBody,
   transferInGroupDatabase,
 );
 router.delete(

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import apiClient from './services/apiClient';
 
 const initialForm = {
   email: '',
@@ -75,21 +76,7 @@ export default function AdminProfessorCreatePage() {
     });
 
     try {
-      const token = window.localStorage.getItem('adminToken') || window.localStorage.getItem('authToken');
-      const response = await fetch('/api/v1/admin/professors', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(form),
-      });
-      const result = await response.json();
-
-      if (!response.ok) {
-        setFeedback(mapRegisterError(result, response.status));
-        return;
-      }
+      const { data: result } = await apiClient.post('/v1/admin/professors', form);
 
       setFeedback({
         type: 'success',
@@ -106,21 +93,25 @@ export default function AdminProfessorCreatePage() {
         message: result.message || 'Professor account created successfully.',
       });
       setForm(initialForm);
-    } catch {
-      setFeedback({
-        type: 'error',
-        title: 'Request failed',
-        message: 'The professor creation request could not reach the backend. Check whether the backend server is running.',
-        result: 'Network error',
-        setupToken: '',
-        setupUrl: '',
-        expiresAt: '',
-      });
-      notify({
-        type: 'error',
-        title: 'Professor creation failed',
-        message: 'The professor creation request could not reach the backend.',
-      });
+    } catch (err) {
+      if (err.response) {
+        setFeedback(mapRegisterError(err.response.data || {}, err.response.status));
+      } else {
+        setFeedback({
+          type: 'error',
+          title: 'Request failed',
+          message: 'The professor creation request could not reach the backend. Check whether the backend server is running.',
+          result: 'Network error',
+          setupToken: '',
+          setupUrl: '',
+          expiresAt: '',
+        });
+        notify({
+          type: 'error',
+          title: 'Professor creation failed',
+          message: 'The professor creation request could not reach the backend.',
+        });
+      }
     } finally {
       setSubmitting(false);
     }

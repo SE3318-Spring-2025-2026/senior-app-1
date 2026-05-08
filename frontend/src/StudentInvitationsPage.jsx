@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
 import { useStudentInvitations } from './hooks/useStudentInvitations';
+import apiClient from './services/apiClient';
 
 function NotificationSection({
   title,
@@ -207,19 +208,9 @@ export default function StudentInvitationsPage() {
   useEffect(() => {
     fetchInvitations();
 
-    const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
-    fetch('/api/v1/notifications/me', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          return;
-        }
-
-        const rows = payload.notifications || [];
+    apiClient.get('/v1/notifications/me')
+      .then(({ data: payload }) => {
+        const rows = payload?.notifications || [];
         setMailbox(rows);
       })
       .catch(() => {
@@ -232,41 +223,20 @@ export default function StudentInvitationsPage() {
   useEffect(() => {
     let active = true;
     let timeoutId;
-    const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
 
     async function loadAdvisorTransfers() {
       try {
-        const response = await fetch('/api/v1/team-leader/notifications/advisor-transfers', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const payload = await response.json().catch(() => []);
-        if (!active) {
-          return;
-        }
-
-        if (!response.ok) {
-          setTransferLoadError('Advisor transfer notifications could not be loaded.');
-          setAdvisorTransfers([]);
-        } else {
-          const rows = Array.isArray(payload) ? payload : payload.notifications || [];
-          setAdvisorTransfers(rows);
-          setTransferLoadError('');
-        }
+        const { data: payload } = await apiClient.get('/v1/team-leader/notifications/advisor-transfers');
+        if (!active) return;
+        const rows = Array.isArray(payload) ? payload : payload?.notifications || [];
+        setAdvisorTransfers(rows);
+        setTransferLoadError('');
       } catch {
-        if (!active) {
-          return;
-        }
-
+        if (!active) return;
         setTransferLoadError('Advisor transfer notifications could not be loaded.');
         setAdvisorTransfers([]);
       } finally {
-        if (!active) {
-          return;
-        }
-
+        if (!active) return;
         setLoadingTransfers(false);
         timeoutId = window.setTimeout(loadAdvisorTransfers, 15000);
       }
@@ -283,41 +253,20 @@ export default function StudentInvitationsPage() {
   useEffect(() => {
     let active = true;
     let timeoutId;
-    const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
 
     async function loadAdvisorReleases() {
       try {
-        const response = await fetch('/api/v1/team-leader/notifications/advisor-releases', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const payload = await response.json().catch(() => []);
-        if (!active) {
-          return;
-        }
-
-        if (!response.ok) {
-          setReleaseLoadError('Advisor release notifications could not be loaded.');
-          setAdvisorReleases([]);
-        } else {
-          const rows = Array.isArray(payload) ? payload : payload.notifications || [];
-          setAdvisorReleases(rows);
-          setReleaseLoadError('');
-        }
+        const { data: payload } = await apiClient.get('/v1/team-leader/notifications/advisor-releases');
+        if (!active) return;
+        const rows = Array.isArray(payload) ? payload : payload?.notifications || [];
+        setAdvisorReleases(rows);
+        setReleaseLoadError('');
       } catch {
-        if (!active) {
-          return;
-        }
-
+        if (!active) return;
         setReleaseLoadError('Advisor release notifications could not be loaded.');
         setAdvisorReleases([]);
       } finally {
-        if (!active) {
-          return;
-        }
-
+        if (!active) return;
         setLoadingReleases(false);
         timeoutId = window.setTimeout(loadAdvisorReleases, 15000);
       }
@@ -334,41 +283,20 @@ export default function StudentInvitationsPage() {
   useEffect(() => {
     let active = true;
     let timeoutId;
-    const token = window.localStorage.getItem('studentToken') || window.localStorage.getItem('authToken');
 
     async function loadAdvisorDecisions() {
       try {
-        const response = await fetch('/api/v1/team-leader/notifications/advisor-decisions', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const payload = await response.json().catch(() => []);
-        if (!active) {
-          return;
-        }
-
-        if (!response.ok) {
-          setDecisionLoadError('Advisor decision notifications could not be loaded.');
-          setAdvisorDecisions([]);
-        } else {
-          const rows = Array.isArray(payload) ? payload : payload.notifications || [];
-          setAdvisorDecisions(rows);
-          setDecisionLoadError('');
-        }
+        const { data: payload } = await apiClient.get('/v1/team-leader/notifications/advisor-decisions');
+        if (!active) return;
+        const rows = Array.isArray(payload) ? payload : payload?.notifications || [];
+        setAdvisorDecisions(rows);
+        setDecisionLoadError('');
       } catch {
-        if (!active) {
-          return;
-        }
-
+        if (!active) return;
         setDecisionLoadError('Advisor decision notifications could not be loaded.');
         setAdvisorDecisions([]);
       } finally {
-        if (!active) {
-          return;
-        }
-
+        if (!active) return;
         setLoadingDecisions(false);
         timeoutId = window.setTimeout(loadAdvisorDecisions, 15000);
       }

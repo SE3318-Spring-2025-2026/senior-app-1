@@ -14,6 +14,7 @@ const registerRoleUser = [
       return res.status(400).json({
         code: 'INVALID_SIGNUP_INPUT',
         message: 'Sign up input is invalid.',
+        details: errors.array(),
       });
     }
 

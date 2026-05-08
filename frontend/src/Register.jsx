@@ -225,6 +225,7 @@ export default function Register() {
     });
 
     try {
+      // Bypasses apiClient: uses the paste-in dev token, not the localStorage authToken.
       const response = await fetch('/api/v1/students/me/github/link', {
         method: 'GET',
         headers: {

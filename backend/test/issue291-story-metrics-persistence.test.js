@@ -1,0 +1,258 @@
+require('./setupTestEnv');
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const sequelize = require('../db');
+const app = require('../app');
+const { IntegrationBinding, StoryMetric } = require('../models');
+
+let server;
+let baseUrl;
+
+async function request(path, options = {}) {
+  const response = await fetch(`${baseUrl}${path}`, options);
+  const json = await response.json();
+  return { response, json };
+}
+
+function internalHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'x-internal-api-key': process.env.INTERNAL_API_KEY,
+  };
+}
+
+async function createTeamBinding(teamId = 'team_01HR9W2Q6NQ7G6M3K4J8') {
+  return IntegrationBinding.create({
+    teamId,
+    providerSet: ['jira'],
+    organizationName: 'senior-project',
+    repositoryName: 'senior-app-1',
+    jiraWorkspaceId: 'workspace-acme',
+    jiraProjectKey: 'SPM',
+    initiatedBy: 'student-1',
+    status: 'ACTIVE',
+  });
+}
+
+test.before(async () => {
+  await sequelize.sync({ force: true });
+  server = app.listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const { port } = server.address();
+  baseUrl = `http://127.0.0.1:${port}`;
+});
+
+test.after(async () => {
+  if (server) {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+
+  await sequelize.close();
+});
+
+test.beforeEach(async () => {
+  await StoryMetric.destroy({ where: {} });
+  await IntegrationBinding.destroy({ where: {} });
+});
+
+test('stores synchronized story metrics and returns ActionResponse status', async () => {
+  await createTeamBinding();
+
+  const { response, json } = await request('/internal/sprint-sync/stories', {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: 'sprint_2026_03',
+      stories: [
+        {
+          issueKey: 'SPM-214',
+          metricName: 'storyCompletionScore',
+          metricValue: 0.85,
+          unit: 'ratio',
+        },
+        {
+          issueKey: 'SPM-214',
+          metricName: 'cycleTimeDays',
+          metricValue: 3,
+          unit: 'days',
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 201);
+  assert.match(json.id, /^op_/);
+  assert.equal(json.status, 'STORED');
+  assert.equal(json.message, 'Story metrics stored successfully.');
+  assert.equal(json.teamId, 'team_01HR9W2Q6NQ7G6M3K4J8');
+  assert.equal(json.sprintId, 'sprint_2026_03');
+  assert.equal(json.storedCount, 2);
+  assert.ok(json.recordedAt);
+
+  const storedMetrics = await StoryMetric.findAll({
+    where: {
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: 'sprint_2026_03',
+      issueKey: 'SPM-214',
+    },
+    order: [['metricName', 'ASC']],
+  });
+
+  assert.equal(storedMetrics.length, 2);
+  assert.equal(storedMetrics[0].metricName, 'cycleTimeDays');
+  assert.equal(storedMetrics[0].metricValue, 3);
+  assert.equal(storedMetrics[1].metricName, 'storyCompletionScore');
+  assert.equal(storedMetrics[1].metricValue, 0.85);
+});
+
+test('rejects invalid story metric payloads with validation error response', async () => {
+  const { response, json } = await request('/internal/sprint-sync/stories', {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: '',
+      stories: [
+        {
+          issueKey: 'SPM-214',
+          metricName: 'storyCompletionScore',
+          metricValue: -1,
+          unit: 'ratio',
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(json.success, false);
+  assert.equal(json.code, 'VALIDATION_ERROR');
+  assert.equal(json.message, 'Validation failed');
+
+  const storedMetrics = await StoryMetric.findAll();
+  assert.equal(storedMetrics.length, 0);
+});
+
+test('safely handles repeated metric submissions by updating existing metric rows', async () => {
+  await createTeamBinding();
+
+  const payload = {
+    teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+    sprintId: 'sprint_2026_03',
+    stories: [
+      {
+        issueKey: 'SPM-214',
+        metricName: 'storyCompletionScore',
+        metricValue: 0.85,
+        unit: 'ratio',
+      },
+    ],
+  };
+
+  await request('/internal/sprint-sync/stories', {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  const { response } = await request('/internal/sprint-sync/stories', {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({
+      ...payload,
+      stories: [
+        {
+          ...payload.stories[0],
+          metricValue: 0.95,
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 201);
+
+  const storedMetrics = await StoryMetric.findAll({
+    where: {
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: 'sprint_2026_03',
+      issueKey: 'SPM-214',
+      metricName: 'storyCompletionScore',
+    },
+  });
+
+  assert.equal(storedMetrics.length, 1);
+  assert.equal(storedMetrics[0].metricValue, 0.95);
+});
+
+test('rejects story metrics for teams without an integration binding', async () => {
+  const { response, json } = await request('/internal/sprint-sync/stories', {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({
+      teamId: 'missing-team',
+      sprintId: 'sprint_2026_03',
+      stories: [
+        {
+          issueKey: 'SPM-214',
+          metricName: 'storyCompletionScore',
+          metricValue: 0.85,
+          unit: 'ratio',
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 404);
+  assert.equal(json.code, 'INTEGRATION_BINDING_NOT_FOUND');
+});
+
+test('rejects duplicate story metrics in the same payload', async () => {
+  await createTeamBinding();
+
+  const { response, json } = await request('/internal/sprint-sync/stories', {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: 'sprint_2026_03',
+      stories: [
+        {
+          issueKey: 'SPM-214',
+          metricName: 'storyCompletionScore',
+          metricValue: 0.85,
+          unit: 'ratio',
+        },
+        {
+          issueKey: 'SPM-214',
+          metricName: 'storyCompletionScore',
+          metricValue: 0.95,
+          unit: 'ratio',
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(json.code, 'VALIDATION_ERROR');
+  assert.equal(json.message, 'Duplicate story metrics in request payload');
+  assert.equal(await StoryMetric.count(), 0);
+});
+
+test('requires internal API key for story metric persistence', async () => {
+  const { response, json } = await request('/internal/sprint-sync/stories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      teamId: 'team_01HR9W2Q6NQ7G6M3K4J8',
+      sprintId: 'sprint_2026_03',
+      stories: [],
+    }),
+  });
+
+  assert.equal(response.status, 401);
+  assert.equal(json.code, 'UNAUTHORIZED');
+});

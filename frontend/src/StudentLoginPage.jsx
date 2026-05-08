@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
+import apiClient from './services/apiClient';
 
 const initialForm = {
   studentId: '',
@@ -62,20 +63,7 @@ export default function StudentLoginPage() {
     });
 
     try {
-      const response = await fetch('/api/v1/students/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(form),
-      });
-      const result = await response.json();
-
-      if (!response.ok) {
-        const mapped = mapLoginError(result, response.status);
-        setFeedback(mapped);
-        return;
-      }
+      const { data: result } = await apiClient.post('/v1/students/login', form);
 
       window.localStorage.setItem('studentToken', result.token);
       window.localStorage.setItem('authToken', result.token);
@@ -95,17 +83,21 @@ export default function StudentLoginPage() {
       window.setTimeout(() => {
         navigate('/home');
       }, 500);
-    } catch {
-      setFeedback({
-        type: 'error',
-        title: 'Request failed',
-        message: 'The student login request could not reach the backend. Check whether the backend server is running.',
-      });
-      notify({
-        type: 'error',
-        title: 'Student login failed',
-        message: 'The student login request could not reach the backend.',
-      });
+    } catch (err) {
+      if (err.response) {
+        setFeedback(mapLoginError(err.response.data || {}, err.response.status));
+      } else {
+        setFeedback({
+          type: 'error',
+          title: 'Request failed',
+          message: 'The student login request could not reach the backend. Check whether the backend server is running.',
+        });
+        notify({
+          type: 'error',
+          title: 'Student login failed',
+          message: 'The student login request could not reach the backend.',
+        });
+      }
     } finally {
       setSubmitting(false);
     }

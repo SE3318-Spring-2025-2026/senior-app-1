@@ -41,6 +41,11 @@ const Grade = sequelize.define(
       defaultValue: [],
       comment: 'Array of {criterionId, value, note}',
     },
+    finalScore: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      comment: 'Computed aggregate score (0..1 or 0..100 depending on rubric)',
+    },
     comments: {
       type: DataTypes.TEXT,
       allowNull: true,

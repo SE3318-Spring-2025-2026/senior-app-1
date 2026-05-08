@@ -1,14 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import apiClient from './services/apiClient';
 
-/**
- * AdvisorRequestDetailsView Component
- * Displays detailed information about an advisor request
- * 
- * Props:
- *   - requestId: The ID of the advisor request to display
- *   - authToken: Authenticated student token (Bearer)
- *   - onClose: Callback function when closing the view
- */
 function AdvisorRequestDetailsView({ requestId, authToken, onClose }) {
   const [request, setRequest] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -24,26 +16,10 @@ function AdvisorRequestDetailsView({ requestId, authToken, onClose }) {
           throw new Error('Student token is required to fetch advisor request details');
         }
 
-        const response = await fetch(
-          `/api/v1/advisor-requests/${requestId}`,
-          {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${authToken.trim()}`,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to fetch advisor request details');
-        }
-
-        const data = await response.json();
+        const { data } = await apiClient.get(`/v1/advisor-requests/${requestId}`);
         setRequest(data);
       } catch (err) {
-        setError(err.message || 'An error occurred while fetching request details');
+        setError(err.response?.data?.message || err.message || 'An error occurred while fetching request details');
         console.error('Error fetching advisor request:', err);
       } finally {
         setLoading(false);

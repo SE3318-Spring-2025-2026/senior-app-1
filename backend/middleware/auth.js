@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const ApiError = require('../errors/apiError');
 
 const authenticate = async (req, res, next) => {
   const authHeader = req.header('Authorization');
@@ -8,7 +9,7 @@ const authenticate = async (req, res, next) => {
     : null;
 
   if (!token) {
-    return res.status(401).json({ message: 'Access denied' });
+    return next(ApiError.unauthorized('AUTH_TOKEN_MISSING', 'Access denied'));
   }
 
   try {
@@ -16,23 +17,23 @@ const authenticate = async (req, res, next) => {
     const user = await User.findByPk(decoded.id);
 
     if (!user) {
-      return res.status(401).json({ message: 'Invalid token' });
+      return next(ApiError.unauthorized('INVALID_TOKEN', 'Invalid token'));
     }
 
     req.user = user;
     return next();
   } catch (err) {
-    return res.status(401).json({ message: 'Invalid token' });
+    return next(ApiError.unauthorized('INVALID_TOKEN', 'Invalid token'));
   }
 };
 
 const authorize = (roles) => (req, res, next) => {
   if (!req.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return next(ApiError.unauthorized('UNAUTHORIZED', 'Unauthorized'));
   }
 
   if (!roles.includes(req.user.role)) {
-    return res.status(403).json({ message: 'Forbidden' });
+    return next(ApiError.forbidden('FORBIDDEN', 'Forbidden'));
   }
 
   return next();

@@ -1,5 +1,6 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireNonEmptyBody } = require('../middleware/requestValidation');
 const {
   createProfessorRecord,
   createStudentRecord,
@@ -10,19 +11,21 @@ const { syncUserDatabaseAssignment } = require('../controllers/mentorMatchingCon
 
 const router = express.Router();
 
-router.post('/students', authenticate, authorize(['ADMIN']), createStudentRecord);
-router.post('/valid-student-ids', authenticate, authorize(['ADMIN']), importValidStudentIds);
-router.post('/professors', authenticate, authorize(['ADMIN']), createProfessorRecord);
+router.post('/students', authenticate, authorize(['ADMIN']), requireNonEmptyBody, createStudentRecord);
+router.post('/valid-student-ids', authenticate, authorize(['ADMIN']), requireNonEmptyBody, importValidStudentIds);
+router.post('/professors', authenticate, authorize(['ADMIN']), requireNonEmptyBody, createProfessorRecord);
 router.patch(
   '/professors/:professorId/password',
   authenticate,
   authorize(['ADMIN']),
+  requireNonEmptyBody,
   updateProfessorPassword
 );
 router.patch(
   '/groups/:groupId/advisor-assignment',
   authenticate,
   authorize(['COORDINATOR']),
+  requireNonEmptyBody,
   syncUserDatabaseAssignment,
 );
 

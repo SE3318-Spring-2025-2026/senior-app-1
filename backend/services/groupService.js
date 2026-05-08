@@ -115,25 +115,25 @@ class GroupService {
       await AdvisorRequest.destroy({ where: { groupId: group.id } });
       await GroupAdvisorAssignment.destroy({ where: { groupId: group.id } });
       await group.destroy();
-
-      await AuditLog.create({
-        action: 'DELETE_ORPHAN_GROUP',
-        actorId: actor?.id || null,
-        targetType: 'GROUP',
-        targetId: group.id,
-        metadata: {
-          groupId: group.id,
-          groupName: group.name,
-          reason: 'No advisor assigned',
-        },
-      });
-
-      return { groupId: group.id, removed: true };
     } catch (err) {
       const error = new Error(err.message || 'Data integrity error during group deletion');
       error.code = 'DATA_INTEGRITY_ERROR';
       throw error;
     }
+
+    AuditLog.create({
+      action: 'DELETE_ORPHAN_GROUP',
+      actorId: actor?.id || null,
+      targetType: 'GROUP',
+      targetId: group.id,
+      metadata: {
+        groupId: group.id,
+        groupName: group.name,
+        reason: 'No advisor assigned',
+      },
+    }).catch((err) => console.error('Audit log failed (DELETE_ORPHAN_GROUP):', err));
+
+    return { groupId: group.id, removed: true };
   }
 
   static async findAnyGroupForUser(userId, options = {}) {
@@ -441,18 +441,16 @@ class GroupService {
   // Internal helpers
   // ---------------------------------------------------------------------------
 
-  static async _writeAuditLog({ invitationId, groupId, actorId, action }) {
-    try {
-      await AuditLog.create({
-        targetType: 'INVITATION',
-        targetId: invitationId,
-        actorId,
-        action,
-        metadata: { groupId },
-      });
-    } catch (err) {
+  static _writeAuditLog({ invitationId, groupId, actorId, action }) {
+    AuditLog.create({
+      targetType: 'INVITATION',
+      targetId: invitationId,
+      actorId,
+      action,
+      metadata: { groupId },
+    }).catch((err) => {
       console.error('[GroupService] _writeAuditLog failed', { invitationId, action }, err);
-    }
+    });
   }
 }
 

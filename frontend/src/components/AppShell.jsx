@@ -11,6 +11,12 @@ const roleMenuSections = {
         { to: '/students/groups/manage', label: 'Manage Group', icon: 'GR' },
       ],
     },
+    {
+      title: 'Deliverables',
+      items: [
+        { to: '/team-leader/submission', label: 'My Submission', icon: 'SB' },
+      ],
+    },
   ],
   Professor: [
     {
@@ -36,6 +42,7 @@ const roleMenuSections = {
         { to: '/coordinator/groups/manage', label: 'Group Membership Edit', icon: 'GM' },
         { to: '/coordinator/groups/transfer', label: 'Advisor Transfer', icon: 'AT' },
         { to: '/coordinator/groups/cleanup', label: 'Group Cleanup', icon: 'GC' },
+        { to: '/coordinator/rubrics', label: 'Grading Rubrics', icon: 'RB' },
         { to: '/coordinator/grading/weight-configuration', label: 'Weight Configuration', icon: 'WC' },
       ],
     },
@@ -231,14 +238,11 @@ export default function AppShell() {
                     </>
                   ) : (
                     <>
-                      <Link to="/auth" role="menuitem" className="app-profile-option" onClick={() => setOpenProfile(false)}>
-                        Login / Sign up
+                      <Link to="/login" role="menuitem" className="app-profile-option" onClick={() => setOpenProfile(false)}>
+                        Login
                       </Link>
-                      <Link to="/students/login" role="menuitem" className="app-profile-option" onClick={() => setOpenProfile(false)}>
-                        Student Login
-                      </Link>
-                      <Link to="/admin/login" role="menuitem" className="app-profile-option" onClick={() => setOpenProfile(false)}>
-                        Admin Login
+                      <Link to="/students/register" role="menuitem" className="app-profile-option" onClick={() => setOpenProfile(false)}>
+                        Sign up
                       </Link>
                     </>
                   )}

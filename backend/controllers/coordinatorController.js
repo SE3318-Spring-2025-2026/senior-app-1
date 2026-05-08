@@ -68,6 +68,7 @@ const createRubric = [
         criteria,
         totalPoints,
         courseId,
+        actorId: req.user?.id ?? null,
       });
 
       return res.status(201).json({

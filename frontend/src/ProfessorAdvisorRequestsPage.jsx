@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import apiClient from './services/apiClient';
 
 function getProfessorToken() {
   return window.localStorage.getItem('professorToken') || window.localStorage.getItem('authToken');
@@ -113,36 +114,11 @@ export default function ProfessorAdvisorRequestsPage() {
   useEffect(() => {
     let active = true;
     let timeoutId;
-    const token = getProfessorToken();
 
     async function loadRequests() {
-      const controller = new AbortController();
-
       try {
-        const response = await fetch('/api/v1/advisors/notifications/advisee-requests', {
-          headers: token
-            ? {
-              Authorization: `Bearer ${token}`,
-            }
-            : {},
-          signal: controller.signal,
-        });
-
-        const payload = await response.json().catch(() => []);
-
-        if (!response.ok) {
-          if (!active) {
-            return;
-          }
-
-          setLoadError('Advisor requests could not be loaded.');
-          setRequests([]);
-          return;
-        }
-
-        if (!active) {
-          return;
-        }
+        const { data: payload } = await apiClient.get('/v1/advisors/notifications/advisee-requests');
+        if (!active) return;
 
         const rows = parseNotificationRows(payload).map(normalizeAdviseeNotification);
         setRequests(rows);
@@ -150,18 +126,12 @@ export default function ProfessorAdvisorRequestsPage() {
           rows.some((entry) => entry.id === current) ? current : rows[0]?.id || null
         ));
         setLoadError('');
-      } catch (error) {
-        if (error.name === 'AbortError' || !active) {
-          return;
-        }
-
+      } catch {
+        if (!active) return;
         setLoadError('Advisor requests could not be loaded.');
         setRequests([]);
       } finally {
-        if (!active) {
-          return;
-        }
-
+        if (!active) return;
         setLoading(false);
         timeoutId = window.setTimeout(loadRequests, 15000);
       }
@@ -178,44 +148,20 @@ export default function ProfessorAdvisorRequestsPage() {
   useEffect(() => {
     let active = true;
     let timeoutId;
-    const token = getProfessorToken();
 
     async function loadTransfers() {
       try {
-        const response = await fetch('/api/v1/advisors/notifications/group-transfers', {
-          headers: token
-            ? {
-              Authorization: `Bearer ${token}`,
-            }
-            : {},
-        });
-
-        const payload = await response.json().catch(() => []);
-
-        if (!active) {
-          return;
-        }
-
-        if (!response.ok) {
-          setTransferLoadError('Group transfer notifications could not be loaded.');
-          setTransferNotifications([]);
-        } else {
-          const rows = parseNotificationRows(payload).map(normalizeTransferNotification);
-          setTransferNotifications(rows);
-          setTransferLoadError('');
-        }
+        const { data: payload } = await apiClient.get('/v1/advisors/notifications/group-transfers');
+        if (!active) return;
+        const rows = parseNotificationRows(payload).map(normalizeTransferNotification);
+        setTransferNotifications(rows);
+        setTransferLoadError('');
       } catch {
-        if (!active) {
-          return;
-        }
-
+        if (!active) return;
         setTransferLoadError('Group transfer notifications could not be loaded.');
         setTransferNotifications([]);
       } finally {
-        if (!active) {
-          return;
-        }
-
+        if (!active) return;
         setLoadingTransfers(false);
         timeoutId = window.setTimeout(loadTransfers, 15000);
       }
@@ -242,16 +188,7 @@ export default function ProfessorAdvisorRequestsPage() {
     }
 
     try {
-      const response = await fetch(`/api/v1/advisors/notifications/${type}/${id}/read`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        return;
-      }
+      await apiClient.put(`/v1/advisors/notifications/${type}/${id}/read`);
 
       if (type === 'advisee-request') {
         setRequests((current) => current.map((entry) => (
@@ -293,24 +230,10 @@ export default function ProfessorAdvisorRequestsPage() {
     setFeedback({ type: '', message: '' });
 
     try {
-      const token = getProfessorToken();
-      const response = await fetch(`/api/v1/advisor-requests/${selectedRequest.requestId}/decision`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ decision }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setFeedback({
-          type: 'error',
-          message: payload.message || 'Advisor request decision could not be saved.',
-        });
-        return;
-      }
+      const { data: payload } = await apiClient.patch(
+        `/v1/advisor-requests/${selectedRequest.requestId}/decision`,
+        { decision },
+      );
 
       const nextStatus = payload.status || (decision === 'APPROVE' ? 'APPROVED' : 'REJECTED');
       setRequests((current) => current.map((entry) => (
@@ -327,10 +250,10 @@ export default function ProfessorAdvisorRequestsPage() {
         type: 'success',
         message: payload.message || `Request ${nextStatus.toLowerCase()} successfully.`,
       });
-    } catch {
+    } catch (err) {
       setFeedback({
         type: 'error',
-        message: 'Advisor request decision could not be saved.',
+        message: err.response?.data?.message || 'Advisor request decision could not be saved.',
       });
     } finally {
       setSubmittingDecision('');

@@ -17,13 +17,26 @@ const GroupAdvisorAssignment = require('./GroupAdvisorAssignment');
 const Invitation = require('./Invitation');
 const AuditLog = require('./AuditLog');
 const Notification = require('./Notification');
+const IntegrationTokenReference = require('./IntegrationTokenReference');
+const IntegrationBinding = require('./IntegrationBinding');
+const GradingRubric = require('./GradingRubric');
 const Grade = require('./Grade');
 const DeliverableRubric = require('./DeliverableRubric');
 const Deliverable = require('./Deliverable');
-const GradingRubric = require('./GradingRubric');
 const CommitteeReview = require('./CommitteeReview');
+const SprintWeightConfiguration = require('./SprintWeightConfiguration');
+const DeliverableSubmission = require('./DeliverableSubmission');
+const DeliverableWeightConfiguration = require('./DeliverableWeightConfiguration');
+const GroupDeliverable = require('./GroupDeliverable');
+const PrMetric = require('./PrMetric');
+const SprintPullRequest = require('./SprintPullRequest');
+const SprintStory = require('./SprintStory');
+const StoryMetric = require('./StoryMetric');
 const FinalEvaluationGrade = require('./FinalEvaluationGrade');
-const AdvisorGrade = require('./AdvisorGrade');
+const FinalEvaluationWeight = require('./FinalEvaluationWeight');
+const TeamScalar = require('./TeamScalar');
+const SprintMemberRecord = require('./SprintMemberRecord');
+const MemberFinalGrade = require('./MemberFinalGrade');
 
 module.exports = {
   User,
@@ -37,11 +50,24 @@ module.exports = {
   Invitation,
   AuditLog,
   Notification,
+  IntegrationTokenReference,
+  IntegrationBinding,
+  GradingRubric,
   Grade,
   DeliverableRubric,
   Deliverable,
-  GradingRubric,
   CommitteeReview,
+  SprintWeightConfiguration,
+  DeliverableSubmission,
+  DeliverableWeightConfiguration,
+  GroupDeliverable,
+  PrMetric,
+  SprintPullRequest,
+  SprintStory,
+  StoryMetric,
   FinalEvaluationGrade,
-  AdvisorGrade,
+  FinalEvaluationWeight,
+  TeamScalar,
+  SprintMemberRecord,
+  MemberFinalGrade,
 };

@@ -1,5 +1,6 @@
 const StudentRegistrationError = require('../errors/studentRegistrationError');
 const studentService = require('./studentService');
+const { ValidStudentId } = require('../models');
 
 async function validateRegistrationDetails({ studentId, email, fullName, password }) {
   if (!studentService.validateStudentIdFormat(studentId)) {
@@ -55,7 +56,19 @@ async function validateAndCreateStudent(registrationDetails) {
   return studentService.createStudent(validatedRegistration);
 }
 
+// Batch eligibility check — single SQL query to avoid N+1 against ValidStudentId.
+async function checkEligibilityBulk(studentIds) {
+  const ids = Array.isArray(studentIds) ? studentIds.map(String) : [];
+  if (ids.length === 0) {
+    return [];
+  }
+  const rows = await ValidStudentId.findAll({ where: { studentId: ids } });
+  const valid = new Set(rows.map((row) => row.studentId));
+  return ids.map((id) => ({ studentId: id, eligible: valid.has(id) }));
+}
+
 module.exports = {
   validateAndCreateStudent,
   validateRegistrationDetails,
+  checkEligibilityBulk,
 };
