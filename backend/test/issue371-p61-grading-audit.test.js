@@ -28,6 +28,9 @@ let baseUrl;
 
 const FINAL_EVAL_GROUPS_BASE =
   process.env.TEST_P61_FINAL_EVAL_BASE || '/api/v1/final-evaluation/groups';
+const AUDIT_POLL_MAX_ATTEMPTS = 20;
+const AUDIT_POLL_DELAY_MS = 25;
+const NORMALIZED_TEST_SCORE = 0.84;
 
 function advisorGradeUrl(groupId) {
   return `${FINAL_EVAL_GROUPS_BASE}/${groupId}/advisor-grade`;
@@ -77,11 +80,10 @@ function skipIfRouteMissing(t, response, json) {
 }
 
 async function waitForAuditRows(expectedCount, where = {}) {
-  const maxAttempts = 20;
-  for (let i = 0; i < maxAttempts; i++) {
+  for (let i = 0; i < AUDIT_POLL_MAX_ATTEMPTS; i++) {
     const count = await AuditLog.count({ where });
     if (count >= expectedCount) return count;
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => setTimeout(resolve, AUDIT_POLL_DELAY_MS));
   }
   return AuditLog.count({ where });
 }
@@ -154,7 +156,7 @@ async function seedCommitteeContext() {
 
 function scoresBody() {
   // Final-evaluation criterion scores are normalized to [0, 1].
-  return { scores: [{ criterionId: 'audit-criterion', value: 0.84 }] };
+  return { scores: [{ criterionId: 'audit-criterion', value: NORMALIZED_TEST_SCORE }] };
 }
 
 runAfterEach(() => {
