@@ -174,6 +174,93 @@ test('reset password updates user password and prevents token reuse', async () =
   assert.equal(reuse.json.code, 'RESET_TOKEN_USED');
 });
 
+test('password reset invalidates previously issued authenticated sessions for that user', async () => {
+  const admin = await createUser({
+    email: 'admin-session@example.edu',
+    fullName: 'Session Admin',
+    role: 'ADMIN',
+  });
+  const target = await createUser({
+    email: 'target-session@example.edu',
+    fullName: 'Session Target',
+    role: 'STUDENT',
+  });
+  const oldAuthHeader = authHeaderFor(target);
+
+  const generated = await request(`/api/v1/admin/users/${target.id}/password-reset-link`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaderFor(admin),
+    },
+  });
+  const token = new URL(generated.json.resetLink).searchParams.get('token');
+
+  const reset = await request('/api/v1/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      token,
+      newPassword: 'NewPassword123.',
+    }),
+  });
+  assert.equal(reset.response.status, 200);
+
+  const staleSession = await request('/api/v1/students/me', {
+    headers: oldAuthHeader,
+  });
+
+  assert.equal(staleSession.response.status, 401);
+  assert.equal(staleSession.json.code, 'SESSION_EXPIRED');
+});
+
+test('concurrent reset attempts with the same token only allow one success', async () => {
+  const admin = await createUser({
+    email: 'admin-race@example.edu',
+    fullName: 'Race Admin',
+    role: 'ADMIN',
+  });
+  const target = await createUser({
+    email: 'target-race@example.edu',
+    fullName: 'Race Target',
+    role: 'PROFESSOR',
+  });
+
+  const generated = await request(`/api/v1/admin/users/${target.id}/password-reset-link`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaderFor(admin),
+    },
+  });
+  const token = new URL(generated.json.resetLink).searchParams.get('token');
+
+  const attempts = await Promise.all([
+    request('/api/v1/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token,
+        newPassword: 'NewPassword123.',
+      }),
+    }),
+    request('/api/v1/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token,
+        newPassword: 'AnotherPass123.',
+      }),
+    }),
+  ]);
+
+  const successCount = attempts.filter((attempt) => attempt.response.status === 200).length;
+  const usedCount = attempts.filter((attempt) => attempt.json.code === 'RESET_TOKEN_USED').length;
+
+  assert.equal(successCount, 1);
+  assert.equal(usedCount, 1);
+});
+
 test('expired reset token is rejected', async () => {
   const admin = await createUser({
     email: 'admin-expired@example.edu',

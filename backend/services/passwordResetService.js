@@ -116,58 +116,67 @@ async function resetPassword({ token, newPassword }) {
   const tokenHash = hashToken(token.trim());
   const now = new Date();
 
-  return sequelize.transaction(async (transaction) => {
-    const resetToken = await PasswordResetToken.findOne({
+  const [consumedCount] = await PasswordResetToken.update(
+    { usedAt: now },
+    {
+      where: {
+        tokenHash,
+        usedAt: null,
+        invalidatedAt: null,
+        expiresAt: { [Op.gt]: now },
+      },
+    },
+  );
+
+  if (consumedCount !== 1) {
+    const failedToken = await PasswordResetToken.findOne({
       where: { tokenHash },
-      transaction,
     });
 
-    if (!resetToken || resetToken.invalidatedAt) {
-      throw serviceError(400, 'RESET_TOKEN_INVALID', 'Password reset token is invalid.');
-    }
-
-    if (resetToken.usedAt) {
+    if (failedToken?.usedAt) {
       throw serviceError(400, 'RESET_TOKEN_USED', 'Password reset token has already been used.');
     }
 
-    if (resetToken.expiresAt <= now) {
+    if (failedToken?.expiresAt && failedToken.expiresAt <= now) {
       throw serviceError(400, 'RESET_TOKEN_EXPIRED', 'Password reset token has expired.');
     }
 
-    const user = await User.findByPk(resetToken.userId, { transaction });
-    if (!user) {
-      throw serviceError(400, 'RESET_TOKEN_INVALID', 'Password reset token is invalid.');
-    }
+    throw serviceError(400, 'RESET_TOKEN_INVALID', 'Password reset token is invalid.');
+  }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await user.update(
-      {
-        password: hashedPassword,
-        passwordHash: hashedPassword,
-        status: 'ACTIVE',
-      },
-      { transaction },
-    );
-
-    await resetToken.update({ usedAt: now }, { transaction });
-    await PasswordResetToken.update(
-      { invalidatedAt: now },
-      {
-        where: {
-          userId: user.id,
-          id: { [Op.ne]: resetToken.id },
-          usedAt: null,
-          invalidatedAt: null,
-        },
-        transaction,
-      },
-    );
-
-    return {
-      userId: user.id,
-      role: user.role,
-    };
+  const resetToken = await PasswordResetToken.findOne({
+    where: { tokenHash },
   });
+
+  const user = await User.findByPk(resetToken.userId);
+  if (!user) {
+    throw serviceError(400, 'RESET_TOKEN_INVALID', 'Password reset token is invalid.');
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await user.update({
+    password: hashedPassword,
+    passwordHash: hashedPassword,
+    status: 'ACTIVE',
+    sessionVersion: Number(user.sessionVersion || 0) + 1,
+  });
+
+  await PasswordResetToken.update(
+    { invalidatedAt: now },
+    {
+      where: {
+        userId: user.id,
+        id: { [Op.ne]: resetToken.id },
+        usedAt: null,
+        invalidatedAt: null,
+      },
+    },
+  );
+
+  return {
+    userId: user.id,
+    role: user.role,
+  };
 }
 
 module.exports = {

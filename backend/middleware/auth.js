@@ -20,6 +20,11 @@ const authenticate = async (req, res, next) => {
       return next(ApiError.unauthorized('INVALID_TOKEN', 'Invalid token'));
     }
 
+    const currentSessionVersion = Number(user.sessionVersion || 0);
+    if (currentSessionVersion > 0 && decoded.sessionVersion !== currentSessionVersion) {
+      return next(ApiError.unauthorized('SESSION_EXPIRED', 'Session expired'));
+    }
+
     req.user = user;
     return next();
   } catch (err) {

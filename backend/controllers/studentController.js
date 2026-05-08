@@ -183,7 +183,11 @@ const loginStudent = [
       });
     }
 
-    const token = jwt.sign({ id: student.id, role: student.role }, process.env.JWT_SECRET);
+    const token = jwt.sign({
+      id: student.id,
+      role: student.role,
+      sessionVersion: Number(student.sessionVersion || 0),
+    }, process.env.JWT_SECRET);
     return res.status(200).json({
       token,
       user: {
