@@ -4,6 +4,7 @@ import AdminHomePage from './AdminHomePage';
 import AdminCoordinatorCreatePage from './AdminCoordinatorCreatePage';
 import AdminAuditLogPage from './AdminAuditLogPage';
 import AdminProfessorCreatePage from './AdminProfessorCreatePage';
+import AdminPasswordResetLinkPage from './AdminPasswordResetLinkPage';
 import AuthPage from './AuthPage';
 import CoordinatorGroupMembershipPage from './CoordinatorGroupMembershipPage';
 import CoordinatorAdvisorTransferPage from './CoordinatorAdvisorTransferPage';
@@ -19,6 +20,7 @@ import ProfessorHomePage from './ProfessorHomePage';
 import ProfessorAdvisorRequestsPage from './ProfessorAdvisorRequestsPage';
 import ProfessorPasswordSetupPage from './ProfessorPasswordSetupPage';
 import Register from './Register';
+import ResetPasswordPage from './ResetPasswordPage';
 import StudentGroupShellPage from './StudentGroupShellPage';
 import StudentInvitationsPage from './StudentInvitationsPage';
 import SubmitAdvisorRequestPage from './SubmitAdvisorRequestPage';
@@ -46,6 +48,7 @@ export default function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/home" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/auth" element={<LoginPage />} />
               <Route path="/students/register" element={<AuthPage />} />
               <Route path="/students/login" element={<Navigate to="/login" replace />} />
@@ -68,6 +71,7 @@ export default function App() {
               <Route path="/admin/audit-logs" element={<AdminAuditLogPage />} />
               <Route path="/admin/professors/new" element={<AdminProfessorCreatePage />} />
               <Route path="/admin/coordinators/new" element={<AdminCoordinatorCreatePage />} />
+              <Route path="/admin/password-reset-links" element={<AuthGuard allowedRoles={['ADMIN']}><AdminPasswordResetLinkPage /></AuthGuard>} />
               <Route path="/admin/groups/cleanup" element={<GroupCleanupPage role="ADMIN" />} />
               <Route path="/coordinator/login" element={<Navigate to="/login" replace />} />
               <Route path="/coordinator" element={<CoordinatorHomePage />} />

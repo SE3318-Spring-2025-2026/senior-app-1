@@ -59,6 +59,7 @@ const roleMenuSections = {
       items: [
         { to: '/admin/professors/new', label: 'Create Professor Account', icon: 'MG' },
         { to: '/admin/coordinators/new', label: 'Create Coordinator Account', icon: 'CG' },
+        { to: '/admin/password-reset-links', label: 'Password Reset Links', icon: 'PR' },
         { to: '/admin/groups/cleanup', label: 'Group Cleanup', icon: 'GC' },
         { to: '/admin/audit-logs', label: 'Audit Logs', icon: 'AL' },
       ],
