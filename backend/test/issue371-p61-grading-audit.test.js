@@ -153,6 +153,7 @@ async function seedCommitteeContext() {
 }
 
 function scoresBody() {
+  // Final-evaluation criterion scores are normalized to [0, 1].
   return { scores: [{ criterionId: 'audit-criterion', value: 0.84 }] };
 }
 

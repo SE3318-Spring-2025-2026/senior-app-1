@@ -73,7 +73,7 @@ async function assertGroupExists(groupId) {
   return group;
 }
 
-async function _logGradingEvent({ actorId, gradeId, groupId, deliverableId, graderRole, gradeType }) {
+async function logGradingEventAsync({ actorId, gradeId, groupId, deliverableId, graderRole, gradeType }) {
   return AuditLog.create({
     action: 'GRADE_SUBMITTED',
     actorId,
@@ -119,7 +119,7 @@ async function submitAdvisorGrade({ groupId, deliverableId, advisorUser, scores,
     finalScore,
     comments: comments ?? null,
   });
-  _logGradingEvent({
+  logGradingEventAsync({
     actorId: advisorUser.id,
     gradeId: grade.id,
     groupId: grade.groupId,
@@ -179,7 +179,7 @@ async function submitCommitteeGrade({ groupId, deliverableId, professorUser, sco
     finalScore,
     comments: comments ?? null,
   });
-  _logGradingEvent({
+  logGradingEventAsync({
     actorId: professorUser.id,
     gradeId: grade.id,
     groupId: grade.groupId,
