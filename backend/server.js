@@ -29,6 +29,7 @@ const ensureSqliteColumns = async () => {
     'passwordHash',
     'githubUsername',
     'githubLinked',
+    'sessionVersion',
   ];
 
   for (const columnName of columnsToEnsure) {

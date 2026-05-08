@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
 import { useAuth } from './contexts/AuthContext';
 import apiClient from './services/apiClient';
+import { persistRoleSession } from './services/sessionStorage';
 
 const LOGIN_ROLES = [
   { value: 'student', label: 'Student' },
@@ -131,9 +132,7 @@ export default function AuthPage() {
 
       const userKey = userStorageKeyForRole(role);
       const tokenKey = tokenStorageKeyForRole(role);
-      window.localStorage.setItem(userKey, JSON.stringify(result.user || {}));
-      window.localStorage.setItem(tokenKey, result.token || '');
-      window.localStorage.setItem('authToken', result.token || '');
+      persistRoleSession({ tokenKey, userKey }, result);
       login(result.token, result.user);
 
       setFeedback({

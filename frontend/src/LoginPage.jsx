@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useNotification } from './contexts/NotificationContext';
 import { useAuth } from './contexts/AuthContext';
 import apiClient from './services/apiClient';
+import { persistRoleSession } from './services/sessionStorage';
 
 const STUDENT_ID_PATTERN = /^[0-9]{11}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -64,19 +65,12 @@ function detectInputKind(value) {
   return 'invalid';
 }
 
-function persistSession({ tokenKey, userKey }, result) {
-  const token = result.token || '';
-  window.localStorage.setItem(tokenKey, token);
-  window.localStorage.setItem('authToken', token);
-  window.localStorage.setItem(userKey, JSON.stringify(result.user || {}));
-}
-
 async function loginWithStudentId({ identifier, password }) {
   const { data: result } = await apiClient.post('/v1/students/login', {
     studentId: identifier,
     password,
   });
-  persistSession(
+  persistRoleSession(
     { tokenKey: 'studentToken', userKey: 'studentUser' },
     result,
   );
@@ -91,7 +85,7 @@ async function loginWithEmail({ identifier, password }) {
         email: identifier,
         password,
       });
-      persistSession(attempt, result);
+      persistRoleSession(attempt, result);
       return { result, home: attempt.home, role: attempt.role };
     } catch (err) {
       lastError = err;

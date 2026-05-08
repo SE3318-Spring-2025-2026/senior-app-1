@@ -55,6 +55,11 @@ const User = sequelize.define('User', {
   passwordSetupTokenExpiresAt: {
     type: DataTypes.DATE,
   },
+  sessionVersion: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0,
+  },
   createdAt: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW,

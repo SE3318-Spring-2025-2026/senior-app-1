@@ -35,6 +35,14 @@ const adminTools = [
     status: 'Ready',
   },
   {
+    eyebrow: 'Accounts',
+    title: 'Password Reset Link',
+    description: 'Generate a one-time password reset link for a registered user by user ID.',
+    href: '/admin/password-reset-links',
+    cta: 'Open Reset Tool',
+    status: 'Ready',
+  },
+  {
     eyebrow: 'Groups',
     title: 'Group Cleanup',
     description: 'Delete orphan groups from the group database when they no longer have an assigned advisor.',

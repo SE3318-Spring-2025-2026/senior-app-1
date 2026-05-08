@@ -45,7 +45,11 @@ function buildRoleLoginHandler(role, successMessage, invalidMessage, failureCode
         });
       }
 
-      const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET);
+      const token = jwt.sign({
+        id: user.id,
+        role: user.role,
+        sessionVersion: Number(user.sessionVersion || 0),
+      }, process.env.JWT_SECRET);
 
       return res.status(200).json({
         token,
