@@ -467,7 +467,6 @@ module.exports = {
   getWeightConfiguration,
   myGrade,
   putAdvisorGrade,
-  postCommitteeGrade,
   putCommitteeGrade,
   getRawGrades,
   finalize,
