@@ -144,6 +144,14 @@ async function listPrReviewStatuses({ teamId, sprintId }) {
     issueKey: row.relatedIssueKey,
     branchName: row.branchName,
     title: row.title,
+    prStatus: row.prStatus,
+    mergeStatus: row.mergeStatus,
+    url: row.url,
+    changedFiles: row.changedFiles || [],
+    diffSummary: row.diffSummary || null,
+    sourceCreatedAt: row.sourceCreatedAt,
+    sourceUpdatedAt: row.sourceUpdatedAt,
+    sourceMergedAt: row.sourceMergedAt,
     reviewVerified: row.reviewVerified,
     reviewConfidence: row.reviewConfidence,
     reviewReasoning: row.reviewReasoning,
@@ -214,6 +222,28 @@ async function runImplementationValidation({
   });
 
   return row;
+}
+
+async function listStoriesForSprint({ teamId, sprintId }) {
+  // Read straight from the SprintStory table — no live JIRA call needed.
+  // The committee grader uses this when reviewing a GITHUB_LLM rubric
+  // criterion so they can see issue descriptions without auth into Jira.
+  const { SprintStory } = require('../models');
+  const rows = await SprintStory.findAll({
+    where: { teamId, sprintId, isActive: true },
+    order: [['issueKey', 'ASC']],
+  });
+  return rows.map((s) => ({
+    issueKey: s.issueKey,
+    title: s.title,
+    description: s.description,
+    status: s.status,
+    storyPoints: s.storyPoints,
+    assigneeId: s.assigneeId,
+    reporterId: s.reporterId,
+    sourceCreatedAt: s.sourceCreatedAt,
+    sourceUpdatedAt: s.sourceUpdatedAt,
+  }));
 }
 
 async function listValidationsForSprint({ teamId, sprintId }) {
@@ -415,4 +445,5 @@ module.exports = {
   storeValidationsBatch,
   aggregateAiSignalsForSprint,
   gradeCriterionFromTeamGithub,
+  listStoriesForSprint,
 };

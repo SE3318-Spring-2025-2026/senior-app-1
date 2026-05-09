@@ -19,14 +19,127 @@ function CriterionCard({ criterion, percent, savedPercent, busy, locked, onChang
   const weightPct = Math.round((criterion.weight || 0) * 100);
   const dirty = percent !== savedPercent;
 
-  // Build the URL for the "Grade with GitHub & AI" tab. We pass the
-  // submission + criterion + max points so the new tab can save back into
-  // the same review.
+  // For GITHUB_LLM criteria we render an inline expandable section with
+  // the team's PRs / issues / AI validations + a "Run AI grading" button.
+  // Everything happens on this page — no second tab.
+  const TEAM_ID = 'team-demo-001';
+  const SPRINT_ID = 'sprint-2026-05';
+  const [showGitHub, setShowGitHub] = useState(false);
+  const [ghLoading, setGhLoading] = useState(false);
+  const [ghPrs, setGhPrs] = useState([]);
+  const [ghValidations, setGhValidations] = useState([]);
+  const [ghStories, setGhStories] = useState([]);
+  const [ghError, setGhError] = useState(null);
+  const [ghAiBusy, setGhAiBusy] = useState(false);
+  const [ghAiSuggestion, setGhAiSuggestion] = useState(null);
+
+  const [ghBulkBusy, setGhBulkBusy] = useState(null); // 'reviews' | 'validations' | null
+  const [ghSignals, setGhSignals] = useState(null);
+
+  async function loadGithubData() {
+    setGhLoading(true);
+    setGhError(null);
+    try {
+      const [prsRes, valsRes, storiesRes, signalsRes] = await Promise.all([
+        apiClient.get(`/v1/teams/${TEAM_ID}/sprints/${SPRINT_ID}/pr-review-verifications`).catch(() => null),
+        apiClient.get(`/v1/teams/${TEAM_ID}/sprints/${SPRINT_ID}/ai-validations`).catch(() => null),
+        apiClient.get(`/v1/teams/${TEAM_ID}/sprints/${SPRINT_ID}/stories`).catch(() => null),
+        apiClient.get(`/v1/teams/${TEAM_ID}/sprints/${SPRINT_ID}/ai-signals`).catch(() => null),
+      ]);
+      setGhPrs(prsRes?.data?.data?.pullRequests || []);
+      setGhValidations(valsRes?.data?.data?.validations || []);
+      setGhStories(storiesRes?.data?.data?.stories || []);
+      setGhSignals(signalsRes?.data?.data || null);
+    } catch (err) {
+      setGhError(err.message || 'Failed to load GitHub data');
+    } finally {
+      setGhLoading(false);
+    }
+  }
+
+  async function runBulkPrReviewVerification() {
+    setGhBulkBusy('reviews');
+    setGhError(null);
+    try {
+      await apiClient.post(`/v1/teams/${TEAM_ID}/sprints/${SPRINT_ID}/pr-review-verifications`, {});
+      await loadGithubData();
+    } catch (err) {
+      setGhError(err.response?.data?.message || err.message || 'Bulk PR review verification failed');
+    } finally {
+      setGhBulkBusy(null);
+    }
+  }
+
+  async function runBulkIssueValidation() {
+    setGhBulkBusy('validations');
+    setGhError(null);
+    try {
+      // For each story, build {issueKey, issueDescription, fileDiffs} from
+      // the linked PR's data and POST to /ai-validations one at a time.
+      const prsByIssue = new Map();
+      for (const pr of ghPrs) {
+        const k = pr.issueKey;
+        if (!k) continue;
+        const arr = prsByIssue.get(k) || [];
+        arr.push(pr);
+        prsByIssue.set(k, arr);
+      }
+      for (const story of ghStories) {
+        const firstPr = (prsByIssue.get(story.issueKey) || [])[0];
+        const summary = firstPr?.diffSummary && typeof firstPr.diffSummary === 'object' ? firstPr.diffSummary : null;
+        const summaryText = summary?.body || (typeof firstPr?.diffSummary === 'string' ? firstPr.diffSummary : firstPr?.title || 'no diff available');
+        const fileDiffs = (firstPr?.changedFiles || []).map((p) => ({ path: p, diff: summaryText.slice(0, 1000) }));
+        if (fileDiffs.length === 0) fileDiffs.push({ path: 'no-files', diff: story.title });
+        await apiClient.post(
+          `/v1/teams/${TEAM_ID}/sprints/${SPRINT_ID}/ai-validations`,
+          {
+            issueKey: story.issueKey,
+            issueDescription: story.title + (story.description ? `\n\n${story.description}` : ''),
+            fileDiffs,
+            prNumber: firstPr ? Number(firstPr.prNumber) : undefined,
+          },
+        ).catch((err) => console.warn(`validate ${story.issueKey} failed`, err));
+      }
+      await loadGithubData();
+    } finally {
+      setGhBulkBusy(null);
+    }
+  }
+
+  async function runGithubAi() {
+    setGhAiBusy(true);
+    setGhError(null);
+    try {
+      const res = await apiClient.post(
+        `/v1/teams/${TEAM_ID}/sprints/${SPRINT_ID}/grade-criterion-with-ai`,
+        { criterion: { question: criterion.question || criterion.name, maxPoints: criterion.maxPoints } },
+      );
+      const data = res.data?.data || res.data || {};
+      setGhAiSuggestion(data);
+      const p = Math.round(Number(data.percent) || 0);
+      onChange(p);
+    } catch (err) {
+      setGhError(err.response?.data?.message || err.message || 'AI grading failed');
+    } finally {
+      setGhAiBusy(false);
+    }
+  }
+
+  function handleToggleGitHub() {
+    const next = !showGitHub;
+    setShowGitHub(next);
+    if (next && ghPrs.length === 0 && !ghLoading) {
+      loadGithubData();
+    }
+  }
+
+  // Build the URL for the "Grade with GitHub & AI" tab (kept as an
+  // optional secondary path; primary flow is now inline).
   const githubGradeUrl = (() => {
     if (!isGithubLlm) return null;
     const params = new URLSearchParams({
-      team: 'team-demo-001',
-      sprint: 'sprint-2026-05',
+      team: TEAM_ID,
+      sprint: SPRINT_ID,
       submission: submissionId || '',
       criterion: criterion.id || '',
       maxPoints: String(criterion.maxPoints || 100),
@@ -116,32 +229,187 @@ function CriterionCard({ criterion, percent, savedPercent, busy, locked, onChang
           {busy ? 'Saving…' : savedPercent != null ? 'Update this criterion' : 'Save this criterion'}
         </button>
 
+        {isGithubLlm && (
+          <button
+            type="button"
+            onClick={handleToggleGitHub}
+            style={{ background: 'var(--accent-strong)', color: 'white' }}
+          >
+            {showGitHub ? '▴ Hide GitHub data' : '🤖 Inspect & grade with GitHub AI'}
+          </button>
+        )}
+
         {isGithubLlm && githubGradeUrl && (
           <a
             href={githubGradeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="gateway-link"
-            style={{
-              background: 'var(--accent-strong)',
-              color: 'white',
-              padding: '6px 12px',
-              borderRadius: 4,
-              textDecoration: 'none',
-              fontSize: '0.9rem',
-            }}
-            title="Opens a new tab with the team's GitHub data — grade manually or run the AI from there."
+            style={{ fontSize: '0.78rem', color: 'var(--muted)' }}
+            title="Opens a new tab — same data, dedicated page."
           >
-            🤖 Grade with GitHub &amp; AI ↗
+            (or open in a new tab ↗)
           </a>
         )}
-
-        {isGithubLlm && (
-          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
-            (this criterion is AI-gradable from the team's GitHub work)
-          </span>
-        )}
       </div>
+
+      {isGithubLlm && showGitHub && (
+        <div style={{
+          marginTop: 12,
+          padding: 12,
+          background: 'rgba(56,195,204,0.06)',
+          border: '1px solid rgba(56,195,204,0.2)',
+          borderRadius: 6,
+        }}>
+          <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
+              <button
+                type="button"
+                onClick={runGithubAi}
+                disabled={ghAiBusy || locked}
+                style={{ background: 'var(--accent-strong)', color: 'white' }}
+                title="Ask the local LLM to suggest a 0-100% score for THIS criterion based on the team's GitHub work."
+              >
+                {ghAiBusy ? 'Asking AI…' : '🤖 Run AI grading (this criterion)'}
+              </button>
+
+              <button
+                type="button"
+                onClick={runBulkPrReviewVerification}
+                disabled={ghBulkBusy === 'reviews'}
+                title="Loop through every stored PR and ask the AI whether a real code review took place."
+              >
+                {ghBulkBusy === 'reviews' ? `Verifying ${ghPrs.length} PR review${ghPrs.length === 1 ? '' : 's'}…` : `↻ Verify ${ghPrs.length} PR review${ghPrs.length === 1 ? '' : 's'}`}
+              </button>
+
+              <button
+                type="button"
+                onClick={runBulkIssueValidation}
+                disabled={ghBulkBusy === 'validations' || ghStories.length === 0}
+                title="Loop through every issue and ask the AI whether the linked PR's diff actually implements it."
+              >
+                {ghBulkBusy === 'validations' ? `Validating ${ghStories.length} issues…` : `🤖 Validate all ${ghStories.length} issues`}
+              </button>
+
+              <button
+                type="button"
+                onClick={loadGithubData}
+                disabled={ghLoading}
+                title="Re-fetch the latest data from the backend without running any AI."
+              >
+                {ghLoading ? 'Loading…' : '↻ Reload data'}
+              </button>
+            </div>
+
+            {ghSignals && (
+              <div style={{ fontSize: '0.82rem', color: 'var(--muted)', padding: '6px 8px', background: 'rgba(0,0,0,0.12)', borderRadius: 4 }}>
+                <strong>Sprint signals:</strong>{' '}
+                {ghSignals.reviewedPullRequestCount} / {ghSignals.pullRequestCount} PRs reviewed
+                {' · '}
+                {(ghSignals.reviewedRatio * 100).toFixed(0)}% reviewed ratio
+                {' · '}
+                {ghSignals.aiValidationCount} issues validated
+                {' · '}
+                {(ghSignals.matchedRatio * 100).toFixed(0)}% match score
+              </div>
+            )}
+
+            {ghError && <span style={{ color: '#c92a2a', fontSize: '0.85rem' }}>⚠ {ghError}</span>}
+          </div>
+
+          {ghAiSuggestion && (
+            <div style={{ marginBottom: 10, padding: 8, background: 'rgba(56,195,204,0.12)', borderRadius: 4, fontSize: '0.88rem' }}>
+              🤖 AI suggests <strong>{ghAiSuggestion.percent}%</strong>
+              {ghAiSuggestion.status ? ` (${ghAiSuggestion.status})` : ''}
+              {ghAiSuggestion.feedback ? ` — ${ghAiSuggestion.feedback}` : ''}
+              <span style={{ marginLeft: 8, color: 'var(--muted)' }}>
+                · Adjust the slider above and click <em>Save this criterion</em> to keep the AI value or override it.
+              </span>
+            </div>
+          )}
+
+          <details style={{ marginTop: 6 }}>
+            <summary style={{ cursor: 'pointer', fontSize: '0.9rem' }}>
+              <strong>JIRA stories ({ghStories.length})</strong>
+            </summary>
+            <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+              {ghStories.map((s) => (
+                <li key={s.issueKey} style={{ marginBottom: 8 }}>
+                  <strong>#{s.issueKey}</strong> · {s.title}
+                  {' '}<span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>({s.status}{s.storyPoints != null ? `, ${s.storyPoints} pts` : ''})</span>
+                  {s.description && (
+                    <details style={{ marginTop: 4 }}>
+                      <summary style={{ cursor: 'pointer', fontSize: '0.82rem' }}>description</summary>
+                      <pre style={{ whiteSpace: 'pre-wrap', background: 'rgba(0,0,0,0.18)', padding: 8, borderRadius: 4, marginTop: 4, fontSize: '0.78rem' }}>
+                        {s.description}
+                      </pre>
+                    </details>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </details>
+
+          <details style={{ marginTop: 6 }}>
+            <summary style={{ cursor: 'pointer', fontSize: '0.9rem' }}>
+              <strong>Pull requests ({ghPrs.length})</strong>
+            </summary>
+            <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+              {ghPrs.map((pr) => {
+                const summary = pr.diffSummary && typeof pr.diffSummary === 'object' ? pr.diffSummary : null;
+                const body = summary?.body || (typeof pr.diffSummary === 'string' ? pr.diffSummary : '');
+                return (
+                  <li key={pr.prNumber} style={{ marginBottom: 10 }}>
+                    <strong>PR #{pr.prNumber}</strong> · {pr.title}
+                    {' '}<span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>
+                      → issue #{pr.issueKey} · {pr.mergeStatus || pr.prStatus} · review {pr.reviewVerified}
+                    </span>
+                    {pr.url && <> · <a href={pr.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.8rem' }}>open on GitHub ↗</a></>}
+                    {summary?.author && (
+                      <div style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>
+                        by {summary.author}
+                        {summary.createdAt ? ` · ${new Date(summary.createdAt).toLocaleDateString()}` : ''}
+                      </div>
+                    )}
+                    {body && (
+                      <details style={{ marginTop: 4 }}>
+                        <summary style={{ cursor: 'pointer', fontSize: '0.82rem' }}>PR description</summary>
+                        <pre style={{ whiteSpace: 'pre-wrap', background: 'rgba(0,0,0,0.18)', padding: 8, borderRadius: 4, marginTop: 4, fontSize: '0.78rem' }}>
+                          {body}
+                        </pre>
+                      </details>
+                    )}
+                    {pr.changedFiles?.length > 0 && (
+                      <details style={{ marginTop: 4 }}>
+                        <summary style={{ cursor: 'pointer', fontSize: '0.82rem' }}>{pr.changedFiles.length} changed files</summary>
+                        <ul style={{ margin: '4px 0', paddingLeft: 16, fontFamily: 'monospace', fontSize: '0.78rem' }}>
+                          {pr.changedFiles.map((f) => <li key={f}>{f}</li>)}
+                        </ul>
+                      </details>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
+
+          <details style={{ marginTop: 6 }}>
+            <summary style={{ cursor: 'pointer', fontSize: '0.9rem' }}>
+              <strong>AI implementation validations ({ghValidations.length})</strong>
+            </summary>
+            <ul style={{ marginTop: 6, paddingLeft: 18, fontSize: '0.85rem' }}>
+              {ghValidations.map((v) => (
+                <li key={v.validationId || v.issueKey}>
+                  <strong>#{v.issueKey}</strong> → <strong style={{ color: v.validationStatus === 'MATCHED' ? '#1f9e4a' : v.validationStatus === 'PARTIAL_MATCH' ? '#d9822b' : '#c92a2a' }}>
+                    {v.validationStatus}
+                  </strong>
+                  {' '}(conf {Number(v.confidence ?? 0).toFixed(2)})
+                  {v.feedback && <div style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>{v.feedback}</div>}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </div>
+      )}
 
     </div>
   );
@@ -254,6 +522,80 @@ export default function CommitteeGradingPage() {
     };
   }, [criteria, percents, savedPercents]);
 
+  // Re-fetch the saved review state from the backend. Used by:
+  //   • the periodic poll while the page is open
+  //   • the storage event fired when the GitHub-AI grading tab saves
+  //   • the postMessage from window.opener for the same reason
+  async function refreshSavedReview() {
+    try {
+      const reviewRes = await apiClient.get(`/v1/committee/submissions/${submissionId}/my-review`);
+      const review = reviewRes.data?.review;
+      if (!review) return;
+      setSavedPercents((prev) => {
+        const next = { ...prev };
+        for (const c of criteria) {
+          const existing = review.scores?.find((s) => s.criterionId === c.id);
+          if (existing && c.maxPoints) {
+            next[c.id] = Math.round((Number(existing.value) / c.maxPoints) * 100);
+          }
+        }
+        return next;
+      });
+      setPercents((cur) => {
+        const next = { ...cur };
+        for (const c of criteria) {
+          const existing = review.scores?.find((s) => s.criterionId === c.id);
+          if (existing && c.maxPoints) {
+            next[c.id] = Math.round((Number(existing.value) / c.maxPoints) * 100);
+          }
+        }
+        return next;
+      });
+      if (review.finalScore != null) setServerFinalScore(review.finalScore);
+      if (review.comments) setComments(review.comments);
+    } catch (_) { /* swallow — not critical */ }
+  }
+
+  // Listen for "I saved a criterion in another tab" events. The most reliable
+  // signal is a periodic poll because:
+  //   • `rel="noopener"` blocks `window.opener.postMessage`
+  //   • the `storage` event is unreliable in some Chrome versions / private mode
+  //   • some browsers debounce focus events
+  // So in addition to listening to those events, we re-fetch /my-review every
+  // 4 seconds whenever this tab is visible. Cheap (one tiny GET) and bullet-
+  // proof: the saved score in the GitHub-AI tab shows up here within 4s.
+  useEffect(() => {
+    if (!submissionId || criteria.length === 0) return;
+    const onStorage = (e) => {
+      if (e.key === `committee-grade-saved:${submissionId}` && e.newValue) refreshSavedReview();
+    };
+    const onMessage = (e) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === 'COMMITTEE_GRADE_SAVED' && e.data?.payload?.submissionId === submissionId) {
+        refreshSavedReview();
+      }
+    };
+    const onFocus = () => refreshSavedReview();
+    const onVisibility = () => { if (!document.hidden) refreshSavedReview(); };
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('message', onMessage);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    const pollId = setInterval(() => {
+      if (!document.hidden) refreshSavedReview();
+    }, 4_000);
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      clearInterval(pollId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submissionId, criteria.length]);
+
   async function saveCriterion(id) {
     const criterion = criteria.find((c) => c.id === id);
     if (!criterion) return;
@@ -318,7 +660,13 @@ export default function CommitteeGradingPage() {
         <p className="subtitle">
           Each criterion is graded independently — adjust the percentage and click <em>Save</em> on
           that criterion. Saved values persist immediately. The submission is marked <strong>GRADED</strong>
-          once every criterion has a saved score.
+          once every criterion has a saved score. This page polls the server every 4 s so saves done
+          in another tab (e.g. the GitHub-AI grading tab) appear here automatically.
+        </p>
+        <p>
+          <button type="button" onClick={refreshSavedReview} style={{ marginTop: 8 }}>
+            🔄 Refresh from server now
+          </button>
         </p>
       </div>
 

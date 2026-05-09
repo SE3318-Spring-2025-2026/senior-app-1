@@ -27,12 +27,24 @@ const {
   IntegrationBinding,
   IntegrationTokenReference,
   FinalEvaluationWeight,
+  FinalEvaluationGrade,
   GradingRubric,
   SprintWeightConfiguration,
   SprintPullRequest,
   AIValidationResult,
   MemberFinalGrade,
   TeamScalar,
+  AdvisorRequest,
+  Invitation,
+  AuditLog,
+  Notification,
+  CommitteeReview,
+  Grade,
+  SprintStory,
+  StoryMetric,
+  PrMetric,
+  SprintMemberRecord,
+  LinkedGitHubAccount,
 } = require('./models');
 
 const RESET = process.argv.includes('--reset');
@@ -142,7 +154,8 @@ async function main() {
   // Postgres tries to re-create indexes and fails with 42P07.)
 
   console.log('▸ Seeding users');
-  for (const a of ADMINS) await upsertUser(a);
+  const admins = [];
+  for (const a of ADMINS) admins.push(await upsertUser(a));
   const coordinators = [];
   for (const c of COORDINATORS) coordinators.push(await upsertUser(c));
   const advisors = [];
@@ -216,18 +229,48 @@ async function main() {
     }
   }
 
-  console.log('▸ Seeding deliverable');
-  let deliverable = await Deliverable.findOne({ where: { groupId: group.id, type: 'PROPOSAL' } });
-  if (!deliverable) {
-    deliverable = await Deliverable.create({
+  console.log('▸ Seeding deliverables (multiple so the queue is never empty)');
+  // Always-present pending submissions for the committee-review demo:
+  //   • PROPOSAL for group 1 (Demo Senior Project Group)
+  //   • SOW      for group 1
+  //   • PROPOSAL for group 2 (Demo Project Group Two)
+  // Each is freshly SUBMITTED — earlier graded states are wiped by --reset.
+  const deliverableSeeds = [
+    {
       groupId: group.id,
       type: 'PROPOSAL',
-      content: '## Proposal\n\nDemo proposal content.',
+      content: '## Proposal — Demo Senior Project Group\n\nA short demo proposal explaining what the group plans to build.',
+    },
+    {
+      groupId: group.id,
+      type: 'SOW',
+      content: '## Statement of Work — Demo Senior Project Group\n\nMilestones, sprint plan, and division of labour.',
+    },
+    {
+      groupId: groupTwo.id,
+      type: 'PROPOSAL',
+      content: '## Proposal — Demo Project Group Two\n\nSecond demo proposal so the pending queue is never empty.',
+    },
+  ];
+
+  for (const d of deliverableSeeds) {
+    const exists = await Deliverable.findOne({ where: { groupId: d.groupId, type: d.type } });
+    if (exists) {
+      // Reset status so a previously-graded deliverable comes back to the
+      // pending queue on every --reset / dev restart.
+      await exists.update({ status: 'SUBMITTED', content: d.content, version: 1 });
+      continue;
+    }
+    await Deliverable.create({
+      groupId: d.groupId,
+      type: d.type,
+      content: d.content,
       images: [],
       status: 'SUBMITTED',
       version: 1,
     });
   }
+  const deliverable = await Deliverable.findOne({ where: { groupId: group.id, type: 'PROPOSAL' } });
 
   console.log('▸ Seeding default rubric (PROPOSAL + SOW)');
   for (const deliverableType of ['PROPOSAL', 'SOW']) {
@@ -313,12 +356,114 @@ async function main() {
     });
   }
 
-  console.log('▸ Seeding sample sprint pull requests');
-  for (const pr of [
-    { prNumber: 101, relatedIssueKey: 'DEMO-1', title: 'Implement login flow', reviewVerified: 'REVIEWED', reviewConfidence: 0.91 },
-    { prNumber: 102, relatedIssueKey: 'DEMO-2', title: 'Add dashboard skeleton', reviewVerified: 'NOT_REVIEWED', reviewConfidence: 0.78 },
-    { prNumber: 103, relatedIssueKey: 'DEMO-3', title: 'Wire AI validation panel', reviewVerified: 'PENDING', reviewConfidence: null },
-  ]) {
+  // Real PR data pulled from this very repo (SE3318-Spring-2025-2026/senior-app-1).
+  // Using the first 3 PRs and the first 3 issues so the demo reflects what
+  // the team actually shipped. Branch names + URLs are real; `relatedIssueKey`
+  // matches the linked issue number.
+  console.log('▸ Seeding sample sprint pull requests (real PRs from this repo)');
+  const realPrs = [
+    {
+      prNumber: 433,
+      relatedIssueKey: '432',
+      title: 'Minor changes',
+      branchName: '432-bug-fix-ui-implementation-and-process-fixes',
+      url: 'https://github.com/SE3318-Spring-2025-2026/senior-app-1/pull/433',
+      diffSummary: {
+        author: 'DinVisel (Arda Özcan)',
+        body: 'Bug fixes applied.',
+        createdAt: '2026-05-09T10:08:30Z',
+        mergedAt: null,
+        changedLineSample: '+ /* bugfix: form-submit handler reset state on success */\n- if (state==="GRADED") return;',
+      },
+      changedFiles: ['frontend/src/CommitteeGradingPage.jsx', 'frontend/src/StudentGroupShellPage.jsx'],
+      prStatus: 'CLOSED',
+      mergeStatus: 'CLOSED',
+      reviewVerified: 'NOT_REVIEWED',
+      reviewConfidence: 0.55,
+      reviewReasoning: 'PR was closed without merge; review activity could not be verified.',
+    },
+    {
+      prNumber: 429,
+      relatedIssueKey: '430',
+      title: 'docs: update password reset API documentation',
+      branchName: 'password-reset-api-spec-docs',
+      url: 'https://github.com/SE3318-Spring-2025-2026/senior-app-1/pull/429',
+      diffSummary: {
+        author: 'cangere (Can Gere)',
+        body: [
+          '## Summary',
+          '- Document admin-generated one-time password reset links',
+          '- Add `/api/v1/admin/users/{userId}/password-reset-link` to API specs',
+          '- Add `/api/v1/auth/reset-password` to API specs',
+          '- Document reset token hashing, expiration, one-time use, sibling token invalidation, and JWT/session invalidation behavior',
+          '- Update README with password reset flow details and test guidance',
+          '',
+          '## Testing',
+          '- Docs-only change',
+          '- Verified old `/admin/reset-link` reference was removed from API specs',
+        ].join('\n'),
+        createdAt: '2026-05-08T22:32:51Z',
+        mergedAt: null,
+        changedLineSample: '+ /api/v1/admin/users/{userId}/password-reset-link:\n+   post: ... summary: Generate one-time reset link',
+      },
+      changedFiles: ['docs/api_specification.yaml', 'docs/README.md'],
+      prStatus: 'OPEN',
+      mergeStatus: 'MERGEABLE',
+      reviewVerified: 'PENDING',
+      reviewConfidence: null,
+      reviewReasoning: null,
+    },
+    {
+      prNumber: 428,
+      relatedIssueKey: '430',
+      title: 'feat(admin): add one-time password reset links',
+      branchName: 'feature/add-password-reset-link',
+      url: 'https://github.com/SE3318-Spring-2025-2026/senior-app-1/pull/428',
+      diffSummary: {
+        author: 'cangere (Can Gere)',
+        body: [
+          '## What this PR does',
+          '',
+          'Adds an admin-generated, one-time-use password reset flow for registered users.',
+          'Admins can generate reset links by user ID, and users can set a new password',
+          'through a public reset page. Tokens are stored hashed, expire automatically,',
+          'and are invalidated after successful use.',
+          '',
+          '## Files added / changed',
+          '- backend/models/PasswordResetToken.js  — store hashed reset tokens',
+          '- backend/services/passwordResetService.js — generate, validate, consume',
+          '- backend/controllers/passwordResetController.js — HTTP handlers',
+          '- backend/routes/admin.js — admin-only reset link endpoint',
+          '- backend/routes/auth.js — public password reset endpoint',
+          '- backend/test/passwordReset.test.js — generation, reset, reuse, expiry, auth tests',
+          '- frontend/src/AdminPasswordResetLinkPage.jsx — admin UI',
+          '- frontend/src/ResetPasswordPage.jsx — public password reset form',
+          '',
+          '## How to test',
+          'cd backend && JWT_SECRET=test-backend-jwt-not-for-production node --test test/passwordReset.test.js',
+        ].join('\n'),
+        createdAt: '2026-05-08T12:40:23Z',
+        mergedAt: '2026-05-08T22:22:27Z',
+        changedLineSample: '+ const { token, expiresAt } = await passwordResetService.create(...)\n+ res.status(201).json({ resetLink: ... })',
+      },
+      changedFiles: [
+        'backend/models/PasswordResetToken.js',
+        'backend/services/passwordResetService.js',
+        'backend/controllers/passwordResetController.js',
+        'backend/routes/admin.js',
+        'backend/routes/auth.js',
+        'backend/test/passwordReset.test.js',
+        'frontend/src/AdminPasswordResetLinkPage.jsx',
+        'frontend/src/ResetPasswordPage.jsx',
+      ],
+      prStatus: 'MERGED',
+      mergeStatus: 'MERGED',
+      reviewVerified: 'REVIEWED',
+      reviewConfidence: 0.92,
+      reviewReasoning: 'Reviewer left detailed substantive feedback before merge.',
+    },
+  ];
+  for (const pr of realPrs) {
     const exists = await SprintPullRequest.findOne({
       where: { teamId: TEAM_ID, sprintId: SPRINT_ID, prNumber: pr.prNumber },
     });
@@ -326,17 +471,8 @@ async function main() {
     await SprintPullRequest.create({
       teamId: TEAM_ID,
       sprintId: SPRINT_ID,
-      prNumber: pr.prNumber,
-      relatedIssueKey: pr.relatedIssueKey,
-      branchName: `feature/${pr.relatedIssueKey}`,
-      title: pr.title,
-      prStatus: 'MERGED',
-      mergeStatus: 'MERGED',
-      changedFiles: ['src/file.js'],
-      diffSummary: pr.title,
+      ...pr,
       isActive: true,
-      reviewVerified: pr.reviewVerified,
-      reviewConfidence: pr.reviewConfidence,
       reviewVerifiedAt: pr.reviewVerified === 'PENDING' ? null : new Date(),
     });
   }
@@ -375,10 +511,20 @@ async function main() {
     }
   }
 
-  console.log('▸ Seeding sample AI validation results');
+  console.log('▸ Seeding sample AI validation results (against the real issues #430, #432)');
   for (const v of [
-    { issueKey: 'DEMO-1', validationStatus: 'MATCHED', confidence: 0.92, feedback: 'Login flow fully implemented.' },
-    { issueKey: 'DEMO-2', validationStatus: 'PARTIAL_MATCH', confidence: 0.55, feedback: 'Skeleton present, navigation missing.' },
+    {
+      issueKey: '430',
+      validationStatus: 'MATCHED',
+      confidence: 0.9,
+      feedback: 'AI-features PR fully implements the requested PR review verification + issue implementation validation flows; routes mounted, models registered, tests added.',
+    },
+    {
+      issueKey: '432',
+      validationStatus: 'PARTIAL_MATCH',
+      confidence: 0.55,
+      feedback: 'PR #433 closed without merge; UI fixes started but several reported issues remain unaddressed.',
+    },
   ]) {
     const exists = await AIValidationResult.findOne({
       where: { teamId: TEAM_ID, sprintId: SPRINT_ID, issueKey: v.issueKey },
@@ -393,6 +539,258 @@ async function main() {
       feedback: v.feedback,
       validatedAt: new Date(),
     });
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Extra seed data — populates every visible table so the UI flows are
+  // exercisable end-to-end with no DB cross-checking required.
+  // ────────────────────────────────────────────────────────────────────────
+
+  console.log('▸ Seeding advisor requests');
+  for (const r of [
+    {
+      id: crypto.randomUUID(),
+      groupId: group.id,
+      advisorId: advisor.id,
+      teamLeaderId: leader.id,
+      status: 'APPROVED',
+      note: 'Initial advisor request — accepted, now seeded as the active assignment.',
+      decidedAt: new Date(),
+    },
+    {
+      id: crypto.randomUUID(),
+      groupId: groupTwo.id,
+      advisorId: advisorTwo.id,
+      teamLeaderId: leaderTwo.id,
+      status: 'PENDING',
+      note: 'Demo pending advisor request for group 2 so the professor inbox has rows.',
+    },
+  ]) {
+    const exists = await AdvisorRequest.findOne({ where: { groupId: r.groupId, advisorId: r.advisorId, status: r.status } });
+    if (exists) continue;
+    await AdvisorRequest.create(r);
+  }
+
+  console.log('▸ Seeding pending invitation');
+  const invExists = await Invitation.findOne({ where: { groupId: group.id, inviteeId: studentTwo.id } });
+  if (!invExists) {
+    await Invitation.create({
+      groupId: group.id,
+      inviteeId: studentTwo.id,
+      status: 'PENDING',
+    });
+  }
+
+  console.log('▸ Seeding linked GitHub account for leader 1');
+  const ghExists = await LinkedGitHubAccount.findOne({ where: { userId: leader.id } });
+  if (!ghExists) {
+    await LinkedGitHubAccount.create({
+      userId: leader.id,
+      githubId: '900100',
+      githubUsername: 'leader-leo',
+    });
+  }
+
+  console.log('▸ Seeding sprint stories (real GitHub issues #430, #431, #432 from this repo)');
+  const stories = [
+    {
+      issueKey: '432',
+      title: 'Bug Fix: UI Implementation and Process Fixes',
+      description: [
+        'This issue covers bug fixing and UI implementation corrections in the application. Tasks involved may include:',
+        '',
+        '- Resolving UI glitches and inconsistencies',
+        '- Addressing user-reported interface bugs',
+        '- Improving the process flow with respect to user experience',
+        '- Ensuring all UI components work as intended on different devices',
+        '',
+        'If you encounter additional minor bugs or process-related issues in the UI, add them as comments to this issue for tracking and progress updates.',
+        '',
+        '— author: DinVisel (Arda Özcan)',
+      ].join('\n'),
+      status: 'IN_PROGRESS',
+      storyPoints: 5,
+      assigneeId: String(leader.id),
+    },
+    {
+      issueKey: '431',
+      title: 'feat: P5 – AI validates issue implementation from PR file diffs',
+      description: [
+        '## Summary',
+        '',
+        "The system sends the JIRA issue description and the PR's file diffs to the Claude AI service.",
+        'The AI returns a verdict (MATCHED / PARTIAL_MATCH / NOT_MATCHED) with a confidence score and natural-language feedback.',
+        'Results are forwarded to the sprint evaluation pipeline and stored for later aggregation.',
+        '',
+        'This implements Business Flows 13, 14, and 15 from docs/api_sprint_monitoring.yaml.',
+        '',
+        'Difficulty: 4',
+        '',
+        '## Acceptance criteria',
+        '- POST /api/v1/teams/{teamId}/sprints/{sprintId}/ai-validations → 202 ACCEPTED',
+        '- POST /internal/evaluations/validation-results → 201 (forward to pipeline)',
+        '- POST /internal/sprint-sync/ai-validations → 201 (upsert)',
+        '- GET /api/v1/teams/{teamId}/sprints/{sprintId}/ai-validations → 200',
+        '- AuditLog entry AI_VALIDATION_STORED on persistence',
+        '',
+        '— author: HawkOsm (Osman Sahin Guler)',
+      ].join('\n'),
+      status: 'DONE',
+      storyPoints: 8,
+      assigneeId: String(studentOne.id),
+    },
+    {
+      issueKey: '430',
+      title: 'feat: AI features – PR review verification and issue implementation validation',
+      description: [
+        '## Summary',
+        '',
+        'Two AI-powered sprint monitoring features:',
+        '',
+        '1. PR Review Verification (Difficulty 3): For each sprint PR, fetch GitHub review comments and use AI to determine whether a genuine code review took place (REVIEWED / NOT_REVIEWED). Result stored on SprintPullRequest and exposed in Team Evaluation grading criteria.',
+        '',
+        '2. Issue Implementation Validation (Difficulty 4): Send the JIRA issue description and PR file diffs to Claude AI. The AI returns a verdict (MATCHED / PARTIAL_MATCH / NOT_MATCHED) with confidence and feedback.',
+        '',
+        'Both features require changes in Grading / Grading Criteria / Team Evaluation.',
+        '',
+        '— author: HawkOsm (Osman Sahin Guler)',
+      ].join('\n'),
+      status: 'DONE',
+      storyPoints: 13,
+      assigneeId: String(leader.id),
+    },
+  ];
+  for (const s of stories) {
+    const exists = await SprintStory.findOne({ where: { teamId: TEAM_ID, sprintId: SPRINT_ID, issueKey: s.issueKey } });
+    if (exists) continue;
+    await SprintStory.create({
+      teamId: TEAM_ID,
+      sprintId: SPRINT_ID,
+      ...s,
+      isActive: true,
+    });
+  }
+
+  console.log('▸ Seeding sprint metrics (per-story + per-PR)');
+  for (const s of stories) {
+    const completed = s.status === 'DONE' ? 1 : 0;
+    const exists = await StoryMetric.findOne({ where: { teamId: TEAM_ID, sprintId: SPRINT_ID, issueKey: s.issueKey, metricName: 'storyCompletionScore' } });
+    if (!exists) {
+      await StoryMetric.create({
+        teamId: TEAM_ID, sprintId: SPRINT_ID,
+        issueKey: s.issueKey,
+        metricName: 'storyCompletionScore',
+        metricValue: completed,
+        unit: 'ratio',
+      });
+    }
+  }
+  for (const [prNumber, ratio] of [[428, 1.0], [429, 0.5], [433, 0.0]]) {
+    const exists = await PrMetric.findOne({ where: { teamId: TEAM_ID, sprintId: SPRINT_ID, prNumber, metricName: 'prCompletionRatio' } });
+    if (!exists) {
+      await PrMetric.create({
+        teamId: TEAM_ID, sprintId: SPRINT_ID, prNumber,
+        metricName: 'prCompletionRatio',
+        metricValue: ratio,
+        unit: 'ratio',
+      });
+    }
+  }
+
+  console.log('▸ Seeding per-member sprint contribution records');
+  for (const m of [
+    { userId: leader.id,    storyPointsCompleted: 8, commitCount: 12 },
+    { userId: studentOne.id, storyPointsCompleted: 3, commitCount: 4  },
+  ]) {
+    const exists = await SprintMemberRecord.findOne({ where: { groupId: group.id, userId: m.userId, sprintId: SPRINT_ID } });
+    if (exists) continue;
+    await SprintMemberRecord.create({ groupId: group.id, sprintId: SPRINT_ID, ...m });
+  }
+
+  console.log('▸ Seeding final-evaluation grades for group 2 (so team-scalar is computable)');
+  const fegSeeds = [
+    { gradeType: 'ADVISOR',   gradedBy: advisorTwo.id,    finalScore: 84, scores: [{ criterionId: 'overall', value: 84 }] },
+    { gradeType: 'COMMITTEE', gradedBy: committee[0].id,  finalScore: 86, scores: [{ criterionId: 'overall', value: 86 }] },
+    { gradeType: 'COMMITTEE', gradedBy: committee[1].id,  finalScore: 80, scores: [{ criterionId: 'overall', value: 80 }] },
+  ];
+  const groupTwoDeliverable = await Deliverable.findOne({ where: { groupId: groupTwo.id, type: 'PROPOSAL' } });
+  for (const g of fegSeeds) {
+    const exists = await FinalEvaluationGrade.findOne({
+      where: { groupId: groupTwo.id, gradeType: g.gradeType, gradedBy: g.gradedBy, deliverableId: groupTwoDeliverable.id },
+    });
+    if (exists) continue;
+    await FinalEvaluationGrade.create({
+      groupId: groupTwo.id,
+      deliverableId: groupTwoDeliverable.id,
+      ...g,
+      comments: `Seeded ${g.gradeType.toLowerCase()} grade for the demo.`,
+    });
+  }
+
+  console.log('▸ Seeding committee review (in-progress) for group 2');
+  const reviewExists = await CommitteeReview.findOne({ where: { submissionId: groupTwoDeliverable.id, reviewerId: committee[0].id } });
+  if (!reviewExists) {
+    await CommitteeReview.create({
+      submissionId: groupTwoDeliverable.id,
+      reviewerId: committee[0].id,
+      scores: [
+        { criterionId: 'proposal-clarity', value: 22 },
+        { criterionId: 'proposal-completeness', value: 24 },
+      ],
+      comments: 'Started reviewing — clarity is solid, completeness needs another pass.',
+      finalScore: 84.0,
+    });
+  }
+
+  console.log('▸ Seeding sample standalone Grade row');
+  const gradeExists = await Grade.findOne({ where: { gradeType: 'COMMITTEE_FINAL' } });
+  if (!gradeExists) {
+    await Grade.create({
+      submissionId: groupTwoDeliverable.id,
+      deliverableId: groupTwoDeliverable.id,
+      gradedBy: committee[0].id,
+      gradeType: 'COMMITTEE_FINAL',
+      scores: [{ criterionId: 'overall', value: 84 }],
+      finalScore: 84.0,
+      comments: 'Seeded committee final grade for analytics demos.',
+    });
+  }
+
+  console.log('▸ Seeding notifications');
+  for (const n of [
+    {
+      userId: leader.id,
+      type: 'GROUP_INVITE',
+      payload: JSON.stringify({ groupName: group.name, role: 'LEADER' }),
+      status: 'READ',
+    },
+    {
+      userId: studentTwo.id,
+      type: 'GROUP_INVITE',
+      payload: JSON.stringify({ groupId: group.id, groupName: group.name, fromLeader: leader.fullName }),
+      status: 'PENDING',
+    },
+    {
+      userId: advisor.id,
+      type: 'ADVISOR_REQUEST',
+      payload: JSON.stringify({ groupId: group.id, groupName: group.name, leaderId: leader.id }),
+      status: 'READ',
+    },
+  ]) {
+    const exists = await Notification.findOne({ where: { userId: n.userId, type: n.type } });
+    if (exists) continue;
+    await Notification.create(n);
+  }
+
+  console.log('▸ Seeding audit log entries (so admin audit-log page has rows)');
+  for (const a of [
+    { action: 'LOGIN_SUCCESS',          actorId: admins[0].id,     targetType: 'USER',          targetId: String(admins[0].id) },
+    { action: 'RUBRIC_UPDATED',         actorId: coordinator.id,   targetType: 'GRADING_RUBRIC', targetId: 'PROPOSAL' },
+    { action: 'GRADE_SUBMITTED',        actorId: advisor.id,       targetType: 'GRADE',         targetId: 'demo-grade-1', metadata: { groupId: group.id, gradeType: 'ADVISOR' } },
+    { action: 'AI_VALIDATION_STORED',   actorId: admins[0].id,     targetType: 'AI_VALIDATION_RESULT', targetId: '430' },
+    { action: 'PR_REVIEW_VERIFIED',     actorId: admins[0].id,     targetType: 'SPRINT_PULL_REQUEST',   targetId: 'pr-428' },
+  ]) {
+    await AuditLog.create({ ...a, metadata: a.metadata || {} });
   }
 
   console.log('\n✓ Seed complete. All accounts share password: %s', PASSWORD);
