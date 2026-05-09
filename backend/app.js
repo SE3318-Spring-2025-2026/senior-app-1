@@ -72,8 +72,12 @@ app.use('/internal/evaluations', internalEvaluationsRoutes);
 app.use('/internal/jira', internalJiraRoutes);
 app.use('/internal/github', internalGithubRoutes);
 app.use('/internal/sprint-sync', internalSprintSyncRoutes);
-app.use('/api/v1/committee/submissions', submissionsRoutes);
+// Mount specific committee routes (/submissions/pending, /rubric-criteria,
+// /submissions/:id/grade, /submissions/:id/my-review) BEFORE the generic
+// `/submissions/:submissionId` catch-all, otherwise express matches the
+// generic route first and treats the literal "pending" as an ID.
 app.use('/api/v1/committee', committeeRoutes);
+app.use('/api/v1/committee/submissions', submissionsRoutes);
 app.use('/api/v1/final-evaluation', finalEvaluationRoutes);
 
 app.use(notFoundHandler);

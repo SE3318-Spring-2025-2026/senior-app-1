@@ -84,6 +84,23 @@ const SprintPullRequest = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    reviewVerified: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'PENDING',
+    },
+    reviewConfidence: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
+    reviewReasoning: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    reviewVerifiedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     tableName: 'SprintPullRequests',

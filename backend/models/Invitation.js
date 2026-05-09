@@ -12,7 +12,7 @@ const Invitation = sequelize.define(
       primaryKey: true,
     },
     groupId: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING,
       allowNull: false,
       references: {
         model: Group,

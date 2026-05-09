@@ -244,7 +244,7 @@ test('after POST /committee-grade succeeds, AuditLog count increases by 1 with a
   assert.equal(latest.action, 'GRADE_SUBMITTED');
   assert.equal(latest.targetType, 'GRADE');
   assert.equal(latest.metadata.deliverableId, deliverableId);
-  assert.equal(latest.metadata.graderRole, 'PROFESSOR');
+  assert.equal(latest.metadata.graderRole, 'COMMITTEE');
   assert.equal(latest.metadata.gradeType, 'COMMITTEE');
 });
 

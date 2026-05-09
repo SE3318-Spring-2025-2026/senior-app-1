@@ -25,8 +25,32 @@ function mapErrorResponse(payload) {
   }
 }
 
+function readActiveToken() {
+  // Login flows store the JWT under role-specific keys. Pick whichever exists.
+  const storage = window.localStorage;
+  return (
+    storage.getItem('authToken') ||
+    storage.getItem('studentToken') ||
+    storage.getItem('professorToken') ||
+    storage.getItem('coordinatorToken') ||
+    storage.getItem('adminToken') ||
+    ''
+  );
+}
+
+const STALE_TOKEN_CODES = new Set(['INVALID_TOKEN', 'AUTH_TOKEN_MISSING', 'SESSION_EXPIRED']);
+
+function clearStoredAuth() {
+  for (const key of [
+    'authToken', 'studentToken', 'professorToken', 'coordinatorToken', 'adminToken',
+    'studentUser', 'professorUser', 'coordinatorUser', 'adminUser',
+  ]) {
+    try { window.localStorage.removeItem(key); } catch (_) {}
+  }
+}
+
 async function request(method, path, body) {
-  const token = window.localStorage.getItem('authToken');
+  const token = readActiveToken();
   const headers = {
     'Content-Type': 'application/json',
   };
@@ -41,9 +65,18 @@ async function request(method, path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const data = await response.json();
+  const text = await response.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; }
+  catch (_) { data = { _raw: text }; }
 
   if (!response.ok) {
+    // If the stored JWT is invalid or expired (typically because the backend
+    // was re-seeded and the user row is gone), drop it so the next page load
+    // bounces to /login instead of looping with the stale token.
+    if (response.status === 401 && data?.code && STALE_TOKEN_CODES.has(data.code)) {
+      clearStoredAuth();
+    }
     const error = new Error(data?.message || 'Request failed');
     error.response = { data, status: response.status };
     error.mappedError = mapErrorResponse(data || {});

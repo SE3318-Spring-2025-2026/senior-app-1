@@ -5,8 +5,21 @@ import apiClient from './services/apiClient';
 
 const DELIVERABLE_TYPES = ['PROPOSAL', 'SOW'];
 
+const CRITERION_TYPES = [
+  { value: 'SOFT', label: 'Soft (manual percentage)', hint: 'Reviewer enters 0–100%' },
+  { value: 'BINARY', label: 'Binary (pass / fail)', hint: 'Yes = full points, No = 0' },
+  { value: 'GITHUB_LLM', label: 'GitHub (AI-graded)', hint: 'Reviewer can ask the AI to score from PR data' },
+];
+
+function slugify(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || `c-${Date.now().toString(36)}`;
+}
+
 function emptyCriterion() {
-  return { name: '', maxPoints: '' };
+  return { id: '', name: '', maxPoints: '', criterionType: 'SOFT', weight: '' };
 }
 
 export default function CoordinatorRubricPage() {
@@ -33,7 +46,13 @@ export default function CoordinatorRubricPage() {
       try {
         const { data } = await apiClient.get(`/v1/coordinator/rubrics/${deliverableType}`);
         if (data.rubric?.criteria?.length) {
-          setCriteria(data.rubric.criteria.map((c) => ({ name: c.name, maxPoints: String(c.maxPoints) })));
+          setCriteria(data.rubric.criteria.map((c) => ({
+            id: c.id || slugify(c.name || c.question),
+            name: c.name || c.question || '',
+            maxPoints: String(c.maxPoints ?? ''),
+            criterionType: c.criterionType || 'SOFT',
+            weight: c.weight != null ? String(c.weight) : '',
+          })));
         } else {
           setCriteria([emptyCriterion()]);
         }
@@ -65,7 +84,25 @@ export default function CoordinatorRubricPage() {
   async function handleSubmit(e) {
     e.preventDefault();
 
-    const parsed = criteria.map((c) => ({ name: c.name.trim(), maxPoints: Number(c.maxPoints) }));
+    const parsed = criteria.map((c) => {
+      const name = c.name.trim();
+      const out = {
+        // Preserve existing id so the per-criterion grade rows stay
+        // attached when a coordinator edits an existing rubric. Generate
+        // a stable slug for new criteria.
+        id: c.id || slugify(name),
+        name,
+        maxPoints: Number(c.maxPoints),
+        criterionType: c.criterionType || 'SOFT',
+      };
+      if (c.weight !== '' && c.weight != null && !Number.isNaN(Number(c.weight))) {
+        out.weight = Number(c.weight);
+      }
+      // The committee page reads `question` for the visible prompt — fall
+      // back to the criterion name so the existing UI keeps working.
+      out.question = name;
+      return out;
+    });
 
     const names = parsed.map((c) => c.name);
     if (new Set(names).size !== names.length) {
@@ -126,38 +163,74 @@ export default function CoordinatorRubricPage() {
               <p>Loading current rubric…</p>
             ) : (
               <>
-                {criteria.map((criterion, index) => (
-                  <div key={index} className="rubric-criterion-row">
-                    <input
-                      type="text"
-                      placeholder="Criterion name"
-                      value={criterion.name}
-                      onChange={(e) => updateCriterion(index, 'name', e.target.value)}
-                      disabled={loading}
-                      required
-                    />
-                    <input
-                      type="number"
-                      placeholder="Max points"
-                      min="0"
-                      step="0.5"
-                      value={criterion.maxPoints}
-                      onChange={(e) => updateCriterion(index, 'maxPoints', e.target.value)}
-                      disabled={loading}
-                      required
-                    />
-                    {criteria.length > 1 && (
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => removeCriterion(index)}
-                        disabled={loading}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                ))}
+                {criteria.map((criterion, index) => {
+                  const typeMeta = CRITERION_TYPES.find((t) => t.value === (criterion.criterionType || 'SOFT'));
+                  return (
+                    <div key={index} className="rubric-criterion-row" style={{ display: 'grid', gridTemplateColumns: '1fr 110px 200px 110px auto', gap: 8, alignItems: 'flex-end', marginBottom: 12 }}>
+                      <label className="field" style={{ margin: 0 }}>
+                        <span>Criterion name / question</span>
+                        <input
+                          type="text"
+                          placeholder="e.g. Code review activity"
+                          value={criterion.name}
+                          onChange={(e) => updateCriterion(index, 'name', e.target.value)}
+                          disabled={loading}
+                          required
+                        />
+                      </label>
+                      <label className="field" style={{ margin: 0 }}>
+                        <span>Max pts</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={criterion.maxPoints}
+                          onChange={(e) => updateCriterion(index, 'maxPoints', e.target.value)}
+                          disabled={loading}
+                          required
+                        />
+                      </label>
+                      <label className="field" style={{ margin: 0 }}>
+                        <span>Type</span>
+                        <select
+                          value={criterion.criterionType || 'SOFT'}
+                          onChange={(e) => updateCriterion(index, 'criterionType', e.target.value)}
+                          disabled={loading}
+                        >
+                          {CRITERION_TYPES.map((t) => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </select>
+                        <span className="field-help" style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+                          {typeMeta?.hint}
+                        </span>
+                      </label>
+                      <label className="field" style={{ margin: 0 }}>
+                        <span>Weight (0-1)</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          placeholder="0.25"
+                          value={criterion.weight}
+                          onChange={(e) => updateCriterion(index, 'weight', e.target.value)}
+                          disabled={loading}
+                        />
+                      </label>
+                      {criteria.length > 1 ? (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => removeCriterion(index)}
+                          disabled={loading}
+                        >
+                          Remove
+                        </button>
+                      ) : <span />}
+                    </div>
+                  );
+                })}
 
                 <button type="button" className="btn-secondary" onClick={addCriterion} disabled={loading}>
                   + Add Criterion

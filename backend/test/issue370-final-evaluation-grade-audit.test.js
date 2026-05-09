@@ -54,7 +54,7 @@ async function createGroup(overrides = {}) {
   return Group.create({
     id,
     name: `Group-${id.slice(0, 8)}`,
-    status: 'FINALIZED',
+    status: 'FORMATION',
     memberIds: [],
     advisorId: null,
     ...overrides,

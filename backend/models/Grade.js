@@ -27,7 +27,7 @@ const Grade = sequelize.define(
       },
     },
     gradedBy: {
-      type: DataTypes.STRING,
+      type: DataTypes.INTEGER,
       allowNull: false,
       comment: 'User ID of the grader (committee member)',
     },

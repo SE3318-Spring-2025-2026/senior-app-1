@@ -21,6 +21,32 @@ exports.listRubricCriteria = async (req, res) => {
   }
 };
 
+exports.getMyReview = async (req, res) => {
+  try {
+    const review = await committeeService.getReviewForReviewer({
+      submissionId: req.params.submissionId,
+      reviewerId: req.user.id,
+    });
+    if (!review) {
+      return res.status(200).json({ review: null });
+    }
+    return res.status(200).json({
+      review: {
+        id: review.id,
+        submissionId: review.submissionId,
+        reviewerId: review.reviewerId,
+        scores: review.scores || [],
+        comments: review.comments,
+        finalScore: review.finalScore,
+        updatedAt: review.updatedAt,
+      },
+    });
+  } catch (err) {
+    console.error('[committeeController] getMyReview error:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+};
+
 exports.listPendingSubmissions = async (req, res) => {
   try {
     const submissions = await committeeService.listPendingSubmissions();

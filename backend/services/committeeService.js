@@ -60,26 +60,64 @@ async function submitReview({ submissionId, reviewerId, scores, comments }) {
     }
   }
 
-  const finalScore = calculateFinalScore(scores, criteriaMap);
-
+  // Per-criterion submission: merge incoming scores into any existing review
+  // by the same reviewer. Each call may include any subset of criteria. The
+  // submission is only marked GRADED once every criterion in the rubric has
+  // a score recorded.
   const transaction = await sequelize.transaction();
   try {
-    const review = await CommitteeReview.create(
-      { submissionId, reviewerId, scores, comments: comments || null, finalScore },
-      { transaction }
-    );
+    const existing = await CommitteeReview.findOne({
+      where: { submissionId, reviewerId },
+      transaction,
+    });
 
-    await Deliverable.update(
-      { status: 'GRADED' },
-      { where: { id: submissionId }, transaction }
-    );
+    const mergedMap = new Map();
+    if (existing && Array.isArray(existing.scores)) {
+      for (const s of existing.scores) mergedMap.set(s.criterionId, s);
+    }
+    for (const s of scores) mergedMap.set(s.criterionId, s);
+    const mergedScores = [...mergedMap.values()];
+
+    const finalScore = calculateFinalScore(mergedScores, criteriaMap);
+    const mergedComments = comments != null ? comments : (existing?.comments ?? null);
+
+    let review;
+    if (existing) {
+      review = await existing.update(
+        { scores: mergedScores, comments: mergedComments, finalScore },
+        { transaction },
+      );
+    } else {
+      review = await CommitteeReview.create(
+        { submissionId, reviewerId, scores: mergedScores, comments: mergedComments, finalScore },
+        { transaction },
+      );
+    }
+
+    // Mark deliverable GRADED only after every criterion is filled in.
+    const gradedIds = new Set(mergedScores.map((s) => s.criterionId));
+    const allCriteriaScored = criteriaList.every((c) => gradedIds.has(c.id));
+    if (allCriteriaScored) {
+      await Deliverable.update(
+        { status: 'GRADED' },
+        { where: { id: submissionId }, transaction },
+      );
+    }
 
     await transaction.commit();
-    return review;
+    return Object.assign(review.toJSON ? review.toJSON() : review, {
+      complete: allCriteriaScored,
+      criterionCount: criteriaList.length,
+      gradedCount: gradedIds.size,
+    });
   } catch (err) {
     if (!transaction.finished) await transaction.rollback();
     throw err;
   }
+}
+
+async function getReviewForReviewer({ submissionId, reviewerId }) {
+  return CommitteeReview.findOne({ where: { submissionId, reviewerId } });
 }
 
 async function listRubricCriteria({ deliverableType } = {}) {
@@ -102,4 +140,4 @@ async function listPendingSubmissions() {
   });
 }
 
-module.exports = { submitReview, listRubricCriteria, listPendingSubmissions };
+module.exports = { submitReview, listRubricCriteria, listPendingSubmissions, getReviewForReviewer };

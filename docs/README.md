@@ -42,8 +42,9 @@ The admin manages the system and performs administrative operations.
 * The coordinator can manually add or remove students from groups.
 * The system supports daily refresh of JIRA issues and GitHub PRs for active sprints.
 * The system provides live grade visibility for advisors during sprints.
-* The system uses AI to read pull request comments and verify that a review process has happened (future feature).
-* The system uses AI to validate issue implementation by reading file diffs in PRs and checking against the issue description (future feature).
+* The system uses AI (Anthropic Claude) to read pull request comments and verify that a code review actually took place. Result (`REVIEWED` / `NOT_REVIEWED`) is stored on each `SprintPullRequest` and feeds into the Team Evaluation grading aggregation. Trigger via `POST /api/v1/teams/{teamId}/sprints/{sprintId}/pr-review-verifications`.
+* The system uses AI (Anthropic Claude) to validate issue implementation by comparing the JIRA issue description against PR file diffs (Business Flows 13, 14, 15 in `docs/api_sprint_monitoring.yaml`). Stores `MATCHED` / `PARTIAL_MATCH` / `NOT_MATCHED` per issue. Trigger via `POST /api/v1/teams/{teamId}/sprints/{sprintId}/ai-validations`.
+* Both AI features degrade gracefully to `AI_UNAVAILABLE` when `ANTHROPIC_API_KEY` is not configured — they never block grade submission or sprint evaluation.
 
 ---
 
@@ -51,7 +52,7 @@ The admin manages the system and performs administrative operations.
 
 * The system must support at least 500 concurrent users without performance degradation.
 * The system should respond to user actions within 2 seconds for 95% of requests.
-* User data must be stored securely, and all sensitive operations (including login) must require two-factor authentication (2FA).
+* User data must be stored securely.
 * The system should keep logs of all user activities, with logs retained for a minimum of 1 year and accessible only to authorized personnel.
 * The system must have an uptime of at least 99.5% per month, excluding scheduled maintenance.
 * The system must be accessible and usable on the latest versions of Chrome, Firefox, Safari, and Edge, and on both desktop and mobile devices.
@@ -139,3 +140,165 @@ The admin manages the system and performs administrative operations.
 | System calculates Team Scalar | Backend (Logic) | Avg of Scrum and Code Reviews |
 | Track Individual points | Backend + JIRA | Completed vs Target story points |
 | Apply final grade scalars | Backend + Database | Team grade, Individual ratio |
+
+---
+
+## 5. Quick start
+
+```bash
+# Backend
+cd backend
+npm install
+cp .env.example .env          # already populated with shared dev keys
+node seed.js --reset          # creates tables + demo data on Supabase
+npm run dev                   # http://localhost:3001
+
+# Frontend (new terminal)
+cd frontend
+npm install
+npm run dev                   # http://localhost:5173
+```
+
+Demo accounts and the shared password live in [`PASSWORDS.md`](PASSWORDS.md).
+Full requirements catalogue in [`REQUIREMENTS.md`](REQUIREMENTS.md).
+
+---
+
+## 6. Database (Supabase)
+
+`backend/db.js` resolves the dialect from env:
+
+- `DATABASE_URL` set → connects to Postgres (Supabase).
+- Otherwise → local `database.sqlite`.
+
+The committed `backend/.env.example` points at the team's shared Supabase project:
+
+```
+DATABASE_URL=postgresql://postgres:<password>@db.kkvdarceomdqzeqiacfo.supabase.co:5432/postgres
+SUPABASE_URL=https://kkvdarceomdqzeqiacfo.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
+```
+
+Run `node seed.js --reset` to drop & recreate every table on Supabase and load
+the demo dataset (`--reset` is destructive; omit it for additive seeding).
+Rotate the database password and the `sb_*` keys in the Supabase dashboard
+before going to production and update `.env.example`.
+
+---
+
+## 7. Worked grading example (from the brief)
+
+Two grading styles per rubric criterion:
+
+- **Binary** — `S` = 100, `F` = 0.
+- **Soft** — `A` = 100, `B` = 80, `C` = 60, `D` = 50, `F` = 0.
+
+| Activity | Sprint 1 | Sprint 2 | Sprint 3 | Avg |
+| --- | --- | --- | --- | --- |
+| Scrum | B | A | A | 90 |
+| Work / Code Review | C | B | A | 70 |
+
+Presumed deliverable grades: Proposal 90, SoW 94, Demonstration 92.
+
+Sprint → deliverable contribution scalars (set by Coordinator):
+
+| | Proposal | SoW | Demonstration |
+| --- | --- | --- | --- |
+| Scrum (sprints contributing) | 1 → 0.7 | 1, 2 → 0.9 | 1, 2, 3 → 0.93 |
+| Reviews | → 0.6 | → 0.7 | → 0.8 |
+| AVG(Scrum, Reviews) | 0.65 | 0.8 | 0.865 |
+
+After scalars: `90 × 0.65 = 58.5`, `94 × 0.8 = 75.2`, `92 × 0.865 = 79.58`.
+
+Item / deliverable weights:
+
+| Documents (50 %) | Demonstration (50 %) | Total |
+| --- | --- | --- |
+| Proposal × 0.15 + SoW × 0.35 = 8.77 + 26.32 | 79.58 × 0.5 = 74.55 | **74.88** |
+
+Story-point completion ratios slice the team grade per member.
+Example: student `11070001000` completes 5/5 in Sprint 1, 4/5 in Sprint 2 →
+ratio 0.9 → individual grade `74.88 × 0.9 = 71.62`.
+
+---
+
+## 8. Features and implementation status
+
+| Capability | Status |
+| --- | --- |
+| Admin password reset link (Difficulty 1) | ✅ `passwordResetTokenService.js`, `ResetPasswordPage.jsx` |
+| Logging user events (Difficulty 1) | ✅ `AuditLog` + fire-and-forget logging across grade submission, rubric updates, AI validation |
+| Embedded Markdown Editor (Difficulty 2) | ✅ `SubmissionEditorPage.jsx` with `react-markdown` |
+| AI to Read Pull Requests (Difficulty 3) — *issue #430* | ✅ `aiFeatureService.verifyPrReviewsForSprint`, panel on `SprintEvaluationPage` |
+| AI to Validate Issue Implementation (Difficulty 4) — *issue #430* | ✅ Business Flows 13/14/15 wired |
+| GitHub OAuth | ✅ Backend redirect + state model; frontend pickup in `Register.jsx` |
+| JIRA / GitHub Integration | ✅ Daily refresh, snapshot, PR verification |
+
+### AI features endpoint summary
+
+- `POST /api/v1/teams/:teamId/sprints/:sprintId/pr-review-verifications`
+- `GET  /api/v1/teams/:teamId/sprints/:sprintId/pr-review-verifications`
+- `POST /api/v1/teams/:teamId/sprints/:sprintId/ai-validations` (Business Flow 13)
+- `GET  /api/v1/teams/:teamId/sprints/:sprintId/ai-validations`
+- `GET  /api/v1/teams/:teamId/sprints/:sprintId/ai-signals` — aggregate consumed by Team Evaluation grading
+- `POST /internal/sprint-sync/ai-validations` — BF15 batch upsert (`x-internal-api-key`)
+- `POST /internal/evaluations/validation-results` — BF14 forward (`x-internal-api-key`)
+
+Both AI features degrade gracefully to `AI_UNAVAILABLE` when `ANTHROPIC_API_KEY`
+is missing — the rest of the grading pipeline keeps working.
+
+---
+
+## 9. Tests
+
+```bash
+cd backend && npm test            # node:test suite
+```
+
+The Anthropic SDK is mocked in `test/issue430-ai-features.test.js` so tests
+don't burn real API credits.
+
+---
+
+## 10. Repo layout
+
+```
+senior-app-1/
+├── backend/
+│   ├── controllers/    # HTTP handlers (express-validator + service calls)
+│   ├── services/       # Business logic, talks to models
+│   │   ├── aiService.js          # Anthropic SDK wrapper
+│   │   ├── aiFeatureService.js   # AI orchestration (GitHub + AI + DB)
+│   │   ├── finalEvaluationService.js
+│   │   └── ...
+│   ├── models/         # Sequelize models (incl. AIValidationResult, SprintPullRequest)
+│   ├── routes/         # Express routers
+│   ├── middleware/
+│   ├── repositories/
+│   ├── test/           # node:test integration tests
+│   ├── seed.js         # Demo dataset loader
+│   ├── db.js           # Sequelize bootstrap (Postgres / SQLite)
+│   └── .env.example    # Committed shared dev keys
+├── frontend/
+│   └── src/
+│       ├── components/AiFeaturesPanel.jsx
+│       ├── services/{apiClient.js,aiFeatures.js,sprintMonitoring.js}
+│       └── *Page.jsx
+└── docs/
+    ├── README.md            # This file — system requirements + setup
+    ├── REQUIREMENTS.md      # Detailed requirement catalogue
+    ├── PASSWORDS.md         # Demo accounts
+    ├── CONTRIBUTING.md      # Branching / commit / PR / test rules
+    ├── api_*.yaml           # OpenAPI specs per module
+    └── dfd_*.drawio         # Data-flow diagrams
+```
+
+---
+
+## 11. Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for branch naming, commit format, PR
+template, and the backend/frontend implementation checklist (model → service →
+controller → route → mount → test). Branches must be created from the GitHub
+issue page, not by hand.

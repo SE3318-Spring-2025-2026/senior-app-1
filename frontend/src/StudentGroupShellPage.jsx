@@ -358,6 +358,13 @@ export default function StudentGroupShellPage() {
               View Integrations
             </span>
           )}
+          {selectedGroup ? (
+            <Link to={`/students/groups/${selectedGroup.groupId}/sprints/evaluation`}>Sprint Evaluation &amp; AI</Link>
+          ) : (
+            <span className="workspace-button workspace-button-secondary workspace-button-disabled">
+              Sprint Evaluation &amp; AI
+            </span>
+          )}
           {advisorRequestEligibleGroups.length > 0 ? (
             <Link to="/team-leader/advisor-requests/new">Request Advisor</Link>
           ) : (

@@ -134,6 +134,25 @@ function computeSprintEvaluationMetrics(input) {
     }
   });
 
+  const aiSignals = input?.aiSignals && typeof input.aiSignals === 'object' ? input.aiSignals : null;
+  const aiMetrics = [];
+  if (aiSignals) {
+    if (typeof aiSignals.reviewedRatio === 'number') {
+      aiMetrics.push({
+        metricName: 'aiReviewedRatio',
+        metricValue: clamp0to100(aiSignals.reviewedRatio * 100),
+        unit: 'percent',
+      });
+    }
+    if (typeof aiSignals.matchedRatio === 'number') {
+      aiMetrics.push({
+        metricName: 'aiMatchedRatio',
+        metricValue: clamp0to100(aiSignals.matchedRatio * 100),
+        unit: 'percent',
+      });
+    }
+  }
+
   const evaluationMetricStoreRequest = {
     teamId,
     sprintId,
@@ -146,6 +165,7 @@ function computeSprintEvaluationMetrics(input) {
       { metricName: 'prCompletionRatio', metricValue: prCompletionRatio, unit: 'percent' },
       { metricName: 'issueToPrMappingCoverage', metricValue: issueToPrMappingCoverage, unit: 'percent' },
       { metricName: 'aggregatedScore', metricValue: aggregatedScore, unit: 'score' },
+      ...aiMetrics,
     ],
   };
 

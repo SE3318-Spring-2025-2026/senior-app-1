@@ -28,4 +28,13 @@ router.post(
   committeeController.submitReview,
 );
 
+// Read the current professor's in-progress (or completed) review for this
+// submission. Returns the merged scores so the page can show progress.
+router.get(
+  '/submissions/:submissionId/my-review',
+  authenticate,
+  authorize(['PROFESSOR']),
+  committeeController.getMyReview,
+);
+
 module.exports = router;

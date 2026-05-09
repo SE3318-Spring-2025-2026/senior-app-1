@@ -25,8 +25,20 @@ function loadStoredUser() {
   return null;
 }
 
+function loadStoredToken() {
+  // Login flows store the JWT under role-specific keys, not "authToken".
+  return (
+    localStorage.getItem('authToken') ||
+    localStorage.getItem('studentToken') ||
+    localStorage.getItem('professorToken') ||
+    localStorage.getItem('coordinatorToken') ||
+    localStorage.getItem('adminToken') ||
+    null
+  );
+}
+
 export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(() => localStorage.getItem('authToken'));
+  const [token, setToken] = useState(() => loadStoredToken());
   const [user, setUser] = useState(() => loadStoredUser());
 
   const login = (newToken, userData) => {
