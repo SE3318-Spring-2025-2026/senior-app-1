@@ -13,7 +13,9 @@ tags:
   - name: Student
     description: Student-facing registration and GitHub linking endpoints.
   - name: Admin
-    description: Admin-facing professor onboarding endpoints.
+    description: Admin-facing professor onboarding and user password reset endpoints.
+  - name: Auth
+    description: Public authentication endpoints, including token-based password reset.
   - name: Professor
     description: Professor-facing initial password setup endpoint.
   - name: User Database
@@ -319,6 +321,85 @@ components:
       example:
         setupToken: pst_xxx
         newPassword: NewStrongPassword123!
+
+    AdminPasswordResetLinkResponse:
+      type: object
+      description: Response returned when an admin generates a one-time-use password reset link for a registered user.
+      required: [message, resetLink, expiresAt, user]
+      properties:
+        message:
+          type: string
+          example: Password reset link generated successfully
+        resetLink:
+          type: string
+          format: uri
+          description: Plain reset token is present only inside this URL. The database stores only the token hash.
+          example: http://localhost:5173/reset-password?token=plain-one-time-token
+        expiresAt:
+          type: string
+          format: date-time
+          example: 2026-05-09T13:00:00.000Z
+        user:
+          type: object
+          required: [id, email, fullName, role]
+          properties:
+            id:
+              type: integer
+              example: 12
+            email:
+              type: string
+              format: email
+              example: student@example.edu
+            fullName:
+              type: string
+              example: Student User
+            role:
+              type: string
+              enum: [STUDENT, PROFESSOR, COORDINATOR, ADMIN]
+              example: STUDENT
+      example:
+        message: Password reset link generated successfully
+        resetLink: http://localhost:5173/reset-password?token=plain-one-time-token
+        expiresAt: 2026-05-09T13:00:00.000Z
+        user:
+          id: 12
+          email: student@example.edu
+          fullName: Student User
+          role: STUDENT
+
+    ResetPasswordRequest:
+      type: object
+      description: Public request to reset a user's password with a one-time-use reset token.
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          description: Plain reset token from the reset link. Only its SHA-256 hash is compared server-side.
+          example: plain-one-time-token
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+          description: Must include at least one uppercase letter, one lowercase letter, one number, and one special character.
+          example: NewPassword123!
+      example:
+        token: plain-one-time-token
+        newPassword: NewPassword123!
+
+    ResetPasswordSuccessResponse:
+      type: object
+      description: Response returned after a password reset token is consumed and the password is updated.
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: PASSWORD_RESET_SUCCESS
+        message:
+          type: string
+          example: Password reset successful
+      example:
+        code: PASSWORD_RESET_SUCCESS
+        message: Password reset successful
 
     SimpleMessageResponse:
       type: object
@@ -856,6 +937,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/admin/users/{userId}/password-reset-link:
+    post:
+      tags: ["Admin"]
+      summary: Admin generates a one-time-use password reset link
+      description: Admin-only endpoint that creates a password reset link for a registered student, professor, coordinator, or admin user. The generated plain token is returned only in the reset URL, while the backend stores a SHA-256 token hash, sets an expiration time, and invalidates any older active reset token for the same user.
+      operationId: generateAdminPasswordResetLink
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: Registered user identifier.
+          schema: { type: integer, minimum: 1 }
+      responses:
+        201:
+          description: Password reset link generated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPasswordResetLinkResponse'
+        400:
+          description: Invalid userId path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Only admins can generate password reset links.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        404:
+          description: Target user was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/user-database/professors:
     post:
       tags: ["User Database", "Internal"]
@@ -949,6 +1075,36 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         422:
           description: Password setup request violates business validation rules.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/reset-password:
+    post:
+      tags: ["Auth"]
+      summary: Reset password using a one-time reset token
+      description: Public endpoint used by the reset password page. The backend validates the token hash, expiration, and unused state; hashes the new password; consumes the token and updates the password in one transaction; invalidates sibling reset tokens; and increments the user's sessionVersion so older JWTs are no longer accepted.
+      operationId: resetPasswordWithOneTimeToken
+      requestBody:
+        required: true
+        description: Reset token from the URL and the new password.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+            example:
+              token: plain-one-time-token
+              newPassword: NewPassword123!
+      responses:
+        200:
+          description: Password reset token consumed and password updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetPasswordSuccessResponse'
+        400:
+          description: Missing token/password, weak password, invalid token, expired token, or already-used token.
           content:
             application/json:
               schema:
