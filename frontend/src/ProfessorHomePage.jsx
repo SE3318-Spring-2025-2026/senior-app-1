@@ -41,6 +41,14 @@ const professorTools = [
     cta: 'Open Password Setup',
     status: 'Ready',
   },
+  {
+    eyebrow: 'Grading',
+    title: 'Final Evaluation Grading',
+    description: 'Submit your advisor or committee grade for a group\'s final evaluation using the rubric criteria.',
+    href: '/professors/final-evaluation/enter',
+    cta: 'Open Final Evaluation',
+    status: 'Ready',
+  },
 ];
 
 export default function ProfessorHomePage() {

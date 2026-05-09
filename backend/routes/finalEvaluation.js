@@ -112,4 +112,12 @@ router.get(
   ctrl.getGrades,
 );
 
+router.get(
+  '/groups/:groupId/deliverables',
+  authenticate,
+  authorize(['COORDINATOR', 'PROFESSOR']),
+  ctrl.groupIdValidation,
+  ctrl.getGroupDeliverables,
+);
+
 module.exports = router;

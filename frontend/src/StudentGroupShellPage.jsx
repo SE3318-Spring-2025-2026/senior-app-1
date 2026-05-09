@@ -365,6 +365,7 @@ export default function StudentGroupShellPage() {
               Request Advisor
             </span>
           )}
+          <Link to="/students/final-grade">View Final Grade</Link>
         </div>
 
         {leaderManagedGroups.length === 0 && (

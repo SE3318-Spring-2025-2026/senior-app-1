@@ -57,6 +57,22 @@ const coordinatorTools = [
     cta: 'Configure Rubrics',
     status: 'Ready',
   },
+  {
+    eyebrow: 'Grading',
+    title: 'Final Evaluation Weights',
+    description: 'Set the advisor vs. committee weight blend used when computing the team scalar.',
+    href: '/coordinator/final-evaluation/weights',
+    cta: 'Configure Weights',
+    status: 'Ready',
+  },
+  {
+    eyebrow: 'Grading',
+    title: 'Final Evaluation',
+    description: 'Review raw grades, calculate team scalars, inspect individual contributions, and finalize per-member grades for each group.',
+    href: '/coordinator/final-evaluation/groups',
+    cta: 'Open Final Evaluation',
+    status: 'Ready',
+  },
 ];
 
 export default function CoordinatorHomePage() {
