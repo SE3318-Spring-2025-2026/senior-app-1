@@ -431,6 +431,22 @@ async function getGrades(req, res) {
   }
 }
 
+async function getGroupDeliverables(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request', errors: errors.array() });
+  }
+
+  try {
+    const { Deliverable } = require('../models');
+    const deliverables = await Deliverable.findAll({ where: { groupId: req.params.groupId } });
+    return res.status(200).json({ code: 'SUCCESS', message: 'Deliverables retrieved', data: deliverables });
+  } catch (err) {
+    console.error('[finalEvaluationController] getGroupDeliverables:', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+}
+
 async function getRawGrades(req, res) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -472,4 +488,5 @@ module.exports = {
   getRawGrades,
   finalize,
   getGrades,
+  getGroupDeliverables,
 };
