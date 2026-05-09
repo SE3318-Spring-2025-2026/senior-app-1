@@ -34,6 +34,7 @@ import SprintEvaluationPage from './SprintEvaluationPage';
 import AdvisorRequestsPage from './AdvisorRequestsPage';
 import AiInsightsPage from './AiInsightsPage';
 import GradeWithGitHubPage from './GradeWithGitHubPage';
+import StudentMyGradePage from './StudentMyGradePage';
 import ProfessorCommitteeSubmissionsPage from './ProfessorCommitteeSubmissionsPage';
 import CommitteeGradingPage from './CommitteeGradingPage';
 import SubmissionEditorPage from './SubmissionEditorPage';
@@ -60,6 +61,7 @@ export default function App() {
               <Route path="/students/groups/:teamId/sprints/evaluation" element={<AuthGuard allowedRoles={['STUDENT']}><SprintEvaluationPage /></AuthGuard>} />
               <Route path="/students/groups/:teamId/sprints/:sprintId/evaluation-history" element={<AuthGuard allowedRoles={['STUDENT']}><SprintEvaluationHistoryPage /></AuthGuard>} />
               <Route path="/students/notifications" element={<StudentInvitationsPage />} />
+              <Route path="/students/my-grade" element={<AuthGuard allowedRoles={['STUDENT']}><StudentMyGradePage /></AuthGuard>} />
               <Route path="/team-leader/submission" element={<AuthGuard allowedRoles={['STUDENT']}><SubmissionEditorPage /></AuthGuard>} />
               <Route path="/team-leader/advisor-requests/new" element={<SubmitAdvisorRequestPage />} />
               <Route path="/team-leader/advisor-requests/:requestId" element={<TeamLeaderAdvisorRequestDetailsPage />} />

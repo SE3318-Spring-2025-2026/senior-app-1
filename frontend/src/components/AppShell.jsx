@@ -19,6 +19,12 @@ const roleMenuSections = {
       ],
     },
     {
+      title: 'Grades',
+      items: [
+        { to: '/students/my-grade', label: 'My Grade', icon: 'MG' },
+      ],
+    },
+    {
       title: 'AI',
       items: [
         { to: '/ai', label: 'AI Sprint Insights', icon: 'AI' },

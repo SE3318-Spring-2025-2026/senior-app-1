@@ -82,6 +82,14 @@ const TEAM_LEADERS = [
 const STUDENTS = [
   { studentId: '11070001002', email: 'student1@demo.edu', fullName: 'Student Sam', role: 'STUDENT' },
   { studentId: '11070001003', email: 'student2@demo.edu', fullName: 'Student Sofia', role: 'STUDENT' },
+  // Six extra students that populate three additional graded groups so the
+  // My Grade page has working examples across letter grades A / B / F.
+  { studentId: '11070001004', email: 'student3@demo.edu', fullName: 'Ada Stellar',     role: 'STUDENT' },
+  { studentId: '11070001005', email: 'student4@demo.edu', fullName: 'Ben Stellar',     role: 'STUDENT' },
+  { studentId: '11070001006', email: 'student5@demo.edu', fullName: 'Cara Solid',      role: 'STUDENT' },
+  { studentId: '11070001007', email: 'student6@demo.edu', fullName: 'Dan Solid',       role: 'STUDENT' },
+  { studentId: '11070001008', email: 'student7@demo.edu', fullName: 'Eve Struggling',  role: 'STUDENT' },
+  { studentId: '11070001009', email: 'student8@demo.edu', fullName: 'Finn Struggling', role: 'STUDENT' },
 ];
 
 const TEAM_ID = 'team-demo-001';
@@ -477,12 +485,145 @@ async function main() {
     });
   }
 
+  // ────────────────────────────────────────────────────────────────────────
+  // Three EXTRA finalised groups so the My Grade page has working examples
+  // across letter grades A / B / F. Each group has its own 2 students, an
+  // advisor, a deliverable, a TeamScalar, and MemberFinalGrade rows.
+  // ────────────────────────────────────────────────────────────────────────
+  console.log('▸ Seeding three more finalised groups (A / B / F)');
+  const activeWeights = await FinalEvaluationWeight.findOne({ where: { isActive: true } });
+  const stellarMembers = [regularStudents[2], regularStudents[3]];      // Ada, Ben
+  // The Solid group is the "everyone gets the same grade" showcase: all
+  // 10 demo students are listed as members and given contributionRatio
+  // 100, so every member's individual grade collapses onto the team
+  // scalar (84 / B). The /my-grade endpoint prefers the MemberFinalGrade
+  // row over the user's primary group, so even Leo & Sam (still primarily
+  // in team-demo-001) see this B grade.
+  const solidMembers   = [
+    regularStudents[4], regularStudents[5],   // Cara, Dan (originals)
+    leader, studentOne,                       // Leo, Sam (group 1)
+    leaderTwo, studentTwo,                    // Lina, Sofia (group 2)
+    regularStudents[2], regularStudents[3],   // Ada, Ben
+    regularStudents[6], regularStudents[7],   // Eve, Finn
+  ];
+  const strugglingMembers = [regularStudents[6], regularStudents[7]];   // Eve, Finn
+
+  // Note: contributionRatio is each member's completion %, not their share
+  // of the team's total work. Formula: finalScore = min(100, teamScalar * ratio / 100).
+  // So ratio=100 means "did all assigned work" → individual ≈ teamScalar.
+  const extraGroupSpecs = [
+    {
+      id: 'team-demo-stellar',
+      name: 'Stellar Performers (A)',
+      members: stellarMembers,
+      advisor: advisor,            // Professor One
+      teamScalar: 95, advisorScore: 96, committeeScore: 94,
+      ratios: [100, 95],           // first did all, second a tiny bit less
+      letter: 'A',
+    },
+    {
+      id: 'team-demo-solid',
+      name: 'Solid Engineers (B — every member gets the same grade)',
+      members: solidMembers,
+      advisor: advisorTwo,         // Professor Two
+      teamScalar: 84, advisorScore: 80, committeeScore: 86,
+      // Equal-contribution showcase: every member did 100% of their assigned
+      // work, so every member's individual grade collapses onto the team
+      // scalar. Use this group when you want to demo "team did B work →
+      // everyone gets the same B".
+      ratios: solidMembers.map(() => 100),
+      letter: 'B',
+    },
+    {
+      id: 'team-demo-struggling',
+      name: 'Struggling Squad (D/F)',
+      members: strugglingMembers,
+      advisor: advisor,
+      teamScalar: 65, advisorScore: 62, committeeScore: 67,
+      ratios: [90, 60],            // Eve almost finished, Finn slacked
+      letter: 'D',
+    },
+  ];
+
+  for (const spec of extraGroupSpecs) {
+    let extraGroup = await Group.findOne({ where: { id: spec.id } });
+    if (!extraGroup) {
+      extraGroup = await Group.create({
+        id: spec.id,
+        name: spec.name,
+        leaderId: String(spec.members[0].id),
+        memberIds: spec.members.map((u) => String(u.id)),
+        status: 'FINALIZED',
+        maxMembers: 4,
+      });
+    }
+
+    // Advisor assignment
+    const aaExists = await GroupAdvisorAssignment.findOne({
+      where: { groupId: spec.id, advisorUserId: spec.advisor.id },
+    });
+    if (!aaExists) {
+      await GroupAdvisorAssignment.create({
+        groupId: spec.id,
+        studentUserId: spec.members[0].id,
+        advisorUserId: spec.advisor.id,
+        status: 'ACTIVE',
+      });
+    }
+
+    // Deliverable so the grading pipeline has something to anchor to
+    const delExists = await Deliverable.findOne({ where: { groupId: spec.id, type: 'PROPOSAL' } });
+    if (!delExists) {
+      await Deliverable.create({
+        groupId: spec.id,
+        type: 'PROPOSAL',
+        content: `## Proposal — ${spec.name}\n\nSeed deliverable.`,
+        images: [],
+        status: 'GRADED',
+        version: 1,
+      });
+    }
+
+    // TeamScalar (uses active weight config)
+    const tsExists = await TeamScalar.findOne({ where: { groupId: spec.id } });
+    if (!tsExists && activeWeights) {
+      await TeamScalar.create({
+        groupId: spec.id,
+        scalar: spec.teamScalar,
+        advisorFinalScore: spec.advisorScore,
+        committeeFinalScore: spec.committeeScore,
+        weightConfigId: activeWeights.id,
+        calculatedAt: new Date(),
+      });
+    }
+
+    // MemberFinalGrade per member
+    for (let i = 0; i < spec.members.length; i++) {
+      const member = spec.members[i];
+      const ratio = spec.ratios[i];
+      const finalScore = parseFloat(Math.min(100, spec.teamScalar * ratio / 100).toFixed(2));
+      const exists = await MemberFinalGrade.findOne({
+        where: { groupId: spec.id, userId: member.id },
+      });
+      if (!exists) {
+        await MemberFinalGrade.create({
+          groupId: spec.id,
+          userId: member.id,
+          teamScalar: spec.teamScalar,
+          contributionRatio: ratio,
+          finalScore,
+          letterGrade: finalScore >= 90 ? 'A' : finalScore >= 80 ? 'B' : finalScore >= 70 ? 'C' : finalScore >= 60 ? 'D' : 'F',
+          finalizedAt: new Date(),
+        });
+      }
+    }
+  }
+
   // Group 1 (Demo Senior Project Group) is left UN-finalised so the advisor /
   // committee / coordinator grading flow can be exercised against it.
   // Group 2 (Demo Project Group Two) is fully finalised so /my-grade returns
   // a real grade for student2 / leader2.
   console.log('▸ Seeding finalised state for groupTwo (so /my-grade returns 200)');
-  const activeWeights = await FinalEvaluationWeight.findOne({ where: { isActive: true } });
   const tsExists = await TeamScalar.findOne({ where: { groupId: groupTwo.id } });
   if (!tsExists && activeWeights) {
     await TeamScalar.create({
@@ -494,18 +635,22 @@ async function main() {
       calculatedAt: new Date(),
     });
   }
-  for (const member of [leaderTwo, studentTwo]) {
+  for (const [i, member] of [leaderTwo, studentTwo].entries()) {
     const exists = await MemberFinalGrade.findOne({
       where: { groupId: groupTwo.id, userId: member.id },
     });
     if (!exists) {
+      // Both completed nearly all assigned work — each gets close to the
+      // team scalar. Leader Lina did slightly more than Sofia.
+      const ratio = i === 0 ? 100 : 90;
+      const finalScore = parseFloat(Math.min(100, 82 * ratio / 100).toFixed(2));
       await MemberFinalGrade.create({
         groupId: groupTwo.id,
         userId: member.id,
         teamScalar: 82,
-        contributionRatio: 50,
-        finalScore: 41,
-        letterGrade: 'F',
+        contributionRatio: ratio,
+        finalScore,
+        letterGrade: finalScore >= 90 ? 'A' : finalScore >= 80 ? 'B' : finalScore >= 70 ? 'C' : finalScore >= 60 ? 'D' : 'F',
         finalizedAt: new Date(),
       });
     }
