@@ -8,6 +8,7 @@ const {
   storeStoryMetricsValidation,
   storeStoryMetrics,
 } = require('../controllers/storyMetricController');
+const aiFeatureController = require('../controllers/aiFeatureController');
 
 const router = express.Router();
 
@@ -23,6 +24,14 @@ router.post(
   authenticateInternalApiKey,
   storeStoryMetricsValidation,
   storeStoryMetrics,
+);
+
+// Business Flow 15 — store AI validation results
+router.post(
+  '/ai-validations',
+  authenticateInternalApiKey,
+  aiFeatureController.storeValidationsValidation,
+  aiFeatureController.storeValidations,
 );
 
 module.exports = router;

@@ -32,6 +32,8 @@ import './styles.css';
 import SprintEvaluationPage from './SprintEvaluationPage';
 
 import AdvisorRequestsPage from './AdvisorRequestsPage';
+import AiInsightsPage from './AiInsightsPage';
+import GradeWithGitHubPage from './GradeWithGitHubPage';
 import ProfessorCommitteeSubmissionsPage from './ProfessorCommitteeSubmissionsPage';
 import CommitteeGradingPage from './CommitteeGradingPage';
 import SubmissionEditorPage from './SubmissionEditorPage';
@@ -82,6 +84,9 @@ export default function App() {
               <Route path="/coordinator/rubrics" element={<CoordinatorRubricPage />} />
               <Route path="/coordinator/grading/weight-configuration" element={<AuthGuard allowedRoles={['COORDINATOR']}><CoordinatorWeightConfigurationPage /></AuthGuard>} />
               <Route path="/groups/:groupId" element={<GroupPage />} />
+              <Route path="/ai" element={<AiInsightsPage />} />
+              <Route path="/ai-insights" element={<AiInsightsPage />} />
+              <Route path="/professors/grade-with-github" element={<GradeWithGitHubPage />} />
               <Route path="/advisor/requests" element={<AdvisorRequestsPage />} />
               <Route path="/professors/committee-submissions" element={<AuthGuard allowedRoles={['PROFESSOR']}><ProfessorCommitteeSubmissionsPage /></AuthGuard>} />
               <Route path="/professors/committee-review/:submissionId" element={<AuthGuard allowedRoles={['PROFESSOR']}><CommitteeGradingPage /></AuthGuard>} />

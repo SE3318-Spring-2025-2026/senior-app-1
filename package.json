@@ -3,11 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "dev": "npm run dev:backend & npm run dev:frontend",
+    "dev": "npm --prefix backend run dev & npm --prefix frontend run dev; wait",
     "dev:backend": "npm --prefix backend run dev",
-    "dev:frontend": "npm --prefix frontend run dev",
-    "build": "npm --prefix frontend run build",
-    "test": "npm --prefix backend test"
+    "dev:frontend": "npm --prefix frontend run dev"
   },
   "dependencies": {
     "react-markdown": "^10.1.0",

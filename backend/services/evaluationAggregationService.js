@@ -22,6 +22,17 @@ const sprintHistoryService = loadOptionalService('./sprintHistoryService', {
   getHistory: async () => null,
 });
 
+const aiFeatureService = loadOptionalService('./aiFeatureService', {
+  aggregateAiSignalsForSprint: async () => ({
+    aiAvailable: false,
+    pullRequestCount: 0,
+    reviewedPullRequestCount: 0,
+    reviewedRatio: 0,
+    aiValidationCount: 0,
+    matchedRatio: 0,
+  }),
+});
+
 // Helper: Extract Jira Issue Key from branch name
 function extractIssueKeyFromBranch(branchName) {
   const match = branchName && branchName.match(/[A-Z]+-\d+/);
@@ -30,15 +41,17 @@ function extractIssueKeyFromBranch(branchName) {
 
 async function aggregateEvaluationInput(teamId, sprintId) {
   // Fetch all data in parallel, tolerate missing data
-  const [storyDataResult, prDataResult, sprintHistoryResult] = await Promise.allSettled([
+  const [storyDataResult, prDataResult, sprintHistoryResult, aiSignalsResult] = await Promise.allSettled([
     storyDataService.getStories(teamId, sprintId),
     prDataService.getPullRequests(teamId, sprintId),
-    sprintHistoryService.getHistory(teamId, sprintId)
+    sprintHistoryService.getHistory(teamId, sprintId),
+    aiFeatureService.aggregateAiSignalsForSprint({ teamId, sprintId })
   ]);
 
   const storyData = storyDataResult.status === 'fulfilled' ? storyDataResult.value : [];
   const prData = prDataResult.status === 'fulfilled' ? prDataResult.value : [];
   const sprintHistory = sprintHistoryResult.status === 'fulfilled' ? sprintHistoryResult.value : null;
+  const aiSignals = aiSignalsResult.status === 'fulfilled' ? aiSignalsResult.value : null;
 
   // Mapping: Link PRs to stories
   const issueKeyToStory = {};
@@ -83,7 +96,8 @@ async function aggregateEvaluationInput(teamId, sprintId) {
     sprintId,
     storyData,
     unlinkedPrs,
-    sprintHistory
+    sprintHistory,
+    aiSignals,
   };
 }
 

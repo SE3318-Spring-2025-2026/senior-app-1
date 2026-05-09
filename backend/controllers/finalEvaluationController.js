@@ -17,16 +17,18 @@ const {
 } = finalEvaluationService;
 
 const groupIdValidation = [
-  param('groupId').isUUID().withMessage('groupId must be a valid UUID'),
+  param('groupId')
+    .custom((v) => isUUID(v) || (typeof v === 'string' && v.length > 0))
+    .withMessage('groupId must be a non-empty string'),
 ];
 
 const gradeBodyValidation = [
-  body('deliverableId').isUUID().withMessage('deliverableId must be a valid UUID'),
+  body('deliverableId').optional().isUUID().withMessage('deliverableId must be a valid UUID'),
   body('scores').isArray({ min: 1 }).withMessage('scores must be a non-empty array'),
   body('scores.*.criterionId').notEmpty().withMessage('Each score must have a criterionId'),
   body('scores.*.value')
-    .isFloat({ min: 0, max: 1 })
-    .withMessage('Score value must be between 0 and 1'),
+    .isFloat({ min: 0, max: 100 })
+    .withMessage('Score value must be between 0 and 100'),
   body('comments')
     .optional()
     .isString()

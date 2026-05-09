@@ -289,6 +289,15 @@ async function getCurrentSprintMonitoringSnapshot(req, res) {
       },
     });
   } catch (error) {
+    // Demo / dev environments often do not have a real Jira PAT wired up.
+    // Surface this as a 409 with the specific code so the frontend can show
+    // a "Jira not configured" message instead of a generic 500.
+    if (error?.code === 'JIRA_TOKEN_SECRET_NOT_RESOLVED' || error?.status === 409) {
+      return res.status(409).json({
+        code: error.code || 'JIRA_NOT_CONFIGURED',
+        message: error.message || 'Jira integration is not fully configured for this team',
+      });
+    }
     console.error('Error in getCurrentSprintMonitoringSnapshot:', error);
     return res.status(500).json({
       code: 'INTERNAL_ERROR',

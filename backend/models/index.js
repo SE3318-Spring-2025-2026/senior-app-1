@@ -38,6 +38,7 @@ const TeamScalar = require('./TeamScalar');
 const SprintMemberRecord = require('./SprintMemberRecord');
 const MemberFinalGrade = require('./MemberFinalGrade');
 const PasswordResetToken = require('./PasswordResetToken');
+const AIValidationResult = require('./AIValidationResult');
 
 module.exports = {
   User,
@@ -72,4 +73,5 @@ module.exports = {
   SprintMemberRecord,
   MemberFinalGrade,
   PasswordResetToken,
+  AIValidationResult,
 };

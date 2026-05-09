@@ -33,13 +33,45 @@ function computeFinalScore(scores) {
     if (!s?.criterionId) {
       throw serviceError('VALIDATION_ERROR', 'each score must have a criterionId');
     }
-    if (Number.isNaN(value) || value < 0 || value > 1) {
-      throw serviceError('VALIDATION_ERROR', 'score value must be between 0 and 1');
+    if (Number.isNaN(value) || value < 0 || value > 100) {
+      throw serviceError('VALIDATION_ERROR', 'score value must be between 0 and 100');
     }
     sum += value;
   }
 
   return Number((sum / scores.length).toFixed(2));
+}
+
+async function isAdvisorForGroup(groupId, userId) {
+  const assignment = await GroupAdvisorAssignment.findOne({
+    where: { groupId, advisorUserId: userId },
+  });
+  if (assignment) return true;
+
+  const group = await Group.findByPk(groupId, { attributes: ['advisorId'] });
+  if (group && group.advisorId != null && String(group.advisorId) === String(userId)) {
+    return true;
+  }
+  return false;
+}
+
+async function resolveDeliverableForGroup(groupId, deliverableId) {
+  if (deliverableId) {
+    const deliverable = await Deliverable.findByPk(deliverableId);
+    if (!deliverable || deliverable.groupId !== groupId) {
+      throw serviceError('DELIVERABLE_NOT_FOUND', 'Deliverable not found');
+    }
+    return deliverable;
+  }
+
+  const latest = await Deliverable.findOne({
+    where: { groupId },
+    order: [['createdAt', 'DESC']],
+  });
+  if (!latest) {
+    throw serviceError('DELIVERABLE_NOT_FOUND', 'No deliverable exists for this group');
+  }
+  return latest;
 }
 
 function mapLetter(score) {
@@ -91,29 +123,24 @@ async function logGradingEventAsync({ actorId, gradeId, groupId, deliverableId, 
 }
 
 async function submitAdvisorGrade({ groupId, deliverableId, advisorUser, scores, comments }) {
-  const group = await assertGroupExistsAndUnlocked(groupId);
+  await assertGroupExistsAndUnlocked(groupId);
 
-  const assignment = await GroupAdvisorAssignment.findOne({
-    where: { groupId, advisorUserId: advisorUser.id },
-  });
-  if (!assignment) {
-    throw serviceError('FORBIDDEN', 'Only assigned advisor can submit advisor grade');
+  const isAdvisor = await isAdvisorForGroup(groupId, advisorUser.id);
+  if (!isAdvisor) {
+    throw serviceError('FORBIDDEN', 'Only the assigned advisor can submit/update advisor grade');
   }
 
-  const deliverable = await Deliverable.findByPk(deliverableId);
-  if (!deliverable || deliverable.groupId !== groupId) {
-    throw serviceError('DELIVERABLE_NOT_FOUND', 'Deliverable not found');
-  }
+  const deliverable = await resolveDeliverableForGroup(groupId, deliverableId);
 
   const existing = await FinalEvaluationGrade.findOne({
-    where: { groupId, deliverableId, gradeType: 'ADVISOR', gradedBy: advisorUser.id },
+    where: { groupId, deliverableId: deliverable.id, gradeType: 'ADVISOR', gradedBy: advisorUser.id },
   });
   if (existing) throw serviceError('ADVISOR_GRADE_EXISTS', 'Advisor grade already exists');
 
   const finalScore = computeFinalScore(scores);
   const grade = await FinalEvaluationGrade.create({
     groupId,
-    deliverableId,
+    deliverableId: deliverable.id,
     gradeType: 'ADVISOR',
     gradedBy: advisorUser.id,
     scores,
@@ -134,7 +161,7 @@ async function submitAdvisorGrade({ groupId, deliverableId, advisorUser, scores,
 }
 
 async function updateAdvisorGrade({ groupId, deliverableId, advisorUser, scores, comments }) {
-  const group = await assertGroupExistsAndUnlocked(groupId);
+  await assertGroupExistsAndUnlocked(groupId);
 
   const assignment = await GroupAdvisorAssignment.findOne({
     where: { groupId, advisorUserId: advisorUser.id },
@@ -143,8 +170,10 @@ async function updateAdvisorGrade({ groupId, deliverableId, advisorUser, scores,
     throw serviceError('FORBIDDEN', 'Only assigned advisor can update advisor grade');
   }
 
+  const deliverable = await resolveDeliverableForGroup(groupId, deliverableId);
+
   const existing = await FinalEvaluationGrade.findOne({
-    where: { groupId, deliverableId, gradeType: 'ADVISOR', gradedBy: advisorUser.id },
+    where: { groupId, deliverableId: deliverable.id, gradeType: 'ADVISOR', gradedBy: advisorUser.id },
   });
   if (!existing) throw serviceError('GRADE_NOT_FOUND', 'Advisor grade not found');
 
@@ -160,20 +189,17 @@ async function updateAdvisorGrade({ groupId, deliverableId, advisorUser, scores,
 async function submitCommitteeGrade({ groupId, deliverableId, professorUser, scores, comments }) {
   await assertGroupExistsAndUnlocked(groupId);
 
-  const deliverable = await Deliverable.findByPk(deliverableId);
-  if (!deliverable || deliverable.groupId !== groupId) {
-    throw serviceError('DELIVERABLE_NOT_FOUND', 'Deliverable not found');
-  }
+  const deliverable = await resolveDeliverableForGroup(groupId, deliverableId);
 
   const existing = await FinalEvaluationGrade.findOne({
-    where: { groupId, deliverableId, gradeType: 'COMMITTEE', gradedBy: professorUser.id },
+    where: { groupId, deliverableId: deliverable.id, gradeType: 'COMMITTEE', gradedBy: professorUser.id },
   });
   if (existing) throw serviceError('COMMITTEE_GRADE_EXISTS', 'Committee grade already exists');
 
   const finalScore = computeFinalScore(scores);
   const grade = await FinalEvaluationGrade.create({
     groupId,
-    deliverableId,
+    deliverableId: deliverable.id,
     gradeType: 'COMMITTEE',
     gradedBy: professorUser.id,
     scores,
@@ -185,7 +211,7 @@ async function submitCommitteeGrade({ groupId, deliverableId, professorUser, sco
     gradeId: grade.id,
     groupId: grade.groupId,
     deliverableId: grade.deliverableId,
-    graderRole: 'PROFESSOR',
+    graderRole: 'COMMITTEE',
     gradeType: grade.gradeType,
   }).catch((err) => {
     console.error('[finalEvaluationService] audit log failed:', err);
@@ -196,13 +222,10 @@ async function submitCommitteeGrade({ groupId, deliverableId, professorUser, sco
 async function updateCommitteeGrade({ groupId, deliverableId, professorUser, scores, comments }) {
   await assertGroupExistsAndUnlocked(groupId);
 
-  const deliverable = await Deliverable.findByPk(deliverableId);
-  if (!deliverable || deliverable.groupId !== groupId) {
-    throw serviceError('DELIVERABLE_NOT_FOUND', 'Deliverable not found');
-  }
+  const deliverable = await resolveDeliverableForGroup(groupId, deliverableId);
 
   const existing = await FinalEvaluationGrade.findOne({
-    where: { groupId, deliverableId, gradeType: 'COMMITTEE', gradedBy: professorUser.id },
+    where: { groupId, deliverableId: deliverable.id, gradeType: 'COMMITTEE', gradedBy: professorUser.id },
   });
   if (existing) {
     const finalScore = computeFinalScore(scores);
@@ -214,7 +237,7 @@ async function updateCommitteeGrade({ groupId, deliverableId, professorUser, sco
   }
 
   const anyForDeliverable = await FinalEvaluationGrade.findOne({
-    where: { groupId, deliverableId, gradeType: 'COMMITTEE' },
+    where: { groupId, deliverableId: deliverable.id, gradeType: 'COMMITTEE' },
   });
   if (anyForDeliverable) {
     throw serviceError('FORBIDDEN', 'Only the original reviewer can update this committee grade');

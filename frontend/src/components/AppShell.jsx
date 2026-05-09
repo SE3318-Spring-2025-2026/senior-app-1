@@ -18,6 +18,12 @@ const roleMenuSections = {
         { to: '/team-leader/submission', label: 'My Submission', icon: 'SB' },
       ],
     },
+    {
+      title: 'AI',
+      items: [
+        { to: '/ai', label: 'AI Sprint Insights', icon: 'AI' },
+      ],
+    },
   ],
   Professor: [
     {
@@ -25,7 +31,13 @@ const roleMenuSections = {
       items: [
         { to: '/professors', label: 'Professor Home', icon: 'HM' },
         { to: '/professors/notifications', label: 'Advisor Requests', icon: 'AR' },
-        { to: '/professors/committee-submissions', label: 'Committee Review', icon: 'CR' },
+        { to: '/professors/committee-submissions', label: 'Grade Submissions', icon: 'GR' },
+      ],
+    },
+    {
+      title: 'AI',
+      items: [
+        { to: '/ai', label: 'AI Sprint Insights', icon: 'AI' },
       ],
     },
   ],
@@ -47,6 +59,12 @@ const roleMenuSections = {
         { to: '/coordinator/grading/weight-configuration', label: 'Weight Configuration', icon: 'WC' },
       ],
     },
+    {
+      title: 'AI',
+      items: [
+        { to: '/ai', label: 'AI Sprint Insights', icon: 'AI' },
+      ],
+    },
   ],
   Admin: [
     {
@@ -63,6 +81,12 @@ const roleMenuSections = {
         { to: '/admin/password-reset-links', label: 'Password Reset Links', icon: 'PR' },
         { to: '/admin/groups/cleanup', label: 'Group Cleanup', icon: 'GC' },
         { to: '/admin/audit-logs', label: 'Audit Logs', icon: 'AL' },
+      ],
+    },
+    {
+      title: 'AI',
+      items: [
+        { to: '/ai', label: 'AI Sprint Insights', icon: 'AI' },
       ],
     },
   ],

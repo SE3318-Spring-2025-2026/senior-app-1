@@ -365,6 +365,11 @@ export default function IntegrationConfigurationPage() {
         <p className="eyebrow">Sprint Monitoring</p>
         <h1>Integration Configuration</h1>
         <p className="group-page-status">Team {teamId}</p>
+        <p className="back-link-wrap">
+          <Link className="back-link" to={`/students/groups/${teamId}/sprints/evaluation`}>
+            Open Sprint Evaluation &amp; AI Insights →
+          </Link>
+        </p>
       </section>
 
       <section className="group-details-card">

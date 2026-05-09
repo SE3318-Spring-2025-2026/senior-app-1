@@ -2161,6 +2161,17 @@ button:disabled {
   gap: 16px;
 }
 
+.audit-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 140px;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.audit-filter-bar .field {
+  margin: 0;
+}
+
 .audit-log-card {
   border: 1px solid var(--line);
   border-radius: 24px;
@@ -2269,6 +2280,10 @@ button:disabled {
   }
 
   .audit-log-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .audit-filter-bar {
     grid-template-columns: 1fr;
   }
 

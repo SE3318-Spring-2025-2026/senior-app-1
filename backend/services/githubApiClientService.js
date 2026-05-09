@@ -255,6 +255,37 @@ async function getPullRequestsByIssueKeys(token, organizationName, repositoryNam
 }
 
 /**
+ * Fetch the reviews left on a pull request. Used by the AI PR review
+ * verification feature to feed the model the actual reviewer comments.
+ */
+async function getPullRequestReviews(token, organizationName, repositoryName, prNumber) {
+  if (!prNumber) {
+    throw ApiError.badRequest('INVALID_PR_NUMBER', 'PR number is required');
+  }
+
+  try {
+    const endpoint = `/repos/${organizationName}/${repositoryName}/pulls/${prNumber}/reviews`;
+    const reviews = await makeGitHubRequest(token, organizationName, repositoryName, endpoint);
+
+    if (!Array.isArray(reviews)) return [];
+
+    return reviews.map((review) => ({
+      id: review.id,
+      author: review.user?.login || null,
+      authorId: review.user?.id || null,
+      state: review.state || 'COMMENTED',
+      body: review.body || '',
+      submittedAt: review.submitted_at || null,
+      htmlUrl: review.html_url || null,
+    }));
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.warn(`Failed to fetch reviews for PR #${prNumber}:`, error);
+    return [];
+  }
+}
+
+/**
  * Verify GitHub token validity
  */
 async function verifyToken(token) {
@@ -283,6 +314,7 @@ module.exports = {
   getPullRequestsByIssueKeys,
   getPullRequestDetails,
   getPullRequestChangedFiles,
+  getPullRequestReviews,
   getCompletePullRequestData,
   verifyToken,
 };

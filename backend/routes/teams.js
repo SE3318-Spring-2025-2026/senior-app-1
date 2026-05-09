@@ -19,6 +19,7 @@ const {
   triggerJiraSyncValidation,
   triggerJiraSync,
 } = require('../controllers/jiraSyncController');
+const aiFeatureController = require('../controllers/aiFeatureController');
 
 const router = express.Router();
 
@@ -89,6 +90,59 @@ router.post(
   requireNonEmptyBody,
   triggerJiraSyncValidation,
   triggerJiraSync
+);
+
+// ─── AI: PR review verification ─────────────────────────────────────────────
+router.post(
+  '/:teamId/sprints/:sprintId/pr-review-verifications',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN', 'PROFESSOR']),
+  aiFeatureController.verifyPrReviewsValidation,
+  aiFeatureController.verifyPrReviews,
+);
+
+router.get(
+  '/:teamId/sprints/:sprintId/pr-review-verifications',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN', 'PROFESSOR']),
+  aiFeatureController.listPrReviewsValidation,
+  aiFeatureController.listPrReviews,
+);
+
+// ─── AI: issue implementation validation (Business Flow 13) ─────────────────
+router.post(
+  '/:teamId/sprints/:sprintId/ai-validations',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN', 'PROFESSOR']),
+  aiFeatureController.runValidationValidation,
+  aiFeatureController.runValidation,
+);
+
+router.get(
+  '/:teamId/sprints/:sprintId/ai-validations',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN', 'PROFESSOR']),
+  aiFeatureController.listValidationsValidation,
+  aiFeatureController.listValidations,
+);
+
+router.get(
+  '/:teamId/sprints/:sprintId/ai-signals',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN', 'PROFESSOR']),
+  aiFeatureController.getAiSignalsValidation,
+  aiFeatureController.getAiSignals,
+);
+
+// AI-driven rubric criterion grading: PROFESSOR (acting as advisor or
+// committee) clicks "Grade with AI" on a GITHUB_LLM criterion. Receives a
+// suggested 0-100 score the professor can accept or override.
+router.post(
+  '/:teamId/sprints/:sprintId/grade-criterion-with-ai',
+  authenticate,
+  authorize(['PROFESSOR', 'COORDINATOR', 'ADMIN']),
+  aiFeatureController.gradeCriterionValidation,
+  aiFeatureController.gradeCriterionWithAi,
 );
 
 module.exports = router;

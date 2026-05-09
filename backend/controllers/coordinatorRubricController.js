@@ -16,6 +16,20 @@ const upsertRubricValidation = [
     .isString().notEmpty().withMessage('each criterion must have a non-empty name'),
   body('criteria.*.maxPoints')
     .isFloat({ min: 0 }).withMessage('each criterion maxPoints must be >= 0'),
+  body('criteria.*.criterionType')
+    .optional()
+    .isIn(['BINARY', 'SOFT', 'GITHUB_LLM'])
+    .withMessage('criterionType must be one of BINARY, SOFT, GITHUB_LLM'),
+  body('criteria.*.weight')
+    .optional()
+    .isFloat({ min: 0, max: 1 })
+    .withMessage('criterion weight must be between 0 and 1'),
+  body('criteria.*.question')
+    .optional()
+    .isString(),
+  body('criteria.*.id')
+    .optional()
+    .isString(),
 ];
 
 async function upsertRubric(req, res) {
