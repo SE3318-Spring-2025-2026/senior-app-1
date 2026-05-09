@@ -20,6 +20,11 @@ export default function AdminAuditLogPage() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [filters, setFilters] = useState({
+    action: '',
+    targetType: '',
+    limit: '150',
+  });
 
   const navigate = useNavigate();
   const { notify } = useNotification();
@@ -48,7 +53,11 @@ export default function AdminAuditLogPage() {
       setError('');
 
       try {
-        const { data: payload } = await apiClient.get('/v1/admin/audit-logs?limit=150');
+        const params = new URLSearchParams();
+        params.set('limit', filters.limit || '150');
+        if (filters.action.trim()) params.set('action', filters.action.trim());
+        if (filters.targetType.trim()) params.set('targetType', filters.targetType.trim());
+        const { data: payload } = await apiClient.get(`/v1/admin/audit-logs?${params.toString()}`);
         setLogs(Array.isArray(payload.data) ? payload.data : []);
       } catch (loadError) {
         setLogs([]);
@@ -59,7 +68,15 @@ export default function AdminAuditLogPage() {
     }
 
     loadLogs();
-  }, [token]);
+  }, [token, filters.action, filters.limit, filters.targetType]);
+
+  function handleFilterChange(event) {
+    const { name, value } = event.target;
+    setFilters((current) => ({
+      ...current,
+      [name]: value,
+    }));
+  }
 
   return (
     <main className="page">
@@ -78,6 +95,40 @@ export default function AdminAuditLogPage() {
       </p>
 
       <section className="single-panel">
+        <form className="audit-filter-bar" onSubmit={(event) => event.preventDefault()}>
+          <label className="field">
+            <span>Action</span>
+            <input
+              name="action"
+              type="text"
+              placeholder="POST_REQUEST"
+              value={filters.action}
+              onChange={handleFilterChange}
+            />
+          </label>
+
+          <label className="field">
+            <span>Target Type</span>
+            <input
+              name="targetType"
+              type="text"
+              placeholder="API_ROUTE"
+              value={filters.targetType}
+              onChange={handleFilterChange}
+            />
+          </label>
+
+          <label className="field">
+            <span>Limit</span>
+            <select name="limit" value={filters.limit} onChange={handleFilterChange}>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="150">150</option>
+              <option value="250">250</option>
+            </select>
+          </label>
+        </form>
+
         {loading && (
           <section className="feedback feedback-loading" aria-live="polite">
             <p className="feedback-label">Audit Feed</p>
