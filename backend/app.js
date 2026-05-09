@@ -11,6 +11,7 @@ const {
   globalErrorHandler,
   notFoundHandler,
 } = require('./middleware/errorResponse');
+const auditTrail = require('./middleware/auditTrail');
 
 const adminRoutes = require('./routes/admin');
 const coordinatorRoutes = require('./routes/coordinator');
@@ -41,6 +42,7 @@ const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 
 app.use(express.json({ limit: '10mb' }));
 app.use(errorResponseNormalizer);
+app.use(auditTrail);
 
 // Serve frontend if exists
 if (fs.existsSync(frontendDistPath)) {
