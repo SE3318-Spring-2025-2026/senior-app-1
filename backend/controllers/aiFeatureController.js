@@ -149,6 +149,26 @@ exports.listValidations = async (req, res, next) => {
   }
 };
 
+exports.listStoriesValidation = [...teamSprintParams];
+
+exports.listStories = async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return fail400(res, errors);
+  try {
+    const stories = await aiFeatureService.listStoriesForSprint({
+      teamId: req.params.teamId,
+      sprintId: req.params.sprintId,
+    });
+    return res.status(200).json({
+      code: 'SUCCESS',
+      message: 'Sprint stories retrieved',
+      data: { teamId: req.params.teamId, sprintId: req.params.sprintId, stories },
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 // ─── AI signal aggregation for grading (Team Evaluation input) ──────────────
 
 exports.getAiSignalsValidation = [...teamSprintParams];

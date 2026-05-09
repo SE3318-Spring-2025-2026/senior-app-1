@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import apiClient from './services/apiClient';
-import { getCurrentSprintMonitoringSnapshot } from './services/sprintMonitoring';
+import {
+  getCurrentSprintMonitoringSnapshot,
+  triggerJiraSync,
+  triggerGitHubVerification,
+} from './services/sprintMonitoring';
 
 const EMPTY_FORM = {
   providerSet: ['GITHUB', 'JIRA'],
@@ -183,6 +187,8 @@ export default function IntegrationConfigurationPage() {
   const [monitoringLoading, setMonitoringLoading] = useState(false);
   const [monitoringSnapshot, setMonitoringSnapshot] = useState(null);
   const [monitoringError, setMonitoringError] = useState('');
+  const [syncBusy, setSyncBusy] = useState(null); // 'jira' | 'github' | null
+  const [syncFeedback, setSyncFeedback] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -499,6 +505,69 @@ export default function IntegrationConfigurationPage() {
               )}
             </div>
           )}
+
+          <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              type="button"
+              disabled={syncBusy != null || !user?.id || !resolvedSprintId}
+              onClick={async () => {
+                setSyncBusy('jira');
+                setSyncFeedback(null);
+                try {
+                  await triggerJiraSync(teamId, resolvedSprintId, user.id, { boardId: 'demo-board' });
+                  setSyncFeedback({ status: 'success', text: 'JIRA sync triggered. Snapshot will refresh in a few seconds.' });
+                  setTimeout(() => refreshMonitoringSummary(), 1500);
+                } catch (err) {
+                  setSyncFeedback({ status: 'error', text: err.response?.data?.message || err.message || 'JIRA sync failed' });
+                } finally { setSyncBusy(null); }
+              }}
+              title="Pull active stories from JIRA into the SprintStory table."
+            >
+              {syncBusy === 'jira' ? 'Syncing JIRA…' : '🔄 Sync JIRA stories now'}
+            </button>
+
+            <button
+              type="button"
+              disabled={syncBusy != null || !user?.id || !resolvedSprintId}
+              onClick={async () => {
+                setSyncBusy('github');
+                setSyncFeedback(null);
+                try {
+                  await triggerGitHubVerification(teamId, resolvedSprintId, user.id, { relatedIssueKeys: ['DEMO-1', 'DEMO-2', 'DEMO-3'] });
+                  setSyncFeedback({ status: 'success', text: 'GitHub PR verification triggered. Snapshot will refresh in a few seconds.' });
+                  setTimeout(() => refreshMonitoringSummary(), 1500);
+                } catch (err) {
+                  setSyncFeedback({ status: 'error', text: err.response?.data?.message || err.message || 'GitHub verification failed' });
+                } finally { setSyncBusy(null); }
+              }}
+              title="Pull PR + branch data for the seeded issues from GitHub into the SprintPullRequest table."
+            >
+              {syncBusy === 'github' ? 'Syncing GitHub…' : '🔄 Verify GitHub PRs now'}
+            </button>
+
+            <button
+              type="button"
+              disabled={monitoringLoading}
+              onClick={refreshMonitoringSummary}
+              title="Re-fetch the latest snapshot from the backend without triggering a sync."
+            >
+              {monitoringLoading ? 'Loading…' : '↻ Reload snapshot'}
+            </button>
+
+            {syncFeedback && (
+              <span style={{
+                fontSize: '0.85rem',
+                color: syncFeedback.status === 'error' ? '#c92a2a' : '#1f9e4a',
+              }}>
+                {syncFeedback.text}
+              </span>
+            )}
+          </div>
+
+          <p className="field-help" style={{ marginTop: 6 }}>
+            Background scheduler also runs automatically every {process.env?.SPRINT_MONITORING_REFRESH_INTERVAL_MS || '15 000'} ms (see <code>SPRINT_MONITORING_REFRESH_INTERVAL_MS</code> in <code>backend/.env</code>).
+            The synced data is what the AI sprint insights and the GITHUB_LLM rubric criterion read from.
+          </p>
         </div>
       </section>
 

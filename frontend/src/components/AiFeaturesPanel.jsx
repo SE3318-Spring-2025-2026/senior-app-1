@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   triggerPrReviewVerification,
   listPrReviewStatuses,
@@ -6,6 +6,7 @@ import {
   listAiValidations,
   getAiSignals,
 } from '../services/aiFeatures';
+import apiClient from '../services/apiClient';
 
 function StatusBadge({ status }) {
   const colorMap = {
@@ -38,9 +39,11 @@ export default function AiFeaturesPanel({ teamId, sprintId }) {
   const [reviews, setReviews] = useState([]);
   const [validations, setValidations] = useState([]);
   const [signals, setSignals] = useState(null);
+  const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [aiAvailable, setAiAvailable] = useState(true);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const [validationForm, setValidationForm] = useState({
     issueKey: '',
@@ -52,18 +55,85 @@ export default function AiFeaturesPanel({ teamId, sprintId }) {
   async function refresh() {
     setError(null);
     try {
-      const [reviewsRes, validationsRes, signalsRes] = await Promise.all([
+      const [reviewsRes, validationsRes, signalsRes, storiesRes] = await Promise.all([
         listPrReviewStatuses(teamId, sprintId).catch(() => ({ data: { data: { pullRequests: [] } } })),
         listAiValidations(teamId, sprintId).catch(() => ({ data: { data: { validations: [] } } })),
         getAiSignals(teamId, sprintId).catch(() => ({ data: { data: null } })),
+        apiClient.get(`/v1/teams/${teamId}/sprints/${sprintId}/stories`).catch(() => ({ data: { data: { stories: [] } } })),
       ]);
       const prData = reviewsRes.data?.data;
       setReviews(prData?.pullRequests || []);
       if (typeof prData?.aiAvailable === 'boolean') setAiAvailable(prData.aiAvailable);
       setValidations(validationsRes.data?.data?.validations || []);
       setSignals(signalsRes.data?.data || null);
+      setStories(storiesRes.data?.data?.stories || []);
     } catch (err) {
       setError(err.message || 'Failed to load AI feature data');
+    }
+  }
+
+  // Build a quick lookup so picking a story auto-fills the form with its
+  // description and the file-diff summary of the PR(s) that claim it.
+  const issueOptions = useMemo(() => {
+    const prsByIssue = new Map();
+    for (const pr of reviews) {
+      const k = pr.issueKey;
+      if (!k) continue;
+      const arr = prsByIssue.get(k) || [];
+      arr.push(pr);
+      prsByIssue.set(k, arr);
+    }
+    return stories.map((s) => ({
+      issueKey: s.issueKey,
+      title: s.title,
+      description: s.description || '',
+      linkedPrs: prsByIssue.get(s.issueKey) || [],
+    }));
+  }, [stories, reviews]);
+
+  function autoFillFromIssue(issueKey) {
+    if (!issueKey) {
+      setValidationForm({ issueKey: '', issueDescription: '', fileDiffsRaw: '', prNumber: '' });
+      return;
+    }
+    const opt = issueOptions.find((o) => o.issueKey === issueKey);
+    if (!opt) return;
+    const firstPr = opt.linkedPrs[0];
+    // Build "path::diff" lines from the PR's changed files (using the diff
+    // summary as the diff text since we don't have full patches stored).
+    const summary = firstPr?.diffSummary && typeof firstPr.diffSummary === 'object' ? firstPr.diffSummary : null;
+    const summaryText = summary?.body || (typeof firstPr?.diffSummary === 'string' ? firstPr.diffSummary : firstPr?.title || '');
+    const lines = (firstPr?.changedFiles || []).map((p) => `${p}::${summaryText.slice(0, 200)}`);
+    setValidationForm({
+      issueKey: opt.issueKey,
+      issueDescription: opt.title + (opt.description ? `\n\n${opt.description}` : ''),
+      fileDiffsRaw: lines.join('\n'),
+      prNumber: firstPr ? String(firstPr.prNumber) : '',
+    });
+  }
+
+  async function validateAllIssues() {
+    setBulkBusy(true);
+    setError(null);
+    try {
+      for (const opt of issueOptions) {
+        const firstPr = opt.linkedPrs[0];
+        const summary = firstPr?.diffSummary && typeof firstPr.diffSummary === 'object' ? firstPr.diffSummary : null;
+        const summaryText = summary?.body || (typeof firstPr?.diffSummary === 'string' ? firstPr.diffSummary : firstPr?.title || 'no diff available');
+        const fileDiffs = (firstPr?.changedFiles || []).map((p) => ({ path: p, diff: summaryText.slice(0, 1000) }));
+        if (fileDiffs.length === 0) {
+          fileDiffs.push({ path: 'no-files', diff: opt.title });
+        }
+        await runAiValidation(teamId, sprintId, {
+          issueKey: opt.issueKey,
+          issueDescription: opt.title + (opt.description ? `\n\n${opt.description}` : ''),
+          fileDiffs,
+          prNumber: firstPr ? Number(firstPr.prNumber) : undefined,
+        }).catch((err) => console.warn(`validate ${opt.issueKey} failed`, err));
+      }
+      await refresh();
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -167,37 +237,13 @@ export default function AiFeaturesPanel({ teamId, sprintId }) {
 
       <div className="ai-validations" style={{ marginBottom: 24 }}>
         <h3>Issue implementation validation</h3>
-        <form onSubmit={handleRunValidation} style={{ marginBottom: 16, display: 'grid', gap: 8 }}>
-          <input
-            placeholder="Issue key (e.g. SPM-214)"
-            value={validationForm.issueKey}
-            onChange={(e) => setValidationForm({ ...validationForm, issueKey: e.target.value })}
-            required
-          />
-          <textarea
-            placeholder="Issue description"
-            value={validationForm.issueDescription}
-            onChange={(e) => setValidationForm({ ...validationForm, issueDescription: e.target.value })}
-            rows={3}
-            required
-          />
-          <textarea
-            placeholder={'File diffs — one per line as "path::diff text"'}
-            value={validationForm.fileDiffsRaw}
-            onChange={(e) => setValidationForm({ ...validationForm, fileDiffsRaw: e.target.value })}
-            rows={5}
-            required
-          />
-          <input
-            placeholder="PR number (optional)"
-            value={validationForm.prNumber}
-            onChange={(e) => setValidationForm({ ...validationForm, prNumber: e.target.value })}
-            type="number"
-          />
-          <button type="submit" disabled={loading}>
-            {loading ? 'Running AI…' : 'Validate implementation'}
-          </button>
-        </form>
+        <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: 0 }}>
+          One click runs AI validation for every seeded issue using its description + the linked PR's diff summary.
+          Per-criterion rubric grading uses the same data — see the GITHUB_LLM criterion in the committee grading page.
+        </p>
+        <button onClick={validateAllIssues} disabled={bulkBusy || issueOptions.length === 0}>
+          {bulkBusy ? `Validating ${issueOptions.length} issues…` : `🤖 Validate all ${issueOptions.length} issues`}
+        </button>
 
         {validations.length === 0 ? (
           <p>No AI validations stored yet.</p>

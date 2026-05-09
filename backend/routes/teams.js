@@ -134,6 +134,17 @@ router.get(
   aiFeatureController.getAiSignals,
 );
 
+// Stored sprint stories (issue list) — no JIRA call required, reads from
+// the SprintStory table. Used by the GitHub-AI grading page so the grader
+// can see the issue descriptions side-by-side with the PRs.
+router.get(
+  '/:teamId/sprints/:sprintId/stories',
+  authenticate,
+  authorize(['STUDENT', 'COORDINATOR', 'ADMIN', 'PROFESSOR']),
+  aiFeatureController.listStoriesValidation,
+  aiFeatureController.listStories,
+);
+
 // AI-driven rubric criterion grading: PROFESSOR (acting as advisor or
 // committee) clicks "Grade with AI" on a GITHUB_LLM criterion. Receives a
 // suggested 0-100 score the professor can accept or override.

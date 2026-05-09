@@ -362,33 +362,38 @@ async function getContributions(groupId) {
 async function getMyGrade(user) {
   const userId = String(user.id);
 
+  // Prefer the finalised grade if one exists. A student may be in multiple
+  // groups (e.g. an "all hands" demo group on top of their primary group),
+  // so finding a MemberFinalGrade by userId is more correct than picking the
+  // first group via memberIds.
+  const grade = await MemberFinalGrade.findOne({
+    where: { userId: user.id },
+    order: [['finalizedAt', 'DESC']],
+  });
+  if (grade) {
+    return {
+      userId: grade.userId,
+      groupId: grade.groupId,
+      finalScore: grade.finalScore,
+      letterGrade: grade.letterGrade,
+      finalizedAt: grade.finalizedAt,
+    };
+  }
+
+  // No grade — fall back to checking whether the student even has a group,
+  // so the API can return GROUP_NOT_FOUND vs GRADE_NOT_FOUND with the
+  // right wording for the page to render.
   const groups = await Group.findAll({ attributes: ['id', 'memberIds'] });
-  const group = groups.find(
+  const inAGroup = groups.some(
     (g) => Array.isArray(g.memberIds) && g.memberIds.map(String).includes(userId),
   );
-
-  if (!group) {
+  if (!inAGroup) {
     throw ApiError.notFound('GROUP_NOT_FOUND', 'No group found for this student');
   }
-
-  const grade = await MemberFinalGrade.findOne({
-    where: { userId: user.id, groupId: group.id },
-  });
-
-  if (!grade) {
-    throw ApiError.notFound(
-      'GRADE_NOT_FOUND',
-      'Coordinator has not finalized grades for your group yet',
-    );
-  }
-
-  return {
-    userId: grade.userId,
-    groupId: grade.groupId,
-    finalScore: grade.finalScore,
-    letterGrade: grade.letterGrade,
-    finalizedAt: grade.finalizedAt,
-  };
+  throw ApiError.notFound(
+    'GRADE_NOT_FOUND',
+    'Coordinator has not finalized grades for your group yet',
+  );
 }
 
 async function getRawGrades(groupId) {
